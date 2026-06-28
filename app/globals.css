@@ -1,0 +1,329 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =========================================================================
+   HiVR — Global styles + 4-mode theming
+   --------------------------------------------------------------------------
+   Every color the app uses flows from these CSS variables. No component
+   should ever hardcode a hex color; consume tokens via Tailwind classes
+   (bg-background, text-foreground, bg-primary, ...) or var(--token).
+   ========================================================================= */
+
+@layer base {
+  :root {
+    /* Accent — deep teal (one confident color, not default blue) */
+    --primary: 173 58% 32%;          /* teal-700ish */
+    --primary-foreground: 0 0% 100%;
+
+    /* Light theme defaults */
+    --background: 0 0% 100%;
+    --foreground: 222 25% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 25% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 25% 12%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 222 25% 12%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 220 14% 96%;
+    --accent-foreground: 222 25% 12%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 173 58% 32%;
+    --success: 142 71% 38%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --radius: 0.625rem;
+  }
+
+  /* Dark — true dark slate, not pure black */
+  .dark {
+    --primary: 173 60% 50%;
+    --primary-foreground: 222 25% 6%;
+
+    --background: 222 25% 7%;        /* #0F1117 area */
+    --foreground: 210 20% 96%;
+    --card: 222 25% 9%;
+    --card-foreground: 210 20% 96%;
+    --popover: 222 25% 9%;
+    --popover-foreground: 210 20% 96%;
+    --secondary: 222 20% 14%;
+    --secondary-foreground: 210 20% 96%;
+    --muted: 222 20% 14%;
+    --muted-foreground: 220 12% 65%;
+    --accent: 222 20% 14%;
+    --accent-foreground: 210 20% 96%;
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 210 20% 96%;
+    --border: 222 20% 18%;
+    --input: 222 20% 18%;
+    --ring: 173 60% 50%;
+    --success: 142 60% 45%;
+    --success-foreground: 210 20% 96%;
+    --warning: 38 90% 55%;
+    --warning-foreground: 222 25% 6%;
+  }
+
+  /* Eye-shield — warm cream, sepia, low blue light. Always manual opt-in. */
+  .eye-shield {
+    --primary: 25 60% 38%;            /* warm brown-amber */
+    --primary-foreground: 40 40% 96%;
+
+    --background: 38 35% 92%;          /* warm cream */
+    --foreground: 25 30% 18%;
+    --card: 38 30% 95%;
+    --card-foreground: 25 30% 18%;
+    --popover: 38 30% 95%;
+    --popover-foreground: 25 30% 18%;
+    --secondary: 35 28% 85%;
+    --secondary-foreground: 25 30% 18%;
+    --muted: 35 28% 85%;
+    --muted-foreground: 25 18% 38%;
+    --accent: 35 28% 85%;
+    --accent-foreground: 25 30% 18%;
+    --destructive: 12 70% 45%;
+    --destructive-foreground: 40 40% 96%;
+    --border: 33 22% 72%;
+    --input: 33 22% 72%;
+    --ring: 25 60% 38%;
+    --success: 95 35% 35%;
+    --success-foreground: 40 40% 96%;
+    --warning: 32 80% 42%;
+    --warning-foreground: 25 30% 18%;
+  }
+
+  * {
+    @apply border-border;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    /* Reserve space for the scrollbar so the layout never shifts when
+       content height crosses the viewport boundary (e.g. loading skeleton
+       → real page). Without this, the container width changes by ~15px
+       every time the scrollbar appears or disappears, making the navbar
+       visibly "shake" left/right during navigation. */
+    scrollbar-gutter: stable;
+  }
+  /* Global scrollbar is hidden — the thin premium variant is opt-in via
+     the .scrollbar-thin class on the sidebar (and any other scrollable
+     panel that wants to show a visible track). */
+  html {
+    scrollbar-width: none;
+  }
+  html::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+}
+
+/* Reusable utility classes */
+@layer utilities {
+  .text-balance { text-wrap: balance; }
+  .text-pretty { text-wrap: pretty; }
+
+  /*
+   * .scrollbar-hide — keeps vertical scrolling working but hides the bar.
+   * Used by the chat thread so conversations can expand without elongating
+   * the chatbot container.
+   */
+  .scrollbar-hide {
+    -ms-overflow-style: none;          /* IE 10+ */
+    scrollbar-width: none;             /* Firefox */
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+
+  /*
+   * .scrollbar-thin — a premium-feeling, minimal scrollbar for the
+   * dashboard sidebar and other scrollable panels. 6px wide, rounded
+   * thumb in a muted foreground tint, transparent track, slightly
+   * darker on hover. Visible only when content actually overflows.
+   */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.25) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.22);
+    border-radius: 9999px;
+    border: 1px solid transparent;
+    background-clip: padding-box;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.45);
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:active {
+    background-color: hsl(var(--primary) / 0.6);
+  }
+
+  .gradient-text {
+    background: linear-gradient(
+      135deg,
+      hsl(var(--primary)) 0%,
+      hsl(var(--primary) / 0.7) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 0%,
+      hsl(var(--muted-foreground) / 0.08) 50%,
+      hsl(var(--muted)) 100%
+    );
+    background-size: 200% 100%;
+    @apply animate-shimmer;
+  }
+
+  .glass {
+    background-color: hsl(var(--background) / 0.85);
+  }
+  /* Only apply the heavy blur effect on devices that can handle it without
+     dropping frames. Backdrop-filter is expensive: it forces the browser
+     to re-rasterize everything behind the element on every scroll frame,
+     which on long pages causes visible blanking/flicker. */
+  @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    @media (min-width: 768px) {
+      .glass {
+        backdrop-filter: saturate(180%) blur(14px);
+        -webkit-backdrop-filter: saturate(180%) blur(14px);
+        background-color: hsl(var(--background) / 0.75);
+      }
+    }
+  }
+}
+
+/* Skeleton loader class shim used by loading.tsx files */
+.skeleton-line {
+  @apply skeleton h-3 w-full rounded;
+}
+
+/* Smooth focus ring */
+:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+  border-radius: 0.25rem;
+}
+
+/* Reduce motion respect */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* =========================================================================
+   Animated Category Showcase keyframes
+   --------------------------------------------------------------------------
+   Each scene in `components/marketing/categories-in-action.tsx` uses one
+   or more of these animations. They are intentionally subtle and slow so
+   the page feels "alive" without being distracting. The `prefers-
+   reduced-motion` media query above automatically neutralises them for
+   users who request reduced motion.
+   ========================================================================= */
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.6; transform: scale(1.05); }
+}
+.animate-pulse-slow { animation: pulse-slow 3s ease-in-out infinite; }
+
+@keyframes cell-fill {
+  0%   { opacity: 0; transform: translateY(2px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.animate-cell-fill { animation: cell-fill 0.4s ease-out backwards; }
+
+@keyframes progress {
+  0%   { width: 0%; }
+  100% { width: var(--target, 100%); }
+}
+.animate-progress { animation: progress 2.5s ease-out infinite; }
+
+@keyframes dash {
+  to { stroke-dashoffset: -40; }
+}
+.animate-dash { stroke-dasharray: 4 3; animation: dash 1.5s linear infinite; }
+
+@keyframes sound-wave {
+  0%, 100% { transform: scaleY(0.3); }
+  50%      { transform: scaleY(1); }
+}
+.animate-sound-wave { animation: sound-wave 0.9s ease-in-out infinite; transform-origin: bottom; }
+
+@keyframes msg-in {
+  0%   { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.animate-msg-in { animation: msg-in 0.35s ease-out backwards; }
+
+@keyframes stream {
+  0%   { width: 0%; }
+  100% { width: 100%; }
+}
+.animate-stream { display: inline-block; white-space: nowrap; overflow: hidden; animation: stream 2.5s steps(40, end) infinite; }
+
+@keyframes type-cursor {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.3; }
+}
+.animate-type-cursor { animation: type-cursor 1.2s ease-in-out infinite; }
+
+@keyframes float-token {
+  0%   { opacity: 0; transform: translate(0, 6px) scale(0.9); }
+  20%  { opacity: 0.7; }
+  100% { opacity: 0; transform: translate(8px, -20px) scale(1.1); }
+}
+.animate-float-token { animation: float-token 3s ease-in infinite; }
+
+@keyframes fade-in {
+  0%   { opacity: 0; transform: scale(0.95); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.animate-fade-in { animation: fade-in 0.4s ease-out backwards; }
+
+@keyframes fade-up {
+  0%   { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up { animation: fade-up 0.35s ease-out backwards; }
+
+@keyframes bar-grow {
+  0%   { transform: scaleX(0); transform-origin: left; }
+  100% { transform: scaleX(1); transform-origin: left; }
+}
+.animate-bar-grow { animation: bar-grow 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+
+@keyframes ping-slow {
+  0%   { transform: scale(0.7); opacity: 0.7; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+.animate-ping-slow { animation: ping-slow 2.5s ease-out infinite; }
+
+@keyframes spin-slow {
+  to { transform: rotate(360deg); }
+}
+.animate-spin-slow { animation: spin-slow 8s linear infinite; }

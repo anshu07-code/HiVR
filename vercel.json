@@ -1,0 +1,32 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/instant-hire-cascade",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/expire-offers",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/auto-release",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/dispute-unpause-check",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/dispute-auto-resolve",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/incentive-check",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/no-show-mark",
+      "schedule": "*/15 * * * *"
+    }
+  ]
+}
