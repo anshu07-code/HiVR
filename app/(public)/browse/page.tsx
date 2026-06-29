@@ -39,7 +39,13 @@ export default async function BrowsePage({ searchParams }: { searchParams: { cat
   const activeTab: TabKey = TABS.find(t => t.key === searchParams.status)?.key ?? "all";
 
   // Identify signed-in user + profile
-  const { data: { user: viewer } } = await sb.auth.getUser();
+  let viewer = null;
+  try {
+    const res = await sb.auth.getUser();
+    viewer = res.data.user;
+  } catch {
+    // fallback if token refresh races with middleware
+  }
   const { data: profile } = viewer
     ? await sb.from("users").select("id, current_mode, roles").eq("id", viewer.id).maybeSingle()
     : { data: null };

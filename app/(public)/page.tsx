@@ -22,7 +22,13 @@ export default async function HomePage() {
     .select("id, slug, name, icon, description, tier, status, sort_order")
     .order("sort_order");
 
-  const { data: { user } } = await sb.auth.getUser();
+  let user = null;
+  try {
+    const res = await sb.auth.getUser();
+    user = res.data.user;
+  } catch {
+    // fallback if token refresh races with middleware
+  }
 
   return (
     <>
