@@ -41,10 +41,11 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  // Refresh session if needed. IMPORTANT: do not put any other logic between
-  // createServerClient and the auth.getUser() call — doing so can cause the
-  // session to be randomly logged out.
-  await supabase.auth.getUser();
+  // NOTE: Session refresh is intentionally removed from middleware to avoid
+  // a known race condition in @supabase/ssr v0.5.x where both middleware and
+  // Server Components call getUser() simultaneously — both try to use the same
+  // refresh token, the second one fails, and the Server Component crashes.
+  // Server Components handle session refresh themselves via createClient().
 
   // Baseline security headers (M1 fix). We use a fresh NextResponse.next
   // wrapper so the headers are always attached, even when the Supabase
