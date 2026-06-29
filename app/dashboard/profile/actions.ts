@@ -167,7 +167,7 @@ export async function updateEmployeeSkillsAction(skills: {
       rate_per_week_paise: s.rate_per_week_paise ?? null,
       current_wage_band_min: 25000,
       current_wage_band_max: 75000,
-      verification_status: "unverified",
+      verification_status: "provisional",
     }));
     const { error } = await sb.from("employee_skills").insert(rows);
     if (error) return { ok: false, reason: error.message };
