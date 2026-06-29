@@ -143,13 +143,16 @@ export default async function DashboardHome() {
     : [];
   const payments = userPayments;
 
-  // Fetch workspaces linked to the user's contracts for escrow-funded amounts
-  // (wallet-funded escrows don't create rows in the payments table)
-  const { data: fundedWorkspaces } = contractIds.length > 0
+  // Fetch workspaces linked to the user's BUYER contracts for escrow-funded amounts
+  // — only count escrows where the user funded them (is the buyer)
+  const buyerContractIds = (contracts ?? [])
+    .filter((c: any) => c.buyer_id === user.id)
+    .map((c: any) => c.id);
+  const { data: fundedWorkspaces } = buyerContractIds.length > 0
     ? await sb
         .from("workspaces")
         .select("id, contract_id, escrow_amount_paise, created_at")
-        .in("contract_id", contractIds)
+        .in("contract_id", buyerContractIds)
         .eq("escrow_funded", true)
     : { data: [] };
 
