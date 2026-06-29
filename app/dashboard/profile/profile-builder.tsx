@@ -110,6 +110,7 @@ function ProfileBuilderInner({
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [hasUnsavedChanges]);
   const [avatarUrl, setAvatarUrl] = React.useState<string | null>(initial.avatarUrl);
+  const [avatarVersion, setAvatarVersion] = React.useState<number>(Date.now());
   const [uploading, setUploading] = React.useState(false);
 
   // Crop modal state
@@ -132,7 +133,11 @@ function ProfileBuilderInner({
     const data = await res.json().catch(() => ({}));
     setUploading(false);
     if (data.ok && data.url) {
-      setAvatarUrl(data.url);
+      // Append ?v=timestamp to bust Supabase CDN cache so the new photo
+      // appears immediately (Supabase storage caches aggressively).
+      const url = data.url + (data.url.includes("?") ? "&" : "?") + "v=" + Date.now();
+      setAvatarUrl(url);
+      setAvatarVersion(Date.now());
       setSaved(`Photo updated`);
       setTimeout(() => setSaved(null), 3000);
       recompute();
@@ -469,8 +474,8 @@ function ProfileBuilderInner({
       <Card className="overflow-hidden">
         <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center">
           <div className="relative shrink-0">
-            <Avatar className="h-20 w-20">
-              <AvatarImage src={avatarUrl ?? undefined} />
+            <Avatar className="h-20 w-20 ring-1 ring-border">
+              <AvatarImage src={avatarUrl ?? undefined} className="object-cover" />
               <AvatarFallback className="text-lg">{(initial.fullName || "?").split(" ").map(w => w[0]).slice(0,2).join("").toUpperCase()}</AvatarFallback>
             </Avatar>
             <button type="button" onClick={() => uploadPhoto("avatar")} disabled={uploading} className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border bg-background shadow-sm transition-colors hover:bg-muted" title="Upload photo">

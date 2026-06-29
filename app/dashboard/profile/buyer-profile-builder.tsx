@@ -116,7 +116,7 @@ export function BuyerProfileBuilder({ userId, avatarUrl: initialAvatar, coverUrl
         <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center">
           <div className="relative shrink-0">
             <Avatar className="h-20 w-20">
-              <AvatarImage src={avatarUrl ?? undefined} />
+              <AvatarImage src={avatarUrl ?? undefined} className="object-cover" />
               <AvatarFallback className="text-lg">{initials}</AvatarFallback>
             </Avatar>
             <button type="button" onClick={() => uploadPhoto("avatar")} disabled={uploading} className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border bg-background shadow-sm transition-colors hover:bg-muted">
