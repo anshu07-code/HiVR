@@ -49,7 +49,7 @@ export async function FeaturedEmployees() {
               <CardContent className="space-y-3 p-5">
                 <div className="flex items-start gap-3">
                   <Avatar className="h-12 w-12">
-                    <AvatarImage src={p.user?.avatar_url ?? undefined} />
+                    <AvatarImage src={p.user?.avatar_url ?? undefined} className="object-cover" />
                     <AvatarFallback>{initials}</AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">

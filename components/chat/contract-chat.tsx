@@ -171,7 +171,7 @@ export function ContractChat({ contractId, currentUserId, peer }: {
     <div className="flex h-[600px] flex-col rounded-2xl border bg-card">
       <div className="flex items-center gap-2 border-b p-3">
         <Avatar className="h-8 w-8">
-          <AvatarImage src={peer.avatar_url ?? undefined} />
+          <AvatarImage src={peer.avatar_url ?? undefined} className="object-cover" />
           <AvatarFallback>{(peer.full_name ?? "?")[0]}</AvatarFallback>
         </Avatar>
         <div className="min-w-0 flex-1">
@@ -216,7 +216,7 @@ export function ContractChat({ contractId, currentUserId, peer }: {
           return (
             <div key={m.id} className={`flex gap-2 ${mine ? "flex-row-reverse" : ""}`}>
               <Avatar className="h-7 w-7 shrink-0">
-                <AvatarImage src={m.sender?.avatar_url ?? undefined} />
+                <AvatarImage src={m.sender?.avatar_url ?? undefined} className="object-cover" />
                 <AvatarFallback>{(m.sender?.full_name ?? "?")[0]}</AvatarFallback>
               </Avatar>
               <div className={`max-w-[70%] rounded-2xl px-3 py-2 text-sm ${mine ? "bg-primary text-primary-foreground" : "bg-muted"}`}>

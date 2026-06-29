@@ -137,7 +137,7 @@ export function TaskChatDialog({
                   <div className="flex items-end gap-2 max-w-[80%]">
                     {!isMe && (
                       <Avatar className="h-6 w-6 shrink-0">
-                        <AvatarImage src={otherUserAvatar ?? undefined} />
+                        <AvatarImage src={otherUserAvatar ?? undefined} className="object-cover" />
                         <AvatarFallback className="text-[9px]">{initial}</AvatarFallback>
                       </Avatar>
                     )}

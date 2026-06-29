@@ -247,7 +247,7 @@ export function WorkspaceShell({
         </Badge>
         <div className="flex items-center gap-2">
           <Avatar className="h-6 w-6">
-            <AvatarImage src={counterparty.avatar_url ?? undefined} />
+            <AvatarImage src={counterparty.avatar_url ?? undefined} className="object-cover" />
             <AvatarFallback className="text-[10px]">{counterpartyInitials}</AvatarFallback>
           </Avatar>
           <div className="text-sm">
@@ -650,7 +650,7 @@ export function WorkspaceShell({
         <div className="flex h-full min-h-0 flex-col">
           <div className="flex items-center gap-2 border-b px-3 py-2">
             <Avatar className="h-7 w-7">
-              <AvatarImage src={counterparty.avatar_url ?? undefined} />
+              <AvatarImage src={counterparty.avatar_url ?? undefined} className="object-cover" />
               <AvatarFallback className="text-xs">{counterpartyInitials}</AvatarFallback>
             </Avatar>
             <div className="min-w-0 flex-1">

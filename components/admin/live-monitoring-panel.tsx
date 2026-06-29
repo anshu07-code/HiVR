@@ -148,11 +148,11 @@ export function LiveMonitoringPanel() {
               >
                 <div className="flex -space-x-1.5">
                   <Avatar className="h-7 w-7 border-2 border-background">
-                    <AvatarImage src={peerA?.avatar_url ?? undefined} />
+                    <AvatarImage src={peerA?.avatar_url ?? undefined} className="object-cover" />
                     <AvatarFallback>{(peerA?.full_name ?? "?")[0]}</AvatarFallback>
                   </Avatar>
                   <Avatar className="h-7 w-7 border-2 border-background">
-                    <AvatarImage src={peerB?.avatar_url ?? undefined} />
+                    <AvatarImage src={peerB?.avatar_url ?? undefined} className="object-cover" />
                     <AvatarFallback>{(peerB?.full_name ?? "?")[0]}</AvatarFallback>
                   </Avatar>
                 </div>

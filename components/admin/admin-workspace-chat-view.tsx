@@ -257,7 +257,7 @@ export function AdminWorkspaceChatView({ workspaceId, currentAdminId, currentAdm
               return (
                 <div key={m.id} className={cn("flex gap-2", isBuyer ? "" : "flex-row-reverse")}>
                   <Avatar className="h-7 w-7 shrink-0">
-                    <AvatarImage src={peer?.avatar_url ?? undefined} />
+                    <AvatarImage src={peer?.avatar_url ?? undefined} className="object-cover" />
                     <AvatarFallback>{(peer?.full_name ?? "?")[0]}</AvatarFallback>
                   </Avatar>
                   <div className={cn("max-w-[80%] rounded-2xl px-3 py-2 text-sm",
@@ -390,7 +390,7 @@ function PartyRow({ label, p }: { label: string; p: { id: string; full_name: str
   return (
     <div className="flex items-center gap-2 rounded-md border bg-muted/20 p-2">
       <Avatar className="h-7 w-7">
-        <AvatarImage src={p.avatar_url ?? undefined} />
+        <AvatarImage src={p.avatar_url ?? undefined} className="object-cover" />
         <AvatarFallback>{(p.full_name ?? "?")[0]}</AvatarFallback>
       </Avatar>
       <div className="min-w-0 flex-1">

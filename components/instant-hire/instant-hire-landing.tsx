@@ -867,7 +867,7 @@ function CandidateCard({ c, onHire, onView, onHireInstant }: { c: IHCandidate; o
       <CardContent className="flex h-full flex-col gap-3 p-5">
         <div className="flex items-start gap-3">
           <Avatar className="h-12 w-12 shrink-0">
-            <AvatarImage src={c.avatar_url ?? undefined} />
+            <AvatarImage src={c.avatar_url ?? undefined} className="object-cover" />
             <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">
@@ -973,7 +973,7 @@ function TopProCard({ p, rank, onHire, onView }: { p: IHTopPro; rank: number; on
           </div>
           <div className="flex items-start gap-3">
             <Avatar className="h-16 w-16 shrink-0 ring-2 ring-amber-400/30">
-              <AvatarImage src={p.avatar_url ?? undefined} />
+              <AvatarImage src={p.avatar_url ?? undefined} className="object-cover" />
               <AvatarFallback className="bg-zinc-800 text-zinc-100">{initials}</AvatarFallback>
             </Avatar>
             <div className="min-w-0 flex-1">
@@ -1441,7 +1441,7 @@ function SmartMatchWizard({
                         #{i + 1}
                       </div>
                       <Avatar className="h-10 w-10">
-                        <AvatarImage src={c.avatar_url ?? undefined} />
+                        <AvatarImage src={c.avatar_url ?? undefined} className="object-cover" />
                         <AvatarFallback>
                           {(c.full_name ?? "??").split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase()}
                         </AvatarFallback>

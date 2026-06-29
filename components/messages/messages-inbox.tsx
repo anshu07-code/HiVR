@@ -481,7 +481,7 @@ export function MessagesInbox({
                       )}
                     >
                       <Avatar className="h-8 w-8 shrink-0">
-                        <AvatarImage src={t.counterpart?.avatar ?? undefined} />
+                        <AvatarImage src={t.counterpart?.avatar ?? undefined} className="object-cover" />
                         <AvatarFallback className="text-[10px]">
                           {t.counterpart?.name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase() ?? "?"}
                         </AvatarFallback>
@@ -534,7 +534,7 @@ export function MessagesInbox({
                 <CardTitle className="flex items-center gap-2 text-base">
                   {activeThread.counterpart && (
                     <Avatar className="h-6 w-6">
-                      <AvatarImage src={activeThread.counterpart.avatar ?? undefined} />
+                      <AvatarImage src={activeThread.counterpart.avatar ?? undefined} className="object-cover" />
                       <AvatarFallback className="text-[10px]">
                         {activeThread.counterpart.name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()}
                       </AvatarFallback>
@@ -577,7 +577,7 @@ export function MessagesInbox({
                   return (
                     <div key={m.id ?? `${m.ticket_id}-${m.created_at}`} className={cn("flex gap-2", isFromMe && "flex-row-reverse")}>
                       <Avatar className="h-6 w-6 shrink-0">
-                        <AvatarImage src={undefined} />
+                        <AvatarImage src={undefined} className="object-cover" />
                         <AvatarFallback className="text-[9px]">
                           {isFromMe ? "Y" : (m.sender?.full_name?.[0] ?? (isSupport ? "S" : "?"))}
                         </AvatarFallback>

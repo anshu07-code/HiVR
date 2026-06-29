@@ -191,7 +191,7 @@ export function ReviewsGiven({
               return (
                 <div key={c.id} className="flex flex-wrap items-center gap-3 rounded-md border p-3">
                   <Avatar className="h-9 w-9">
-                    <AvatarImage src={counterparty?.avatar_url ?? undefined} />
+                    <AvatarImage src={counterparty?.avatar_url ?? undefined} className="object-cover" />
                     <AvatarFallback className="text-[10px]">
                       {(counterparty?.full_name ?? "?").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()}
                     </AvatarFallback>
@@ -268,7 +268,7 @@ export function ReviewsGiven({
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="flex items-start gap-2.5 min-w-0">
                         <Avatar className="h-9 w-9">
-                          <AvatarImage src={r.reviewee?.avatar_url ?? undefined} />
+                          <AvatarImage src={r.reviewee?.avatar_url ?? undefined} className="object-cover" />
                           <AvatarFallback className="text-[10px]">
                             {(r.reviewee?.full_name ?? "?").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()}
                           </AvatarFallback>
@@ -403,7 +403,7 @@ function ReviewEditorModal({
         <div className="flex items-start gap-3">
           {counterparty && (
             <Avatar className="h-10 w-10">
-              <AvatarImage src={counterparty.avatar_url ?? undefined} />
+              <AvatarImage src={counterparty.avatar_url ?? undefined} className="object-cover" />
               <AvatarFallback className="text-xs">
                 {(counterparty.full_name ?? "?").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()}
               </AvatarFallback>

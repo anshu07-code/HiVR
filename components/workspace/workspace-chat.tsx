@@ -292,7 +292,7 @@ export function WorkspaceChat({
           return (
             <div key={m.id} className={cn("flex gap-2", mine ? "flex-row-reverse" : "")}>
               <Avatar className="h-7 w-7 shrink-0">
-                <AvatarImage src={m.sender?.avatar_url ?? undefined} />
+                <AvatarImage src={m.sender?.avatar_url ?? undefined} className="object-cover" />
                 <AvatarFallback>{(senderName ?? "?")[0]}</AvatarFallback>
               </Avatar>
               <div className={cn("max-w-[78%] rounded-2xl px-3 py-2 text-sm", mine ? "bg-primary text-primary-foreground" : "bg-muted")}>

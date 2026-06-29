@@ -114,7 +114,7 @@ export function PublicNavbarMobileMenu({ signedIn, email, profile }: Props) {
           <div className="mt-4 border-t pt-4">
             <div className="mb-3 flex items-center gap-2">
               <Avatar className="h-8 w-8">
-                <AvatarImage src={profile?.avatar_url ?? undefined} />
+                <AvatarImage src={profile?.avatar_url ?? undefined} className="object-cover" />
                 <AvatarFallback className="text-xs">{initials}</AvatarFallback>
               </Avatar>
               <div className="min-w-0">
