@@ -364,7 +364,7 @@ export function InstantHireLanding({
       </section>
 
       {/* BROWSE PROS */}
-      <section id="browse" className="container scroll-mt-32 py-16">
+      <section id="browse" className="container scroll-mt-32 py-16 min-w-0">
         <div className="mb-6 grid gap-4 md:grid-cols-[1.4fr,1fr] md:items-end">
           <div>
             <Badge variant="outline" className="mb-2">
@@ -384,9 +384,9 @@ export function InstantHireLanding({
           </div>
         </div>
 
-        <Card className="mb-6">
+        <Card className="mb-6 min-w-0">
           <CardContent className="space-y-3 p-4">
-            <div className="grid gap-3 md:grid-cols-[1.5fr,1fr,auto]">
+            <div className="grid gap-3 md:grid-cols-[1.5fr,1fr,auto] min-w-0">
               <VoiceSearch
                 name="q"
                 defaultValue={q}
@@ -397,7 +397,7 @@ export function InstantHireLanding({
                 value={skillFilter}
                 onChange={(e) => setSkillFilter(e.target.value)}
                 aria-label="Filter by skill"
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <option value="">All skills</option>
                 {activeSubcats.map(c => (

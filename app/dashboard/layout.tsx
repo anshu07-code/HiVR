@@ -1,20 +1,26 @@
 import { redirect } from "next/navigation";
 import { ShieldCheck } from "lucide-react";
 import { DashboardSidebar } from "@/components/layout/dashboard-sidebar";
+import { DashboardMobileSidebar } from "@/components/layout/dashboard-mobile-sidebar";
 import { MobileBottomTabs } from "@/components/layout/mobile-bottom-tabs";
 import { DashboardClientWrapper } from "@/components/dashboard/dashboard-client-wrapper";
+import { PageTransition } from "@/components/layout/page-transition";
 import { requireUser } from "@/lib/auth-context";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { isAdmin, mode, user } = await requireUser("/dashboard");
+  const { isAdmin, mode, user, profile } = await requireUser("/dashboard");
   const userId = user?.id ?? "";
+  const currentMode = (profile as any)?.current_mode;
 
   return (
     <DashboardClientWrapper userId={userId ?? ""}>
       <div className="flex min-h-screen bg-background">
-        <DashboardSidebar mode={mode} />
+        <DashboardSidebar mode={mode} currentMode={currentMode} />
         <main className="flex-1 min-w-0 pb-20 md:pb-0">
-          {children}
+          <div className="sticky top-0 z-20 flex items-center border-b bg-background/90 px-2 backdrop-blur md:hidden" style={{ height: 44 }}>
+            <DashboardMobileSidebar mode={mode} currentMode={currentMode} />
+          </div>
+          <PageTransition>{children}</PageTransition>
         </main>
         {isAdmin && (
           <a
@@ -25,7 +31,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             Open admin panel
           </a>
         )}
-        <MobileBottomTabs />
+        <MobileBottomTabs mode={mode} />
       </div>
     </DashboardClientWrapper>
   );

@@ -18,7 +18,7 @@
  */
 
 import Link from "next/link";
-import { User, LifeBuoy } from "lucide-react";
+import { User, LifeBuoy, Menu } from "lucide-react";
 import { Logo } from "./logo";
 import { ThemeSwitcher } from "@/components/theme/switcher";
 import { Button } from "@/components/ui/button";
@@ -97,6 +97,7 @@ export async function PublicNavbar() {
                 profile={profile}
                 notifUnread={notifUnread}
                 notifRecent={notifRecent}
+                onOpenMobileMenu={() => {}}
               />
             ) : (
               <>
@@ -108,6 +109,19 @@ export async function PublicNavbar() {
                 </Button>
                 <Button asChild size="icon" className="sm:hidden" aria-label="Sign in">
                   <Link href="/auth/signin"><User className="h-4 w-4" /></Link>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="sm:hidden"
+                  aria-label="Open menu"
+                  onClick={() => {
+                    if (typeof window !== "undefined") {
+                      window.dispatchEvent(new CustomEvent("hivr:open-mobile-menu"));
+                    }
+                  }}
+                >
+                  <Menu className="h-5 w-5" />
                 </Button>
               </>
             )}

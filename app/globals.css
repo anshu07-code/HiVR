@@ -3,6 +3,42 @@
 @tailwind utilities;
 
 /* =========================================================================
+   Mobile-first app-like feel
+   ========================================================================= */
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: none;
+  }
+
+  body {
+    overscroll-behavior: none;
+  }
+
+  /* Hide scrollbars on mobile while keeping scroll functionality */
+  @media (max-width: 767px) {
+    ::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+    }
+    .scrollbar-thin {
+      scrollbar-width: none;
+    }
+  }
+
+  /* Minimum touch target size for interactive elements on mobile */
+  @media (max-width: 767px) {
+    button, a, [role="button"], input, select, textarea {
+      touch-action: manipulation;
+    }
+  }
+}
+
+/* =========================================================================
    HiVR — Global styles + 4-mode theming
    --------------------------------------------------------------------------
    Every color the app uses flows from these CSS variables. No component

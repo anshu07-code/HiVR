@@ -167,7 +167,7 @@ export default async function DashboardHome() {
     <div className="container max-w-6xl space-y-6 py-8">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-3xl font-semibold tracking-tight">
+          <h1 className="font-display text-xl font-semibold tracking-tight md:text-3xl">
             Welcome back, {name}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -179,7 +179,7 @@ export default async function DashboardHome() {
         {/* Compact mode switcher in the header (for users who
             can only be in one mode, this becomes a "Become an
             Employee" prompt instead). */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col items-start gap-2 md:flex-row md:items-center">
           {(mode === "employee" || mode === "both") && (
             <AnonymousRequestButton
               status={(anonymousProfile as any)?.status ?? "none"}
@@ -651,7 +651,7 @@ function EmployeeHome({ contracts, ep, skills, points, verifications, currentUse
 
       <PaymentNotificationBanner userId={currentUserId} />
 
-      <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
         <ActiveContractsRealtime userId={currentUserId} initialCount={active} />
         <KpiCard Icon={Wallet}    accent="success" label="Earnings (lifetime)" value={formatINR(Math.round(lifetime / 100))} hint="after fees" />
         <KpiCard Icon={IndianRupee} accent="sky" label="Wallet balance" value={formatINR(Math.round(((wallet as any)?.balance_paise ?? 0) / 100))} hint="available" />
@@ -861,7 +861,7 @@ function BothHome({ contracts, ep, bp, skills, points, tasksPosted, payments, ve
         </Link>
         <KpiCard Icon={Star}      label="Rating"                            value={(ep as any)?.avg_rating?.toFixed(2) ?? "—"} hint={`${(ep as any)?.total_reviews ?? 0} reviews`} />
       </div>
-      <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
         <KpiCard Icon={ListChecks} accent="primary" label="Open tasks"         value={String(openTasks)}          hint={`${tasksPosted.length} posted`} />
         <KpiCard Icon={FileText}    label="Spent (lifetime)"                  value={formatINR(totalSpent)}     hint="on hired work" />
         <KpiCard Icon={ShieldCheck} label="Verified skills"                  value={String(skills.filter((s: any) => s.verification_status === "verified").length)} hint={`${skills.length} total`} />

@@ -50,27 +50,8 @@ export function NavLinks() {
         })}
       </nav>
 
-      {/* Mobile (sm): icon-only nav */}
-      <nav className="ml-2 flex items-center gap-0.5 md:hidden">
-        {NAV.map((n) => {
-          const active = pathname === n.href || pathname.startsWith(n.href + "/");
-          return (
-            <Link
-              key={n.href}
-              href={n.href}
-              prefetch
-              aria-label={n.label}
-              title={n.label}
-              className={cn(
-                "grid h-9 w-9 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
-                active && "bg-accent text-foreground"
-              )}
-            >
-              <n.Icon className="h-4 w-4" />
-            </Link>
-          );
-        })}
-      </nav>
+      {/* Mobile: hidden — nav links are in the side drawer */}
+
     </>
   );
 }

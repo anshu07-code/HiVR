@@ -28,23 +28,31 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning className={cn(sans.variable, display.variable)}>
       <head>
-        {/* Anti-FOUC theme bootstrap.
-            Runs synchronously before <body> renders so the
-            `.dark` / `.eye-shield` class is on <html> by the time
-            the first paint happens. Without this, every refresh
-            shows the light theme for a fraction of a second before
-            React hydrates and applies the saved preference. */}
+        {/* Anti-FOUC theme bootstrap */}
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){try{var k="hivr-theme";var m=localStorage.getItem(k);if(m==="dark"){document.documentElement.classList.add("dark");}else if(m==="eye_shield"){document.documentElement.classList.add("eye-shield");}}catch(e){}})();`,
           }}
         />
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#18181b" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="HiVR" />
+        <link rel="apple-touch-icon" href="/icon-192.svg" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="application-name" content="HiVR" />
       </head>
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">
         <ThemeProvider>
           {children}
           <AssistantLauncher />
         </ThemeProvider>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(e){console.warn("SW registration failed:",e)})})}`,
+          }}
+        />
       </body>
     </html>
   );

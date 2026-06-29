@@ -181,12 +181,19 @@ function SidebarNav({ items, collapsed }: { items: Item[]; collapsed: boolean })
   );
 }
 
-export function DashboardSidebar({ mode = "employee" }: { mode?: SidebarMode }) {
+const BOTH_NAV: Item[] = (() => {
+  const list = EMPLOYEE_NAV.slice();
+  const ovIdx = list.findIndex(i => i.href === "/dashboard");
+  list.splice(ovIdx + 1, 0, { href: "/dashboard/tasks", label: "My Posted Tasks", Icon: ListChecks });
+  return list;
+})();
+
+export function DashboardSidebar({ mode = "employee", currentMode }: { mode?: SidebarMode; currentMode?: string | null }) {
   // No usePathname() here on purpose. Only the nav subtrees re-render on
   // route change, so the Logo, collapse button, and outer aside stay
   // completely stable.
   const [collapsed, setCollapsed] = React.useState(false);
-  const nav = mode === "admin" ? ADMIN_NAV : mode === "buyer" ? BUYER_NAV : mode === "business" ? BUSINESS_NAV : EMPLOYEE_NAV;
+  const nav = mode === "admin" ? ADMIN_NAV : mode === "buyer" ? BUYER_NAV : mode === "business" ? BUSINESS_NAV : currentMode === "both" ? BOTH_NAV : EMPLOYEE_NAV;
 
   return (
     <aside
