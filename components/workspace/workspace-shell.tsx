@@ -23,7 +23,7 @@ import { MarkDoneButton } from "./mark-done-button";
 import { DeliveryChecklist } from "./delivery-checklist";
 import { VaultActivityTimeline } from "./vault-activity-timeline";
 import { WorkspaceFlowHelp } from "./workspace-flow-help";
-import { CancellationPanel } from "./cancellation-panel";
+import { ReviewPopup } from "./review-popup";
 import { FileScopeDisputeModal } from "@/components/disputes/file-scope-dispute-modal";
 
 type WorkspaceStatus = "awaiting_funding" | "funded" | "delivered" | "in_review" | "completed" | "frozen" | "cancelled";
@@ -71,7 +71,7 @@ export function WorkspaceShell({
   workspace, contract, task, brief, counterparty, me, currentUserRole, initialChecklist,
 }: {
   workspace: Workspace;
-  contract: { id: string; agreed_price: number; status: string; incentive_earned: boolean; incentive_paid_at: string | null; cancellation_policy: string };
+  contract: { id: string; agreed_price: number; status: string; incentive_earned: boolean; incentive_paid_at: string | null };
   task: { id: string; title: string; pricing_model: string; incentive_condition_type: string | null; incentive_threshold: string | null; incentive_amount_paise: number | null };
   brief: any;
   counterparty: { id: string; full_name: string | null; avatar_url: string | null };
@@ -198,6 +198,23 @@ export function WorkspaceShell({
     router.refresh();
   };
 
+  const withdrawFromContract = async () => {
+    if (!window.confirm("Withdraw from this contract? A ₹99 fee will be charged to your wallet (or added to your pending balance if you don't have enough funds). The escrow, if already funded, will be refunded to the buyer.")) return;
+    setBusy(true); setError(null);
+    try {
+      const r = await fetch(`/api/contracts/${workspace.contract_id}/withdraw`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reason: "User withdrew from workspace" }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || !data.ok) { setError(data?.error ?? "Failed"); return; }
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const openChat = () => { setChatOpen(true); setUnread(0); };
   const counterpartyInitials = (counterparty.full_name ?? "?").split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase() || "?";
   const myInitials = (me.full_name ?? "?").split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase() || "?";
@@ -263,21 +280,7 @@ export function WorkspaceShell({
         <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2.5 text-sm text-destructive">{error}</div>
       )}
 
-      {/* Cancellation flow */}
-      <CancellationPanel
-        contractId={workspace.contract_id}
-        workspaceId={workspace.id}
-        currentUserId={me.id}
-        buyerId={workspace.buyer_id}
-        employeeId={workspace.employee_id}
-        currentUserRole={currentUserRole}
-        workspaceStatus={workspace.status}
-        cancellable={workspace.status === "funded" || workspace.status === "delivered" || workspace.status === "in_review"}
-        cancellationPolicy={contract.cancellation_policy as "cancellable" | "non-cancellable"}
-        agreedPaise={Number(workspace.escrow_amount_paise ?? contract?.agreed_price ?? 0)}
-        totalDeliverables={initialChecklist.length}
-        approvedDeliverables={initialChecklist.filter(c => c.status === "done" || c.status === "resolved").length}
-      />
+      {/* Cancellation removed — contracts run to completion or go to dispute. */}
 
       {/* Frozen banner */}
       {workspace.status === "frozen" && (
@@ -313,6 +316,16 @@ export function WorkspaceShell({
             </Button>
           )}
         </div>
+      )}
+
+      {/* Post-completion review popup — fires once per contract per session. */}
+      {workspace.status === "completed" && (
+        <ReviewPopup
+          contractId={workspace.contract_id}
+          currentUserId={me.id}
+          revieweeId={isBuyer ? workspace.employee_id : workspace.buyer_id}
+          revieweeName={counterparty?.full_name ?? ""}
+        />
       )}
 
       {/* Previous workspace hint */}
@@ -404,6 +417,7 @@ export function WorkspaceShell({
         onRequestRevision={requestRevision}
         onMarkDone={() => router.refresh()}
         onFileDispute={() => setDisputeOpen(true)}
+        onWithdraw={withdrawFromContract}
       />
 
       {/* Checklist / Vault / How-it-works tabs */}
@@ -643,7 +657,7 @@ export function WorkspaceShell({
 
 function ActionBar({
   workspaceId, contractId, status, role, allDone, pendingNotDone, busy,
-  onFund, onSubmitDelivery, onRequestRevision, onMarkDone, onFileDispute,
+  onFund, onSubmitDelivery, onRequestRevision, onMarkDone, onFileDispute, onWithdraw,
 }: {
   workspaceId: string;
   contractId: string;
@@ -656,6 +670,7 @@ function ActionBar({
   onSubmitDelivery: () => void;
   onRequestRevision: () => void;
   onMarkDone: () => void;
+  onWithdraw: () => void;
   onFileDispute: () => void;
 }) {
   if (status === "frozen") {
@@ -692,17 +707,27 @@ function ActionBar({
         <Card>
           <CardContent className="flex flex-wrap items-center justify-between gap-2 p-4">
             <p className="text-sm text-muted-foreground">Fund the escrow so the employee can start work.</p>
-            <Button size="sm" variant="gradient" onClick={onFund}>
-              <ShieldAlert className="h-3.5 w-3.5" />Fund escrow
-            </Button>
+            <div className="flex gap-2">
+              <Button size="sm" variant="ghost" onClick={onWithdraw} disabled={busy} className="text-rose-600 hover:bg-rose-500/10">
+                Withdraw (₹99 fee)
+              </Button>
+              <Button size="sm" variant="gradient" onClick={onFund}>
+                <ShieldAlert className="h-3.5 w-3.5" />Fund escrow
+              </Button>
+            </div>
           </CardContent>
         </Card>
       );
     }
     return (
       <Card>
-        <CardContent className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
-          <Clock className="h-4 w-4" />Waiting for the buyer to fund the escrow…
+        <CardContent className="flex flex-wrap items-center justify-between gap-2 p-4 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4" />Waiting for the buyer to fund the escrow…
+          </div>
+          <Button size="sm" variant="ghost" onClick={onWithdraw} disabled={busy} className="text-rose-600 hover:bg-rose-500/10">
+            Withdraw (₹99 fee)
+          </Button>
         </CardContent>
       </Card>
     );

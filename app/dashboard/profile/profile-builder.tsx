@@ -36,7 +36,7 @@ type Initial = {
   fullName: string; email: string; avatarUrl: string | null; coverUrl: string | null; phone: string | null;
   headline: string; bio: string; location: string; experienceType: string;
   hourlyRatePaise: number | null; availabilityHours: number | null; timezone: string;
-  skills: { category_id: string; name?: string; slug?: string; icon?: string; tier?: string; is_primary?: boolean; years_experience?: number }[];
+  skills: { category_id: string; name?: string; slug?: string; icon?: string; tier?: string; is_primary?: boolean; years_experience?: number; rate_per_hour_paise?: number | null; rate_per_task_paise?: number | null; rate_per_day_paise?: number | null; rate_per_week_paise?: number | null }[];
   education: any[]; experience: any[]; projects: any[]; certifications: any[]; resume: any;
   socialLinks: any[];
   avgRating: number;
@@ -165,8 +165,22 @@ export function ProfileBuilder({
   }, []);
 
   // ----- Skills state -----
-  const [selectedSkills, setSelectedSkills] = React.useState<{ category_id: string; years_experience?: number }[]>(
-    initial.skills.map(s => ({ category_id: s.category_id, years_experience: s.years_experience }))
+  const [selectedSkills, setSelectedSkills] = React.useState<{
+    category_id: string;
+    years_experience?: number;
+    rate_per_hour_paise?: number | null;
+    rate_per_task_paise?: number | null;
+    rate_per_day_paise?: number | null;
+    rate_per_week_paise?: number | null;
+  }[]>(
+    initial.skills.map(s => ({
+      category_id: s.category_id,
+      years_experience: s.years_experience,
+      rate_per_hour_paise: s.rate_per_hour_paise ?? null,
+      rate_per_task_paise: s.rate_per_task_paise ?? null,
+      rate_per_day_paise: s.rate_per_day_paise ?? null,
+      rate_per_week_paise: s.rate_per_week_paise ?? null,
+    }))
   );
   const [skillSearch, setSkillSearch] = React.useState("");
   const [skillsDirty, setSkillsDirty] = React.useState(false);
@@ -196,8 +210,23 @@ export function ProfileBuilder({
       if (prev.find(s => s.category_id === catId)) {
         return prev.filter(s => s.category_id !== catId);
       }
-      return [...prev, { category_id: catId, years_experience: 1 }];
+      const cat = flatSkills.find(c => c.id === catId);
+      return [...prev, {
+        category_id: catId,
+        years_experience: 1,
+        rate_per_hour_paise: null,
+        rate_per_task_paise: null,
+        rate_per_day_paise: null,
+        rate_per_week_paise: null,
+      }];
     });
+  }
+
+  function updateSkillRate(catId: string, key: string, value: number | null) {
+    setSkillsDirty(true);
+    setSelectedSkills(prev => prev.map(s =>
+      s.category_id === catId ? { ...s, [key]: value } : s
+    ));
   }
 
   // ----- Education -----
@@ -485,20 +514,58 @@ export function ProfileBuilder({
             {selectedSkills.length > 0 && (
               <div>
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Selected ({selectedSkills.length})</p>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="space-y-3">
                   {selectedSkills.map(s => {
                     const cat = flatSkills.find(c => c.id === s.category_id);
+                    const isTierB = cat?.tier === "role_engagement";
+                    const tierAShow = true;
                     return (
-                      <Badge key={s.category_id} variant="default" className="gap-1 pr-1">
-                        {cat?.name ?? "Skill"}
-                        <button
-                          type="button"
-                          className="ml-1 grid h-4 w-4 place-items-center rounded-full hover:bg-primary-foreground/20"
-                          onClick={() => toggleSkill(s.category_id)}
-                        >
-                          <X className="h-2.5 w-2.5" />
-                        </button>
-                      </Badge>
+                      <div key={s.category_id} className="rounded-md border p-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="default" className="gap-1">
+                              {cat?.name ?? "Skill"}
+                            </Badge>
+                            <span className="text-[10px] text-muted-foreground">{isTierB ? "Tier B" : "Tier A"}</span>
+                          </div>
+                          <button
+                            type="button"
+                            className="grid h-5 w-5 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                            onClick={() => toggleSkill(s.category_id)}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          {(isTierB ? [
+                            { key: "rate_per_hour_paise", label: "Per hour", unit: "/hr" },
+                            { key: "rate_per_task_paise", label: "Per task", unit: "/task" },
+                            { key: "rate_per_day_paise", label: "Per day", unit: "/day" },
+                            { key: "rate_per_week_paise", label: "Per week", unit: "/week" },
+                          ] : [
+                            { key: "rate_per_hour_paise", label: "Per hour", unit: "/hr" },
+                            { key: "rate_per_task_paise", label: "Per task", unit: "/task" },
+                          ]).map(r => (
+                            <div key={r.key}>
+                              <label className="text-[10px] font-medium text-muted-foreground">{r.label}</label>
+                              <div className="relative mt-0.5">
+                                <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">₹</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  placeholder="0"
+                                  value={(s as any)[r.key] ? Math.round(Number((s as any)[r.key]) / 100) : ""}
+                                  onChange={(e) => {
+                                    const val = e.target.value ? Math.round(Number(e.target.value) * 100) : null;
+                                    updateSkillRate(s.category_id, r.key, val);
+                                  }}
+                                  className="h-8 w-full rounded-md border bg-background pl-5 pr-2 text-xs"
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     );
                   })}
                 </div>

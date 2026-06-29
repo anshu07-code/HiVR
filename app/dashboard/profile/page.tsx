@@ -37,7 +37,7 @@ export default async function ProfilePage() {
   ] = await Promise.all([
     sb.from("users").select("id, full_name, email, avatar_url, cover_url, phone, roles, current_mode").eq("id", user.id).maybeSingle(),
     sb.from("employee_profiles").select("*").eq("user_id", user.id).maybeSingle(),
-    sb.from("employee_skills").select("id, category_id, is_primary, years_experience, category:skill_categories(name, slug, icon, tier)").eq("employee_id", user.id),
+    sb.from("employee_skills").select("id, category_id, is_primary, years_experience, rate_per_hour_paise, rate_per_task_paise, rate_per_day_paise, rate_per_week_paise, category:skill_categories(name, slug, icon, tier)").eq("employee_id", user.id),
     sb.from("skill_categories").select("id, name, slug, icon, tier, parent_category_id, status").eq("status", "active").order("sort_order"),
     sb.from("employee_education").select("*").eq("user_id", user.id).order("sort_order", { ascending: false }),
     sb.from("employee_experience").select("*").eq("user_id", user.id).order("sort_order", { ascending: false }),
@@ -153,7 +153,7 @@ export default async function ProfilePage() {
           hourlyRatePaise: (ep as any)?.hourly_rate_paise ?? null,
           availabilityHours: (ep as any)?.availability_hours ?? null,
           timezone: (ep as any)?.timezone ?? "Asia/Kolkata",
-          skills: (skills ?? []).map((s: any) => ({ category_id: s.category_id, name: s.category?.name, slug: s.category?.slug, icon: s.category?.icon, tier: s.category?.tier, is_primary: s.is_primary, years_experience: s.years_experience })),
+          skills: (skills ?? []).map((s: any) => ({ category_id: s.category_id, name: s.category?.name, slug: s.category?.slug, icon: s.category?.icon, tier: s.category?.tier, is_primary: s.is_primary, years_experience: s.years_experience, rate_per_hour_paise: s.rate_per_hour_paise, rate_per_task_paise: s.rate_per_task_paise, rate_per_day_paise: s.rate_per_day_paise, rate_per_week_paise: s.rate_per_week_paise })),
           education: (education ?? []) as any[],
           experience: (experience ?? []) as any[],
           projects: (projects ?? []) as any[],

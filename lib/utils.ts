@@ -5,18 +5,20 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatINR(amount: number): string {
+export function formatINR(amount: number | null | undefined): string {
+  if (amount == null) return "—";
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(amount);
 }
 
 /**
- * Format a paise amount (bigint) as INR. All money in the DB is stored in
+ * Format a paise amount as INR. All money in the DB is stored in
  * paise (₹1 = 100 paise). Use this anywhere a money value is read from the
- * database. Negative values get a "−" prefix.
+ * database. Shows up to 2 decimal places (so ₹200.5, ₹700.25, etc.).
  */
 export function formatPaise(paise: number | bigint | null | undefined): string {
   if (paise == null) return "—";
@@ -24,7 +26,8 @@ export function formatPaise(paise: number | bigint | null | undefined): string {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(rupees);
 }
 

@@ -214,7 +214,7 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
 
       {/* ============ HERO ============ */}
       <div className="border-b bg-background">
-        <div className="container py-8">
+        <div className="container pb-0 pt-8">
           <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
             <div className="flex-1 min-w-0">
               {/* Tags row */}
@@ -352,7 +352,7 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
       </div>
 
       {/* ============ MAIN BODY (tabs) ============ */}
-      <div className="container py-8">
+      <div className="container pb-8 pt-4">
         <TaskTabs
           taskId={taskId}
           task={{

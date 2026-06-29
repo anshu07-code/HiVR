@@ -14,6 +14,7 @@ import { cn, formatPaise, timeAgo } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { downloadFromSignedUrl } from "@/lib/safe-download";
 import { VaultPreviewModal, type VaultItem as PreviewItem } from "./vault-preview-modal";
+import { MarkDoneButton } from "./mark-done-button";
 
 type VaultReviewItem = {
   id: string;
@@ -229,7 +230,8 @@ export function VaultReviewPanel({
                 {isBuyer && !isLocked && (workspaceStatus === "delivered" || workspaceStatus === "in_review") && (
                   <MarkDoneButton
                     workspaceId={workspaceId}
-                    disabled={!summary.can_mark_done}
+                    canMark={summary.can_mark_done}
+                    hint={!summary.can_mark_done ? "All checklist items must be approved first" : "Mark workspace as done"}
                     onDone={() => load()}
                   />
                 )}
@@ -470,52 +472,4 @@ function StatusBadge({ status }: { status: "pending" | "approved" | "rejected" }
     return <Badge variant="outline" className="border-rose-500/30 bg-rose-500/10 text-[9px] text-rose-700"><XCircle className="h-2.5 w-2.5" />Rejected</Badge>;
   }
   return <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-[9px] text-amber-700"><Clock className="h-2.5 w-2.5" />Pending</Badge>;
-}
-
-function MarkDoneButton({ workspaceId, disabled, onDone }: { workspaceId: string; disabled: boolean; onDone: () => void }) {
-  const [open, setOpen] = React.useState(false);
-  const [busy, setBusy] = React.useState(false);
-  const [err, setErr] = React.useState<string | null>(null);
-
-  async function markDone() {
-    setBusy(true);
-    setErr(null);
-    try {
-      const r = await fetch("/api/workspace/mark-done", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ workspaceId }),
-      });
-      const d = await r.json();
-      if (!r.ok || !d.ok) { setErr(d?.error ?? "Failed"); return; }
-      setOpen(false);
-      onDone();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (!open) {
-    return (
-      <Button onClick={() => setOpen(true)} disabled={disabled} variant="gradient">
-        <ShieldCheck className="h-3.5 w-3.5" />Mark as done
-      </Button>
-    );
-  }
-
-  return (
-    <div className="rounded-md border bg-background p-3 space-y-2">
-      <p className="text-xs font-semibold">Confirm & release payment</p>
-      <p className="text-[10px] text-muted-foreground">
-        This releases the escrow to the employee, locks the chat, and closes the vault. This can&apos;t be undone.
-      </p>
-      {err && <p className="text-[10px] text-rose-600">{err}</p>}
-      <div className="flex justify-end gap-2">
-        <Button size="sm" variant="ghost" onClick={() => setOpen(false)} disabled={busy}>Cancel</Button>
-        <Button size="sm" variant="gradient" onClick={markDone} disabled={busy}>
-          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-          Confirm & release
-        </Button>
-      </div>
-    </div>
-  );
 }

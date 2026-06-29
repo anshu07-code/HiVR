@@ -31,7 +31,6 @@ const Schema = z.object({
   scheduled_publish_at: z.string().optional(),
   show_in_upcoming: z.boolean().default(true),
   brief: z.string().min(2),
-  cancellation_policy: z.enum(["cancellable", "non-cancellable"]).default("cancellable"),
   openings: z.coerce.number().int().min(1).max(50).default(1),
 }).refine(d => d.budget_max >= d.budget_min, { message: "Max budget must be ≥ min" })
   .refine(d => new Date(d.deadline) > new Date(), { message: "Deadline must be in the future", path: ["deadline"] })
@@ -57,7 +56,6 @@ export async function createTaskAction(formData: FormData): Promise<void> {
     scheduled_publish_at: formData.get("scheduled_publish_at") ? String(formData.get("scheduled_publish_at")) : undefined,
     show_in_upcoming: String(formData.get("show_in_upcoming") ?? "true") !== "false",
     brief: String(formData.get("brief") ?? ""),
-    cancellation_policy: String(formData.get("cancellation_policy") ?? "cancellable"),
     openings: formData.get("openings") ? String(formData.get("openings")) : "1",
   };
   const parsed = Schema.safeParse(raw);
@@ -121,7 +119,6 @@ export async function createTaskAction(formData: FormData): Promise<void> {
     scheduled_publish_at: scheduled ? parsed.data.scheduled_publish_at : null,
     show_in_upcoming: parsed.data.show_in_upcoming ?? true,
     brief: briefPayload,
-    cancellation_policy: parsed.data.cancellation_policy,
     scope_flag: "standard",
     openings: parsed.data.openings ?? 1,
     status: scheduled ? "upcoming" : "open",

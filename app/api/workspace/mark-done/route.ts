@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { notify } from "@/lib/notifications/helpers";
 import { SecurityError, requireUuid, enforceRateLimit } from "@/lib/security";
 import { encodeWorkspaceSlug } from "@/lib/workspace-slug";
+import { formatPaise } from "@/lib/utils";
 
 export async function POST(req: NextRequest) {
   try {
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
     // Confirm user is a party to the workspace.
     const { data: ws, error: wsErr } = await sb
       .from("workspaces")
-      .select("id, buyer_id, employee_id")
+      .select("id, buyer_id, employee_id, contract_id")
       .eq("id", workspaceId)
       .maybeSingle();
     if (wsErr || !ws) {
@@ -35,6 +36,9 @@ export async function POST(req: NextRequest) {
     const w = ws as any;
     if (w.buyer_id !== user.id && w.employee_id !== user.id) {
       return NextResponse.json({ ok: false, error: "Not a party to this workspace" }, { status: 403 });
+    }
+    if (!w.contract_id) {
+      return NextResponse.json({ ok: false, error: "Workspace has no associated contract" }, { status: 400 });
     }
 
     // Mark workspace done via RPC (sets contract status = 'completed', release_at, etc.).
@@ -50,11 +54,14 @@ export async function POST(req: NextRequest) {
     const employeeId = w.employee_id;
 
     // Fetch contract + payment info.
-    const { data: contract } = await admin
+    const { data: contract, error: contractErr } = await admin
       .from("contracts")
       .select("id, employee_payout_paise, agreed_price, payments(id, amount, platform_fee_amount, razorpay_payment_id, escrow_released)")
-      .eq("workspace_id", workspaceId)
+      .eq("id", w.contract_id)
       .maybeSingle();
+    if (contractErr) {
+      console.error("[mark-done] contract fetch failed", contractErr);
+    }
 
     if (contract) {
       const c = contract as any;
@@ -97,7 +104,7 @@ export async function POST(req: NextRequest) {
         userId: employeeId,
         kind: "payment_released",
         title: "Payment released ✓",
-        body: `₹${(employeePayout / 100).toFixed(2)} has been credited to your wallet for the completed contract.`,
+        body: `${formatPaise(employeePayout)} has been credited to your wallet for the completed contract.`,
         link: `/dashboard/workspaces/${encodeWorkspaceSlug("workspace", workspaceId)}`,
       });
     }

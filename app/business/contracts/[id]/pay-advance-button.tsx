@@ -13,6 +13,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { IndianRupee, Loader2 } from "lucide-react";
+import { formatPaise } from "@/lib/utils";
 
 declare global {
   interface Window {
@@ -139,7 +140,7 @@ export function PayAdvanceButton({
     <div className="flex flex-col items-end gap-1">
       <Button variant="gradient" size="sm" disabled={busy || disabled} onClick={pay}>
         {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <IndianRupee className="h-3.5 w-3.5" />}
-        Pay advance ₹{Math.round(advancePaise / 100)}
+        Pay advance {formatPaise(advancePaise)}
       </Button>
       {err && <span className="text-xs text-destructive">{err}</span>}
     </div>

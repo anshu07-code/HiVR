@@ -16,18 +16,20 @@ import crypto from "crypto";
  * Flow (HiVR wallet-first policy):
  *   1. Verify the signature.
  *   2. Look up the workspace and the assigned employee.
- *   3. Compute the platform fee using the employee's trust tier.
- *   4. Credit the buyer's HiVR wallet with (escrow_amount - platform_fee).
- *      This is the net amount that lands in the wallet — the platform
- *      fee is recognized as HiVR's revenue at this point.
- *   5. Auto-debit the wallet to fund the workspace escrow.
- *   6. Mark the workspace as funded.
- *   7. Notify both parties.
+ *   3. Compute the platform fee from the employee's trust tier
+ *      (this is recorded in `payments.platform_fee_amount` and is
+ *      deducted from the employee's payout at release time — see
+ *      /api/workspace/mark-done).
+ *   4. Credit the buyer's HiVR wallet with the FULL gross amount.
+ *   5. Auto-debit the wallet to fund the workspace escrow (full amount).
+ *   6. Record the gross payment + platform fee in `payments`.
+ *   7. Mark the workspace as funded.
+ *   8. Notify both parties.
  *
- * The end result: every rupee that comes in from Razorpay first lands
- * in the buyer's wallet (net of platform fee), then is debited into
- * the workspace escrow. The wallet is the single source of truth for
- * "money the buyer controls".
+ * The platform fee is NOT pre-deducted from the escrow principal —
+ * doing so would short-fund the workspace and double-count the fee
+ * (once at funding, once at release). The fee is only deducted at
+ * release time from the employee's payout.
  *
  * Body: {
  *   workspaceId: string,
@@ -98,18 +100,22 @@ export async function POST(req: NextRequest) {
   }
 
   // 3. Compute the platform fee from the employee's trust tier
+  //    NOTE: the platform fee is recorded against the payment and is
+  //    deducted from the employee's payout at release time (see
+  //    /api/workspace/mark-done). We do NOT pre-deduct it from the
+  //    buyer's escrow here — that double-counts the fee and short-funds
+  //    the workspace by exactly the fee amount.
   const { data: feePct } = await admin.rpc("get_platform_fee_pct" as any, { p_user_id: w.employee_id } as any);
   const feeDecimal = Number(feePct ?? 0.15);
   const grossPaise = Number(w.escrow_amount_paise);
   const platformFeePaise = Math.floor(grossPaise * feeDecimal);
-  const netWalletCreditPaise = grossPaise - platformFeePaise;
 
-  // 4. Credit the buyer's wallet (net of platform fee)
+  // 4. Credit the buyer's wallet with the FULL gross amount paid in.
   const { data: walletRes } = await admin.rpc("wallet_credit" as any, {
     p_user_id: user.id,
-    p_amount_paise: netWalletCreditPaise,
+    p_amount_paise: grossPaise,
     p_kind: "add_funds",
-    p_description: `Razorpay top-up for workspace ${workspaceId} (net of ${(feeDecimal * 100).toFixed(0)}% platform fee)`,
+    p_description: `Razorpay top-up for workspace ${workspaceId}`,
     p_ref_type: "razorpay_payment",
     p_ref_id: paymentId,
     p_metadata: {
@@ -129,12 +135,12 @@ export async function POST(req: NextRequest) {
     }, { status: 500 });
   }
 
-  // 5. Auto-debit the wallet to fund the workspace escrow
+  // 5. Auto-debit the FULL gross amount from the wallet into the workspace escrow.
   const { data: debitRes } = await admin.rpc("wallet_debit_for_escrow" as any, {
     p_workspace_id: workspaceId,
-    p_amount_paise: netWalletCreditPaise,
+    p_amount_paise: grossPaise,
     p_user_id: user.id,
-    p_description: `Funded workspace escrow (after platform fee of ${platformFeePaise} paise)`,
+    p_description: `Funded workspace escrow`,
   } as any);
   const dRes = debitRes as any;
   if (!dRes || !dRes.ok) {
@@ -192,7 +198,7 @@ export async function POST(req: NextRequest) {
     orderId,
     gross_paise: grossPaise,
     platform_fee_paise: platformFeePaise,
-    wallet_credit_paise: netWalletCreditPaise,
+    wallet_credit_paise: grossPaise,
     new_balance_paise: wRes.balance,
   });
 }

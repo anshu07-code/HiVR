@@ -66,11 +66,6 @@ const TIER_B_MODELS = [
   { key: "rate_per_week_paise", label: "Per week",  unit: "/week" },
 ] as const;
 
-function inr(n: number | null | undefined): string {
-  if (!n || n <= 0) return "—";
-  return "₹" + (n / 100).toLocaleString("en-IN", { maximumFractionDigits: 0 });
-}
-
 export function InstantHireSection({
   userId,
   initial,

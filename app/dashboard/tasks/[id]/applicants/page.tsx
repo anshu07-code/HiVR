@@ -62,6 +62,7 @@ export default async function TaskApplicantsPage({ params }: { params: { id: str
     .from("task_applications")
     .select("id, cover_note, bid_paise, status, created_at, updated_at, hiring_stage, hiring_stage_history, hiring_notes, hiring_stage_updated_at, employee_id")
     .eq("task_id", taskId)
+    .neq("hiring_stage", "withdrawn")
     .order("created_at", { ascending: false });
 
   // Fetch employee standing rates for this task's category to compute bargain prices

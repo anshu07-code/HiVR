@@ -89,7 +89,7 @@ export function TaskTabs({
       {/* Sticky tab bar */}
       <div className="sticky top-[57px] z-20 -mx-4 mb-6 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="container">
-          <div className="flex gap-1 overflow-x-auto">
+          <div className="flex gap-1">
             <TabButton active={tab === "overview"} onClick={() => setTab("overview")} Icon={FileText} label="Overview" />
             <TabButton active={tab === "applicants"} onClick={() => setTab("applicants")} Icon={Users} label="Applicants" count={appsCount} />
             <TabButton active={tab === "qa"} onClick={() => setTab("qa")} Icon={MessageCircle} label="Q & A" count={qCount} />
@@ -154,12 +154,12 @@ function OverviewTab({ task }: { task: TaskLite }) {
                 <div key={i} className="mb-4 last:mb-0">
                   {s.heading && <h3 className="mb-2 mt-4 font-display text-base font-semibold text-foreground">{s.heading}</h3>}
                   {s.body.split("\n").filter((l) => l.trim()).map((line, j) => (
-                    <p key={j} className="my-1 text-sm leading-relaxed text-foreground/90">{line}</p>
+                    <p key={j} className="my-1 break-words text-sm leading-relaxed text-foreground/90">{line}</p>
                   ))}
                 </div>
               ))
             ) : (
-              <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">{task.description}</p>
+              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground/90">{task.description}</p>
             )}
           </CardContent>
         </Card>

@@ -35,7 +35,6 @@ export function PostTaskForm({ categories, kycComplete = true, remainingHour, re
   const [improving, setImproving] = React.useState(false);
   const [briefValue, setBriefValue] = React.useState<BriefValue>({ checklist_items: [], notes: "" });
   const [openings, setOpenings] = React.useState<number>(1);
-  const [cancellationPolicy, setCancellationPolicy] = React.useState<"cancellable" | "non-cancellable">("cancellable");
   const errorRef = React.useRef<HTMLDivElement | null>(null);
 
   // Auto-scroll the error message into view when it appears.
@@ -163,7 +162,6 @@ export function PostTaskForm({ categories, kycComplete = true, remainingHour, re
         notes: briefValue.notes ?? "",
         sample_url: briefValue.sample_url ?? undefined,
       }));
-      fd.set("cancellation_policy", cancellationPolicy);
       fd.set("openings", String(openings));
       await createTaskAction(fd);
       setSubmitting(false);
@@ -326,33 +324,10 @@ export function PostTaskForm({ categories, kycComplete = true, remainingHour, re
         <p className="text-xs text-muted-foreground">After this, the task auto-closes. You can extend or close it manually later from the task page.</p>
       </div>
 
-      {/* ---------- CANCELLATION POLICY ---------- */}
-      <div className="space-y-2 rounded-lg border p-4">
-        <Label className="text-base">Cancellation policy</Label>
-        <p className="text-xs text-muted-foreground">
-          Choose whether employees can earn per-deliverable with partial refunds, or lock the full amount with no cancellations.
-        </p>
-        <div className="flex gap-3">
-          <label className={`flex flex-1 cursor-pointer items-start gap-3 rounded-md border p-3 text-sm transition-colors ${cancellationPolicy === "cancellable" ? "border-primary bg-primary/5" : "hover:bg-muted"}`}>
-            <input type="radio" name="cancellation" value="cancellable" checked={cancellationPolicy === "cancellable"} onChange={() => setCancellationPolicy("cancellable")} className="mt-0.5" />
-            <div>
-              <p className="font-medium">Cancellable</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Price divided across deliverables. Buyer approves each one — partial refunds available if cancelled.
-              </p>
-            </div>
-          </label>
-          <label className={`flex flex-1 cursor-pointer items-start gap-3 rounded-md border p-3 text-sm transition-colors ${cancellationPolicy === "non-cancellable" ? "border-primary bg-primary/5" : "hover:bg-muted"}`}>
-            <input type="radio" name="cancellation" value="non-cancellable" checked={cancellationPolicy === "non-cancellable"} onChange={() => setCancellationPolicy("non-cancellable")} className="mt-0.5" />
-            <div>
-              <p className="font-medium">Non-cancellable</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Once funded, full amount is locked. No refunds or cancellations. Best for fixed-price jobs.
-              </p>
-            </div>
-          </label>
-        </div>
-      </div>
+      {/* ---------- CANCELLATION POLICY (removed) ---------- */}
+      {/* Cancellation is no longer a feature. Once escrow is funded, contracts
+          run to completion or go to dispute. */}
+
 
       {/* ---------- SCHEDULING ---------- */}
       <div className="rounded-lg border bg-muted/30 p-3">

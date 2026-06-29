@@ -93,7 +93,15 @@ export async function updateAvatarUrlAction(avatarUrl: string) {
  * but for typical employees (5-15 skills) it's fine.
  * ====================================================================== */
 
-export async function updateEmployeeSkillsAction(skills: { category_id: string; years_experience?: number; is_primary?: boolean }[]) {
+export async function updateEmployeeSkillsAction(skills: {
+  category_id: string;
+  years_experience?: number;
+  is_primary?: boolean;
+  rate_per_hour_paise?: number | null;
+  rate_per_task_paise?: number | null;
+  rate_per_day_paise?: number | null;
+  rate_per_week_paise?: number | null;
+}[]) {
   const { sb, user } = await requireUser();
   // Delete existing
   await sb.from("employee_skills").delete().eq("employee_id", user.id);
@@ -104,6 +112,10 @@ export async function updateEmployeeSkillsAction(skills: { category_id: string; 
       category_id: s.category_id,
       years_experience: s.years_experience ?? null,
       is_primary: s.is_primary ?? (i === 0),
+      rate_per_hour_paise: s.rate_per_hour_paise ?? null,
+      rate_per_task_paise: s.rate_per_task_paise ?? null,
+      rate_per_day_paise: s.rate_per_day_paise ?? null,
+      rate_per_week_paise: s.rate_per_week_paise ?? null,
       current_wage_band_min: 25000,
       current_wage_band_max: 75000,
       verification_status: "unverified",

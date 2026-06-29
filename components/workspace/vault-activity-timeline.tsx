@@ -307,7 +307,7 @@ export function VaultActivityTimeline({
                       <span className="text-muted-foreground">{meta.label}</span>
                       {w.kind === "incentive_earned" && w.payload?.amount_paise && (
                         <span className="rounded bg-amber-500/10 px-1 text-[9px] text-amber-700">
-                          ₹{Math.round(w.payload.amount_paise / 100)}
+                          {formatPaise(w.payload.amount_paise)}
                         </span>
                       )}
                       {w.kind === "ghost_block" && w.payload?.reason && (

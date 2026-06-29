@@ -20,8 +20,9 @@ export function RealtimeDashboardRefresh({
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "wallet_transactions", filter: `user_id=eq.${userId}` }, () => router.refresh())
       .on("postgres_changes", { event: "*", schema: "public", table: "user_wallets", filter: `user_id=eq.${userId}` }, () => router.refresh())
       .on("postgres_changes", { event: "*", schema: "public", table: "employee_profiles", filter: `user_id=eq.${userId}` }, () => router.refresh())
-      .on("postgres_changes", { event: "*", schema: "public", table: "contracts" }, () => router.refresh())
-      .on("postgres_changes", { event: "*", schema: "public", table: "workspaces", filter: `buyer_id=eq.${userId}` }, () => router.refresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "contracts", filter: `or(buyer_id.eq.${userId},employee_id.eq.${userId})` }, () => router.refresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "workspaces", filter: `or(buyer_id.eq.${userId},employee_id.eq.${userId})` }, () => router.refresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "reviews", filter: `or(reviewer_id.eq.${userId},reviewee_id.eq.${userId})` }, () => router.refresh())
       .subscribe();
     return () => { sb.removeChannel(ch); };
   }, [userId, router]);

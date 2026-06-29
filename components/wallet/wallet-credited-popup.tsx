@@ -3,7 +3,7 @@
 import * as React from "react";
 import { createClient } from "@/lib/supabase/client";
 import { CircleDollarSign, X } from "lucide-react";
-import { formatINR } from "@/lib/utils";
+import { formatPaise } from "@/lib/utils";
 
 export function WalletCreditedPopup({ userId }: { userId: string }) {
   const [show, setShow] = React.useState(false);
@@ -54,7 +54,7 @@ export function WalletCreditedPopup({ userId }: { userId: string }) {
         <div>
           <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">Amount credited!</p>
           <p className="text-xs text-emerald-700 dark:text-emerald-300">
-            {formatINR(amount)} added to your wallet
+            {formatPaise(amount)} added to your wallet
           </p>
         </div>
         <button

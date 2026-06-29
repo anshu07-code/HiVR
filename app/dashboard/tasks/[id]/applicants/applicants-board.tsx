@@ -426,7 +426,7 @@ export function ApplicantsBoard({
                         </>
                       )}
                       {/* Quick stage jump chips */}
-                      {cur !== "hired" && cur !== "rejected" && (
+                      {cur !== "hired" && cur !== "rejected" && cur !== "withdrawn" && (
                         <div className="flex flex-wrap gap-1">
                           {STAGE_ORDER.filter(s => s !== cur).filter(s => !isTierA || ["shortlist", "offer", "hired"].includes(s)).slice(0, 4).map(s => (
                             <button
@@ -444,7 +444,7 @@ export function ApplicantsBoard({
                       )}
                     </>
                   )}
-                  {cur !== "rejected" && cur !== "hired" && (
+                  {cur !== "rejected" && cur !== "hired" && cur !== "withdrawn" && (
                     <Button size="sm" variant="ghost" disabled={busyId === a.id} onClick={() => setAdvanceTo({ appId: a.id, stage: "rejected" })} className="text-rose-600 hover:bg-rose-500/10">
                       <XCircle className="h-3.5 w-3.5" />Reject
                     </Button>

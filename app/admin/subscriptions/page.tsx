@@ -106,7 +106,7 @@ export default async function AdminSubscriptionsPage() {
                   </div>
                   <Badge variant="secondary">{(s.plan as any)?.name}</Badge>
                   <Badge variant={s.status === "active" ? "success" : "destructive"} className="capitalize">{s.status}</Badge>
-                  <span className="text-xs text-muted-foreground">₹{s.amount_paid_inr ?? 0}</span>
+                  <span className="text-xs text-muted-foreground">{formatINR(s.amount_paid_inr ?? 0)}</span>
                 </li>
               ))}
             </ul>

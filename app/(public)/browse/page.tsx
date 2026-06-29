@@ -115,6 +115,34 @@ export default async function BrowsePage({ searchParams }: { searchParams: { cat
     query = query.eq("pricing_model", searchParams.pricing as any);
   }
 
+  // Budget range filter (values in rupees from dropdown, converted to paise)
+  if (searchParams.budget && searchParams.budget !== "any") {
+    const parts = searchParams.budget.split("-").map(Number);
+    const bMin = parts[0];
+    const bMax = parts[1];
+    if (!isNaN(bMin)) {
+      if (!isNaN(bMax)) {
+        query = query.gte("budget_min", bMin * 100).lte("budget_max", bMax * 100);
+      } else {
+        query = query.gte("budget_min", bMin * 100);
+      }
+    }
+  }
+
+  // Posted within filter
+  if (searchParams.posted && searchParams.posted !== "anytime") {
+    const now = Date.now();
+    const msMap: Record<string, number> = {
+      "24h": 24 * 60 * 60 * 1000,
+      "week": 7 * 24 * 60 * 60 * 1000,
+      "month": 30 * 24 * 60 * 60 * 1000,
+    };
+    const ms = msMap[searchParams.posted];
+    if (ms) {
+      query = query.gte("created_at", new Date(now - ms).toISOString());
+    }
+  }
+
   // Search filter
   if (searchParams.q && searchParams.q.trim()) {
     const q = searchParams.q.trim();

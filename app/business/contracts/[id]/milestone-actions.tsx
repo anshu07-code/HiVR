@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { IndianRupee, CheckCircle2, ThumbsDown, Loader2 } from "lucide-react";
+import { formatPaise } from "@/lib/utils";
 
 export function MilestoneActions({
   contractId, milestoneId, status, amountPaise, nextActionable,
@@ -45,7 +46,7 @@ export function MilestoneActions({
           )}
           {status === "approved" && (
             <Button size="sm" variant="gradient" disabled={busy !== null} onClick={() => act("release")}>
-              {busy === "release" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <IndianRupee className="h-3.5 w-3.5" />} Release ₹{Math.round(amountPaise / 100)}
+              {busy === "release" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <IndianRupee className="h-3.5 w-3.5" />}               Release {formatPaise(amountPaise)}
             </Button>
           )}
         </>
