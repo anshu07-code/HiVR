@@ -1,55 +1,21 @@
-// Middleware-side Supabase client. Refreshes the session cookie on every request
-// so server components always see an up-to-date auth state.
+// Sets baseline security headers on every response.
+// Supabase session refresh is intentionally excluded here — @supabase/ssr v0.5.x
+// has a race condition when both middleware and Server Components call getUser()
+// simultaneously. Server Components handle their own session refresh.
 //
-// Also sets baseline security headers on every response:
+// Security headers:
 //   - Strict-Transport-Security (HSTS) — forces HTTPS for 1 year
 //   - X-Frame-Options: DENY — clickjacking protection
 //   - X-Content-Type-Options: nosniff — prevents MIME sniffing
 //   - Referrer-Policy: strict-origin-when-cross-origin
 //   - Permissions-Policy — disables features we don't use
 //   - X-DNS-Prefetch-Control: off
-// CSP is intentionally omitted here (it conflicts with the Supabase
-// Realtime WS endpoint and Razorpay checkout). If you want strict CSP,
-// add a nonce-based policy in a future iteration.
 
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import type { Database } from "./types";
 
 export async function updateSession(request: NextRequest) {
-  let response = NextResponse.next({ request: { headers: request.headers } });
+  const response = NextResponse.next({ request: { headers: request.headers } });
 
-  const supabase = createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value;
-        },
-        set(name: string, value: string, options: CookieOptions) {
-          request.cookies.set({ name, value, ...options });
-          response = NextResponse.next({ request: { headers: request.headers } });
-          response.cookies.set({ name, value, ...options });
-        },
-        remove(name: string, options: CookieOptions) {
-          request.cookies.set({ name, value: "", ...options });
-          response = NextResponse.next({ request: { headers: request.headers } });
-          response.cookies.set({ name, value: "", ...options });
-        },
-      },
-    },
-  );
-
-  // NOTE: Session refresh is intentionally removed from middleware to avoid
-  // a known race condition in @supabase/ssr v0.5.x where both middleware and
-  // Server Components call getUser() simultaneously — both try to use the same
-  // refresh token, the second one fails, and the Server Component crashes.
-  // Server Components handle session refresh themselves via createClient().
-
-  // Baseline security headers (M1 fix). We use a fresh NextResponse.next
-  // wrapper so the headers are always attached, even when the Supabase
-  // client short-circuits with its own response.
   response.headers.set("X-Frame-Options", "DENY");
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
