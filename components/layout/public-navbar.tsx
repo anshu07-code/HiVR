@@ -42,31 +42,37 @@ export async function PublicNavbar() {
   // by the avatar / dropdown, and (c) the first 15 notifications +
   // unread count for the bell badge. The client never has to repeat
   // any of these on mount.
-  const sb = createClient();
-  const { data: { user } } = await sb.auth.getUser();
-
+  let user = null;
   let profile: Profile = null;
   let notifUnread = 0;
   let notifRecent: any[] = [];
 
-  if (user) {
-    const [profileRes, countRes, listRes] = await Promise.all([
-      sb
-        .from("users")
-        .select("full_name, avatar_url, current_mode, roles")
-        .eq("id", user.id)
-        .maybeSingle(),
-      (sb.rpc as any)("unread_notification_count", { p_user_id: user.id }),
-      sb
-        .from("notifications")
-        .select("id, type, title, body, link, read_at, created_at")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(15),
-    ]);
-    profile = (profileRes.data as Profile) ?? null;
-    notifUnread = typeof countRes === "number" ? countRes : (countRes?.data ?? 0);
-    notifRecent = (listRes as any)?.data ?? [];
+  try {
+    const sb = createClient();
+    const res = await sb.auth.getUser();
+    user = res.data.user;
+
+    if (user) {
+      const [profileRes, countRes, listRes] = await Promise.all([
+        sb
+          .from("users")
+          .select("full_name, avatar_url, current_mode, roles")
+          .eq("id", user.id)
+          .maybeSingle(),
+        (sb.rpc as any)("unread_notification_count", { p_user_id: user.id }),
+        sb
+          .from("notifications")
+          .select("id, type, title, body, link, read_at, created_at")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(15),
+      ]);
+      profile = (profileRes.data as Profile) ?? null;
+      notifUnread = typeof countRes === "number" ? countRes : (countRes?.data ?? 0);
+      notifRecent = (listRes as any)?.data ?? [];
+    }
+  } catch {
+    // Graceful fallback: if auth refresh races with middleware, render logged-out state.
   }
 
   return (
