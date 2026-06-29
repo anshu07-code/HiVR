@@ -104,7 +104,7 @@ export async function PublicNavbar() {
                 profile={profile}
                 notifUnread={notifUnread}
                 notifRecent={notifRecent}
-                onOpenMobileMenu={() => {}}
+              
               />
             ) : (
               <>

@@ -38,7 +38,6 @@ type Props = {
   profile: Profile;
   notifUnread: number;
   notifRecent: any[];
-  onOpenMobileMenu?: () => void;
 };
 
 export function PublicNavbarUserMenu({
@@ -47,7 +46,6 @@ export function PublicNavbarUserMenu({
   profile,
   notifUnread,
   notifRecent,
-  onOpenMobileMenu,
 }: Props) {
   const initials = ((profile?.full_name ?? email ?? "U")
     .split(" ")
@@ -132,22 +130,17 @@ export function PublicNavbarUserMenu({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      {onOpenMobileMenu && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="md:hidden"
-          aria-label="Open menu"
-          onClick={() => {
-            if (typeof window !== "undefined") {
-              window.dispatchEvent(new CustomEvent("hivr:open-mobile-menu"));
-            }
-            onOpenMobileMenu?.();
-          }}
-        >
-          <Menu className="h-5 w-5" />
-        </Button>
-      )}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="md:hidden"
+        aria-label="Open menu"
+        onClick={() => {
+          window.dispatchEvent(new CustomEvent("hivr:open-mobile-menu"));
+        }}
+      >
+        <Menu className="h-5 w-5" />
+      </Button>
     </>
   );
 }
