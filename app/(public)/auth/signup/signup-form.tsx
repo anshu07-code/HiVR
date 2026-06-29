@@ -147,67 +147,69 @@ function IndividualForm({ initialRole }: { initialRole: string | null }) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
-      <fieldset className="space-y-2">
-        <legend className="text-sm font-medium">I want to…</legend>
-        <div role="radiogroup" className="grid grid-cols-3 gap-2">
-          {ROLES.map(({ value, title, desc, Icon }) => {
-            const active = role === value;
-            return (
-              <button
-                key={value}
-                type="button"
-                role="radio"
-                aria-selected={active}
-                onClick={() => setRole(value)}
-                className={cn(
-                  "flex h-full flex-col items-start gap-1 rounded-md border p-3 text-left transition-colors",
-                  "hover:border-foreground/30",
-                  active && "border-primary bg-primary/5 ring-1 ring-primary/20",
-                )}
-              >
-                <div className="flex w-full items-center justify-between">
-                  <Icon className="h-4 w-4" />
-                  {active && <Check className="h-3.5 w-3.5 text-primary" />}
-                </div>
-                <div className="text-sm font-semibold">{title}</div>
-                <div className="text-xs text-muted-foreground">{desc}</div>
-              </button>
-            );
-          })}
-        </div>
-      </fieldset>
+    <div className="space-y-4">
+      <form onSubmit={onSubmit} className="space-y-4">
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium">I want to…</legend>
+          <div role="radiogroup" className="grid grid-cols-3 gap-2">
+            {ROLES.map(({ value, title, desc, Icon }) => {
+              const active = role === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-selected={active}
+                  onClick={() => setRole(value)}
+                  className={cn(
+                    "flex h-full flex-col items-start gap-1 rounded-md border p-3 text-left transition-colors",
+                    "hover:border-foreground/30",
+                    active && "border-primary bg-primary/5 ring-1 ring-primary/20",
+                  )}
+                >
+                  <div className="flex w-full items-center justify-between">
+                    <Icon className="h-4 w-4" />
+                    {active && <Check className="h-3.5 w-3.5 text-primary" />}
+                  </div>
+                  <div className="text-sm font-semibold">{title}</div>
+                  <div className="text-xs text-muted-foreground">{desc}</div>
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="full_name">Full name</Label>
-        <Input id="full_name" name="full_name" required minLength={2} maxLength={80} autoComplete="name" />
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="email">Email</Label>
-        <Input id="email" name="email" type="email" required autoComplete="email" />
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="phone">Phone {role === "employee" ? "(optional)" : "(required for hiring)"}</Label>
-        <Input id="phone" name="phone" type="tel" required={role !== "employee"} placeholder="+91 98xxxxxxxx" autoComplete="tel" />
-        {role !== "employee" && (
-          <p className="text-[11px] text-muted-foreground">Required for posting tasks. We send a one-time code via SMS to verify.</p>
+        <div className="space-y-1.5">
+          <Label htmlFor="full_name">Full name</Label>
+          <Input id="full_name" name="full_name" required minLength={2} maxLength={80} autoComplete="name" />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="email">Email</Label>
+          <Input id="email" name="email" type="email" required autoComplete="email" />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="phone">Phone {role === "employee" ? "(optional)" : "(required for hiring)"}</Label>
+          <Input id="phone" name="phone" type="tel" required={role !== "employee"} placeholder="+91 98xxxxxxxx" autoComplete="tel" />
+          {role !== "employee" && (
+            <p className="text-[11px] text-muted-foreground">Required for posting tasks. We send a one-time code via SMS to verify.</p>
+          )}
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="password">Password</Label>
+          <Input id="password" name="password" type="password" required minLength={8} autoComplete="new-password" />
+        </div>
+
+        {error && (
+          <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+            <p className="text-destructive">{error}</p>
+          </div>
         )}
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="password">Password</Label>
-        <Input id="password" name="password" type="password" required minLength={8} autoComplete="new-password" />
-      </div>
 
-      {error && (
-        <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-          <p className="text-destructive">{error}</p>
-        </div>
-      )}
-
-      <Button type="submit" className="w-full" disabled={loading}>
-        {loading ? "Creating account…" : "Create individual account"}
-      </Button>
+        <Button type="submit" className="w-full" disabled={loading}>
+          {loading ? "Creating account…" : "Create individual account"}
+        </Button>
+      </form>
 
       <div className="relative">
         <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
@@ -223,7 +225,7 @@ function IndividualForm({ initialRole }: { initialRole: string | null }) {
         Already have an account?{" "}
         <Link href={{ pathname: "/auth/signin", query: { type: "individual" } }} className="font-medium text-primary">Log in</Link>
       </p>
-    </form>
+    </div>
   );
 }
 

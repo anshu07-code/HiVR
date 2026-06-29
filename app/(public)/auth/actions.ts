@@ -182,22 +182,10 @@ export async function signUpBusiness(formData: FormData) {
 /* ====================================================================== */
 
 export async function signInWithGoogle() {
-  try {
-    const sb = createClient();
-    const { data, error } = await sb.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback` },
-    });
-    if (error) return { error: friendlyOAuthError(error.message) };
-    if (!data?.url) return { error: "Google sign-in is not configured in your Supabase project yet." };
-    redirect(data.url);
-  } catch (e) {
-    if (e && typeof e === "object" && "digest" in e && typeof (e as { digest?: unknown }).digest === "string"
-        && ((e as { digest: string }).digest.startsWith("NEXT_REDIRECT"))) {
-      throw e;
-    }
-    return { error: friendlyOAuthError((e as Error).message) };
-  }
+  // Redirect to our own API route that initiates Google OAuth from our domain.
+  // This makes Google show "to continue to <our domain>" instead of the
+  // raw Supabase project subdomain on the consent screen.
+  redirect(`${process.env.NEXT_PUBLIC_APP_URL}/api/auth/google`);
 }
 
 function friendlyOAuthError(raw: string): string {
