@@ -99,10 +99,11 @@ export function DashboardMobileSidebar({ mode, currentMode }: Props) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+        className="md:hidden inline-flex h-9 items-center gap-1.5 rounded-md px-2 text-sm font-medium text-foreground hover:bg-accent"
         aria-label="Open dashboard menu"
       >
-        <Menu className="h-5 w-5" />
+        <Menu className="h-5 w-5 shrink-0" />
+        <span>Menu</span>
       </button>
 
       {open && (

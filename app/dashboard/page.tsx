@@ -23,7 +23,13 @@ type Mode = "employee" | "buyer" | "both";
 
 export default async function DashboardHome() {
   const sb = createClient();
-  const { data: { user } } = await sb.auth.getUser();
+  let user = null;
+  try {
+    const res = await sb.auth.getUser();
+    user = res.data.user;
+  } catch {
+    // fallback if token refresh races with middleware
+  }
   if (!user) redirect("/auth/signin?next=/dashboard");
 
   // Direct parallel queries (11 SELECTs). We tried the

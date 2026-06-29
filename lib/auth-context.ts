@@ -14,7 +14,13 @@ import type { SidebarMode } from "@/components/layout/dashboard-sidebar";
  */
 export const getCurrentUserContext = cache(async () => {
   const sb = createClient();
-  const { data: { user } } = await sb.auth.getUser();
+  let user = null;
+  try {
+    const res = await sb.auth.getUser();
+    user = res.data.user;
+  } catch {
+    // fallback if token refresh races with middleware
+  }
   if (!user) return {
     user: null,
     profile: null,
