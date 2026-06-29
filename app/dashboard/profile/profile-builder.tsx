@@ -227,7 +227,8 @@ export function ProfileBuilder({
   function recompute() {
     let s = 0;
     if (basics.full_name) s += 5;
-    if (initial.avatarUrl) s += 5;
+    if (avatarUrl) s += 5;
+    if (coverUrl) s += 2;
     if (basics.headline) s += 5;
     if (basics.bio && basics.bio.length > 20) s += 15;
     if (basics.location) s += 5;
@@ -246,15 +247,19 @@ export function ProfileBuilder({
     <div className="space-y-6">
       {/* Progress + avatar row */}
       <Card className="overflow-hidden">
-        {coverUrl && (
-          <div className="relative h-32 w-full bg-muted">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={coverUrl} alt="Cover" className="h-full w-full object-cover" />
-            <button type="button" onClick={() => uploadPhoto("cover")} disabled={uploading} className="absolute bottom-2 right-2 rounded-md bg-black/50 p-1.5 text-white backdrop-blur-sm transition-colors hover:bg-black/70">
-              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
-            </button>
-          </div>
-        )}
+        <div className="relative h-32 w-full bg-gradient-to-br from-muted to-muted/50">
+          {coverUrl ? (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={coverUrl} alt="Cover" className="h-full w-full object-cover" />
+            </>
+          ) : (
+            <div className="flex h-full items-center justify-center text-xs text-muted-foreground/50">Add a cover image</div>
+          )}
+          <button type="button" onClick={() => uploadPhoto("cover")} disabled={uploading} className="absolute bottom-2 right-2 rounded-md bg-black/50 p-1.5 text-white backdrop-blur-sm transition-colors hover:bg-black/70">
+            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+          </button>
+        </div>
         <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center">
           <div className="relative shrink-0">
             <Avatar className="h-20 w-20">
@@ -276,12 +281,12 @@ export function ProfileBuilder({
               {completeness < 40 ? "A stronger profile gets 3-5x more invites." : completeness < 80 ? "Good. Add a few more sections to stand out." : "Profile complete. You're ready to be discovered."}
             </p>
           </div>
-          {!coverUrl && (
+          <div className="flex gap-2">
             <Button type="button" variant="outline" size="sm" onClick={() => uploadPhoto("cover")} disabled={uploading}>
               {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
-              Add cover image
+              {coverUrl ? "Change cover" : "Add cover"}
             </Button>
-          )}
+          </div>
         </CardContent>
       </Card>
 
@@ -315,22 +320,23 @@ export function ProfileBuilder({
 
       {/* Tabs */}
       <div className="flex flex-wrap gap-1 border-b">
-        <TabBtn active={tab === "basics"} onClick={() => setTab("basics")} Icon={Sparkles} label="Basics" />
-        <TabBtn active={tab === "skills"} onClick={() => setTab("skills")} Icon={Award} label="Skills" count={selectedSkills.length} />
-        <TabBtn active={tab === "videos"} onClick={() => setTab("videos")} Icon={VideoIcon} label="Videos" />
+        <TabBtn tabId="basics" active={tab === "basics"} onClick={() => setTab("basics")} Icon={Sparkles} label="Basics" />
+        <TabBtn tabId="skills" active={tab === "skills"} onClick={() => setTab("skills")} Icon={Award} label="Skills" count={selectedSkills.length} />
+        <TabBtn tabId="videos" active={tab === "videos"} onClick={() => setTab("videos")} Icon={VideoIcon} label="Videos" />
         <TabBtn
+          tabId="instant"
           active={tab === "instant"}
           onClick={() => setTab("instant")}
           Icon={Zap}
           label="Instant"
           badge={initial.instantProfile?.enabled ? "On" : undefined}
         />
-        <TabBtn active={tab === "education"} onClick={() => setTab("education")} Icon={GraduationCap} label="Education" count={initial.education.length} />
-        <TabBtn active={tab === "experience"} onClick={() => setTab("experience")} Icon={Briefcase} label="Experience" count={initial.experience.length} />
-        <TabBtn active={tab === "projects"} onClick={() => setTab("projects")} Icon={FolderGit2} label="Projects" count={initial.projects.length} />
-        <TabBtn active={tab === "certs"} onClick={() => setTab("certs")} Icon={Award} label="Certifications" count={initial.certifications.length} />
-        <TabBtn active={tab === "links"} onClick={() => setTab("links")} Icon={Globe} label="Links" count={initial.socialLinks.length} />
-            <TabBtn active={tab === "resume"} onClick={() => setTab("resume")} Icon={FileText} label="Resume" />
+        <TabBtn tabId="education" active={tab === "education"} onClick={() => setTab("education")} Icon={GraduationCap} label="Education" count={initial.education.length} />
+        <TabBtn tabId="experience" active={tab === "experience"} onClick={() => setTab("experience")} Icon={Briefcase} label="Experience" count={initial.experience.length} />
+        <TabBtn tabId="projects" active={tab === "projects"} onClick={() => setTab("projects")} Icon={FolderGit2} label="Projects" count={initial.projects.length} />
+        <TabBtn tabId="certs" active={tab === "certs"} onClick={() => setTab("certs")} Icon={Award} label="Certifications" count={initial.certifications.length} />
+        <TabBtn tabId="links" active={tab === "links"} onClick={() => setTab("links")} Icon={Globe} label="Links" count={initial.socialLinks.length} />
+            <TabBtn tabId="resume" active={tab === "resume"} onClick={() => setTab("resume")} Icon={FileText} label="Resume" />
           </div>
 
       {tab === "basics" && (
@@ -787,10 +793,11 @@ export function ProfileBuilder({
   );
 }
 
-function TabBtn({ active, onClick, Icon, label, count, badge }: { active: boolean; onClick: () => void; Icon: any; label: string; count?: number; badge?: string }) {
+function TabBtn({ active, onClick, Icon, label, count, badge, tabId }: { active: boolean; onClick: () => void; Icon: any; label: string; count?: number; badge?: string; tabId?: string }) {
   return (
     <button
       type="button"
+      id={tabId ? `tab-${tabId}` : undefined}
       onClick={onClick}
       className={`inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors ${active ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
     >

@@ -150,7 +150,10 @@ const STEPS: Array<{
 ];
 
 export function ProfileGuide({ initial, currentTab, setTab, initialCompleteness }: Props) {
-  const [dismissed, setDismissed] = React.useState(false);
+  const [dismissed, setDismissed] = React.useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("pg_dismissed") === "true";
+  });
   const [activeStep, setActiveStep] = React.useState<string | null>(null);
 
   // Compute per-step status from the live data.
@@ -161,6 +164,10 @@ export function ProfileGuide({ initial, currentTab, setTab, initialCompleteness 
   const doneCount = stepStatus.filter(s => s.done).length;
   const totalCount = stepStatus.length;
   const liveCompleteness = Math.round((doneCount / totalCount) * 100);
+
+  React.useEffect(() => {
+    localStorage.setItem("pg_dismissed", String(dismissed));
+  }, [dismissed]);
 
   if (dismissed) {
     return (
@@ -248,6 +255,7 @@ export function ProfileGuide({ initial, currentTab, setTab, initialCompleteness 
                     onClick={() => {
                       setActiveStep(s.id);
                       setTab(s.tab);
+                      document.getElementById(`tab-${s.tab}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
                     }}
                     onMouseEnter={() => setActiveStep(s.id)}
                     onMouseLeave={() => setActiveStep(null)}

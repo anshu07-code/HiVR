@@ -19,6 +19,9 @@ export const metadata: Metadata = {
     description: "Hire skilled people for small jobs, by the hour, day, task, or month.",
     type: "website",
   },
+  verification: {
+    google: "xr2URc_6KHtS9HnRobUX_Ma9IPOPAGVpPKosVRghSAE",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -162,18 +162,36 @@ export async function POST(req: NextRequest) {
   }
   await admin.from("employee_profiles").update(updates).eq("user_id", user.id);
 
-  // 4. In production, this would call Razorpay Payouts API.
-  //    For now we mark it completed immediately.
+  // 4. Call Razorpay Payouts API to actually send money.
+  //    Falls back to immediate completion via BYPASS_RAZORPAY_PAYOUTS env flag.
+  let payoutStatus = "bypassed";
+  if (txn && method === "upi") {
+    try {
+      const { createRazorpayPayout } = await import("@/lib/razorpay-payouts");
+      const payout = await createRazorpayPayout({
+        amountPaise: netPaise,
+        upiId: m.upi_id,
+        referenceId: `wd_${(txn as any).id.slice(0, 16)}`,
+        note: `HiVR withdrawal · ${method}`,
+      });
+      payoutStatus = payout.status;
+    } catch (e) {
+      console.error("[withdraw] Razorpay payout failed:", (e as Error).message);
+      payoutStatus = "failed";
+    }
+  }
   if (txn) {
     await admin.from("wallet_transactions").update({
-      kind: "withdraw_completed",
-      description: `Withdrawal to ${method} completed · net ${formatInr(netPaise)}`,
+      kind: payoutStatus === "failed" ? "withdraw_failed" : "withdraw_completed",
+      description: `Withdrawal to ${method} · ${payoutStatus === "failed" ? "FAILED" : `completed net ${formatInr(netPaise)}`}`,
     } as any).eq("id", (txn as any).id);
-    await admin.from("employee_profiles").update({
-      payouts_pending_count: Math.max(0, ((ep as any).payouts_pending_count ?? 0)),
-      payouts_lifetime_count: ((ep as any).payouts_lifetime_count ?? 0) + 1,
-      total_withdrawn: ((ep as any).total_withdrawn ?? 0) + netPaise,
-    } as any).eq("user_id", user.id);
+    if (payoutStatus !== "failed") {
+      await admin.from("employee_profiles").update({
+        payouts_pending_count: Math.max(0, ((ep as any).payouts_pending_count ?? 0)),
+        payouts_lifetime_count: ((ep as any).payouts_lifetime_count ?? 0) + 1,
+        total_withdrawn: ((ep as any).total_withdrawn ?? 0) + netPaise,
+      } as any).eq("user_id", user.id);
+    }
   }
 
   return NextResponse.json({

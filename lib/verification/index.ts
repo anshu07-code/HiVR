@@ -374,42 +374,19 @@ export function extractNameFromText(text: string, lines: string[]): string | nul
 }
 
 /* ====================================================================== */
-/* 7. Tesseract.js lazy loader (CDN)                                       */
+/* 7. Tesseract.js lazy loader (local node_modules via dynamic import)      */
 /* ====================================================================== */
-
-const TESSERACT_CDN = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
-
-declare global {
-  interface Window {
-    Tesseract?: any;
-  }
-}
 
 let _tesseractPromise: Promise<any> | null = null;
 
 /**
- * Lazily injects the Tesseract.js script tag on first call and resolves
- * with the global. Subsequent calls return the cached promise.
+ * Lazily loads Tesseract.js via dynamic import from node_modules.
+ * Subsequent calls return the cached promise. No CDN dependency.
  */
 export function loadTesseract(): Promise<any> {
   if (typeof window === "undefined") return Promise.reject(new Error("Tesseract can only run in the browser"));
-  if (window.Tesseract) return Promise.resolve(window.Tesseract);
   if (_tesseractPromise) return _tesseractPromise;
-  _tesseractPromise = new Promise((resolve, reject) => {
-    const existing = document.querySelector(`script[data-tesseract]`);
-    if (existing) {
-      existing.addEventListener("load", () => resolve(window.Tesseract));
-      existing.addEventListener("error", () => reject(new Error("Failed to load Tesseract.js")));
-      return;
-    }
-    const s = document.createElement("script");
-    s.src = TESSERACT_CDN;
-    s.async = true;
-    s.setAttribute("data-tesseract", "1");
-    s.onload = () => resolve(window.Tesseract);
-    s.onerror = () => reject(new Error("Failed to load Tesseract.js"));
-    document.head.appendChild(s);
-  });
+  _tesseractPromise = import("tesseract.js").then((mod) => mod);
   return _tesseractPromise;
 }
 

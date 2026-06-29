@@ -33,7 +33,7 @@ export default async function ProfilePage() {
     { data: availability },
     { data: standingRates },
   ] = await Promise.all([
-    sb.from("users").select("id, full_name, email, avatar_url, phone").eq("id", user.id).maybeSingle(),
+    sb.from("users").select("id, full_name, email, avatar_url, cover_url, phone").eq("id", user.id).maybeSingle(),
     sb.from("employee_profiles").select("*").eq("user_id", user.id).maybeSingle(),
     sb.from("employee_skills").select("id, category_id, is_primary, years_experience, category:skill_categories(name, slug, icon, tier)").eq("employee_id", user.id),
     sb.from("skill_categories").select("id, name, slug, icon, tier, parent_category_id, status").eq("status", "active").order("sort_order"),
