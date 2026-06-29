@@ -152,7 +152,7 @@ const STEPS: Array<{
 export function ProfileGuide({ initial, currentTab, setTab, initialCompleteness }: Props) {
   const [dismissed, setDismissed] = React.useState(() => {
     if (typeof window === "undefined") return false;
-    return localStorage.getItem("pg_dismissed") === "true";
+    return sessionStorage.getItem("pg_dismissed") === "true";
   });
   const [activeStep, setActiveStep] = React.useState<string | null>(null);
 
@@ -166,7 +166,7 @@ export function ProfileGuide({ initial, currentTab, setTab, initialCompleteness 
   const liveCompleteness = Math.round((doneCount / totalCount) * 100);
 
   React.useEffect(() => {
-    localStorage.setItem("pg_dismissed", String(dismissed));
+    sessionStorage.setItem("pg_dismissed", String(dismissed));
   }, [dismissed]);
 
   if (dismissed) {

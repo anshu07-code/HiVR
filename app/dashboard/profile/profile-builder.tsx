@@ -27,6 +27,7 @@ import { VideoGrid } from "@/components/profile/video-grid";
 import { ProfileGuide } from "@/components/dashboard/profile-guide";
 import { InstantHireSection } from "./instant-hire-section";
 import { ResumeUploader } from "./resume-uploader";
+import { ImageCropModal } from "@/components/profile/image-crop-modal";
 
 
 type Cat = { id: string; name: string; slug: string; icon: string; tier: string; status: string; parent_category_id: string | null };
@@ -38,7 +39,6 @@ type Initial = {
   skills: { category_id: string; name?: string; slug?: string; icon?: string; tier?: string; is_primary?: boolean; years_experience?: number }[];
   education: any[]; experience: any[]; projects: any[]; certifications: any[]; resume: any;
   socialLinks: any[];
-  // Instant Hire section
   avgRating: number;
   totalReviews: number;
   completionRate: number;
@@ -64,7 +64,7 @@ export function ProfileBuilder({
   initialCompleteness: number;
 }) {
   const router = useRouter();
-  const [tab, setTab] = React.useState<"basics" | "skills" | "videos" | "instant" | "education" | "experience" | "projects" | "certs" | "links" | "resume">("basics");
+  const [tab, setTab] = React.useState<"basics" | "skills" | "videos" | "instant" | "education" | "experience" | "projects" | "certs" | "links" | "resume">(typeof window !== "undefined" ? (sessionStorage.getItem("pb_tab") as any) ?? "basics" : "basics");
   const [completeness, setCompleteness] = React.useState(initialCompleteness);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -73,6 +73,36 @@ export function ProfileBuilder({
   const [coverUrl, setCoverUrl] = React.useState<string | null>(initial.coverUrl);
   const [uploading, setUploading] = React.useState(false);
 
+  // Crop modal state
+  const [cropFile, setCropFile] = React.useState<File | null>(null);
+  const [cropField, setCropField] = React.useState<"avatar" | "cover" | null>(null);
+
+  React.useEffect(() => {
+    if (tab) sessionStorage.setItem("pb_tab", tab);
+  }, [tab]);
+
+  async function handleCropComplete(blob: Blob) {
+    const field = cropField;
+    setCropFile(null);
+    setCropField(null);
+    if (!field) return;
+    setUploading(true); setError(null);
+    const fd = new FormData();
+    fd.append("file", blob, `${field}.jpg`);
+    const res = await fetch(`/api/profile/upload-${field === "avatar" ? "avatar" : "cover"}`, { method: "POST", body: fd });
+    const data = await res.json().catch(() => ({}));
+    setUploading(false);
+    if (data.ok && data.url) {
+      if (field === "avatar") setAvatarUrl(data.url);
+      else setCoverUrl(data.url);
+      setSaved(`${field === "avatar" ? "Photo" : "Cover image"} updated`);
+      setTimeout(() => setSaved(null), 3000);
+      recompute();
+    } else {
+      setError(data.error ?? "Upload failed");
+    }
+  }
+
   async function uploadPhoto(field: "avatar" | "cover") {
     const input = document.createElement("input");
     input.type = "file";
@@ -80,21 +110,10 @@ export function ProfileBuilder({
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
-      if (file.size > 5 * 1024 * 1024) { setError("Max 5MB"); return; }
-      setUploading(true); setError(null);
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch(`/api/profile/upload-${field === "avatar" ? "avatar" : "cover"}`, { method: "POST", body: fd });
-      const data = await res.json().catch(() => ({}));
-      setUploading(false);
-      if (data.ok && data.url) {
-        if (field === "avatar") setAvatarUrl(data.url);
-        else setCoverUrl(data.url);
-        setSaved(`${field === "avatar" ? "Photo" : "Cover image"} updated`);
-        setTimeout(() => setSaved(null), 3000);
-      } else {
-        setError(data.error ?? "Upload failed");
-      }
+      if (file.size > (field === "cover" ? 8 : 5) * 1024 * 1024) { setError(`Max ${field === "cover" ? "8" : "5"}MB`); return; }
+      // Open crop modal
+      setCropFile(file);
+      setCropField(field);
     };
     input.click();
   }
@@ -111,7 +130,20 @@ export function ProfileBuilder({
     timezone: initial.timezone,
   });
 
+  // Debounced auto-save for basics
+  const autoSaveRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [dirtyBasics, setDirtyBasics] = React.useState(false);
+
+  function markBasicsDirty() {
+    setDirtyBasics(true);
+    if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
+    autoSaveRef.current = setTimeout(() => {
+      saveBasics();
+    }, 2500);
+  }
+
   async function saveBasics() {
+    if (autoSaveRef.current) { clearTimeout(autoSaveRef.current); autoSaveRef.current = null; }
     setBusy("basics"); setError(null); setSaved(null);
     const r = await updateProfileBasicsAction({
       full_name: basics.full_name,
@@ -125,24 +157,41 @@ export function ProfileBuilder({
     });
     setBusy(null);
     if (!r.ok) setError(r.reason ?? "Failed");
-    else { setSaved("Basics saved."); recompute(); }
+    else { setSaved("Basics saved."); setDirtyBasics(false); recompute(); }
   }
+
+  React.useEffect(() => {
+    return () => { if (autoSaveRef.current) clearTimeout(autoSaveRef.current); };
+  }, []);
 
   // ----- Skills state -----
   const [selectedSkills, setSelectedSkills] = React.useState<{ category_id: string; years_experience?: number }[]>(
     initial.skills.map(s => ({ category_id: s.category_id, years_experience: s.years_experience }))
   );
   const [skillSearch, setSkillSearch] = React.useState("");
+  const [skillsDirty, setSkillsDirty] = React.useState(false);
 
   async function saveSkills() {
     setBusy("skills"); setError(null); setSaved(null);
     const r = await updateEmployeeSkillsAction(selectedSkills);
     setBusy(null);
     if (!r.ok) setError(r.reason ?? "Failed");
-    else { setSaved("Skills updated."); recompute(); router.refresh(); }
+    else { setSaved("Skills updated."); setSkillsDirty(false); recompute(); router.refresh(); }
   }
 
+  // Auto-save skills when they change after a delay
+  const skillsTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  React.useEffect(() => {
+    if (!skillsDirty) return;
+    if (skillsTimerRef.current) clearTimeout(skillsTimerRef.current);
+    skillsTimerRef.current = setTimeout(() => {
+      if (skillsDirty) saveSkills();
+    }, 3000);
+    return () => { if (skillsTimerRef.current) clearTimeout(skillsTimerRef.current); };
+  }, [selectedSkills, skillsDirty]);
+
   function toggleSkill(catId: string) {
+    setSkillsDirty(true);
     setSelectedSkills(prev => {
       if (prev.find(s => s.category_id === catId)) {
         return prev.filter(s => s.category_id !== catId);
@@ -245,14 +294,20 @@ export function ProfileBuilder({
 
   return (
     <div className="space-y-6">
+      <ImageCropModal
+        open={!!cropFile}
+        onClose={() => { setCropFile(null); setCropField(null); }}
+        file={cropFile}
+        aspect={cropField === "avatar" ? 1 : 21/9}
+        cropShape={cropField === "avatar" ? "round" : "rect"}
+        onCropComplete={handleCropComplete}
+      />
+
       {/* Progress + avatar row */}
       <Card className="overflow-hidden">
-        <div className="relative h-32 w-full bg-gradient-to-br from-muted to-muted/50">
+        <div className="relative h-48 w-full bg-gradient-to-br from-muted to-muted/50">
           {coverUrl ? (
-            <>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={coverUrl} alt="Cover" className="h-full w-full object-cover" />
-            </>
+            <img src={coverUrl} alt="Cover" className="h-full w-full object-contain bg-muted" />
           ) : (
             <div className="flex h-full items-center justify-center text-xs text-muted-foreground/50">Add a cover image</div>
           )}
@@ -293,10 +348,6 @@ export function ProfileBuilder({
       {error && <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div>}
       {saved && <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm text-emerald-700">{saved}</div>}
 
-      {/* Interactive profile guide — live preview + step-by-step checklist.
-          The preview reflects the user's current data; clicking any step
-          jumps to the relevant tab. Can be dismissed (button reappears
-          in the corner). */}
       <ProfileGuide
         initial={{
           fullName: basics.full_name,
@@ -320,8 +371,8 @@ export function ProfileBuilder({
 
       {/* Tabs */}
       <div className="flex flex-wrap gap-1 border-b">
-        <TabBtn tabId="basics" active={tab === "basics"} onClick={() => setTab("basics")} Icon={Sparkles} label="Basics" />
-        <TabBtn tabId="skills" active={tab === "skills"} onClick={() => setTab("skills")} Icon={Award} label="Skills" count={selectedSkills.length} />
+        <TabBtn tabId="basics" active={tab === "basics"} onClick={() => setTab("basics")} Icon={Sparkles} label="Basics" dirty={dirtyBasics} />
+        <TabBtn tabId="skills" active={tab === "skills"} onClick={() => setTab("skills")} Icon={Award} label="Skills" count={selectedSkills.length} dirty={skillsDirty} />
         <TabBtn tabId="videos" active={tab === "videos"} onClick={() => setTab("videos")} Icon={VideoIcon} label="Videos" />
         <TabBtn
           tabId="instant"
@@ -336,8 +387,8 @@ export function ProfileBuilder({
         <TabBtn tabId="projects" active={tab === "projects"} onClick={() => setTab("projects")} Icon={FolderGit2} label="Projects" count={initial.projects.length} />
         <TabBtn tabId="certs" active={tab === "certs"} onClick={() => setTab("certs")} Icon={Award} label="Certifications" count={initial.certifications.length} />
         <TabBtn tabId="links" active={tab === "links"} onClick={() => setTab("links")} Icon={Globe} label="Links" count={initial.socialLinks.length} />
-            <TabBtn tabId="resume" active={tab === "resume"} onClick={() => setTab("resume")} Icon={FileText} label="Resume" />
-          </div>
+        <TabBtn tabId="resume" active={tab === "resume"} onClick={() => setTab("resume")} Icon={FileText} label="Resume" />
+      </div>
 
       {tab === "basics" && (
         <Card>
@@ -348,40 +399,42 @@ export function ProfileBuilder({
           <CardContent className="space-y-3">
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Full name" required>
-                <Input value={basics.full_name} onChange={(e) => setBasics({ ...basics, full_name: e.target.value })} placeholder="Your full name" />
+                <Input value={basics.full_name} onChange={(e) => { setBasics({ ...basics, full_name: e.target.value }); markBasicsDirty(); }} onBlur={() => { if (dirtyBasics) saveBasics(); }} placeholder="Your full name" />
               </Field>
               <Field label="Headline">
-                <Input value={basics.headline} onChange={(e) => setBasics({ ...basics, headline: e.target.value })} placeholder="Full-stack engineer · React + Node" />
+                <Input value={basics.headline} onChange={(e) => { setBasics({ ...basics, headline: e.target.value }); markBasicsDirty(); }} onBlur={() => { if (dirtyBasics) saveBasics(); }} placeholder="Full-stack engineer · React + Node" />
               </Field>
             </div>
             <Field label="Bio" hint="Tell buyers who you are and what you're best at. 200+ characters works best.">
-              <Textarea rows={5} value={basics.bio} onChange={(e) => setBasics({ ...basics, bio: e.target.value })} placeholder="3rd-year CS student at XYZ. Comfortable with Python + SQL. Love cleaning messy data and writing scripts that save hours." />
+              <Textarea rows={5} value={basics.bio} onChange={(e) => { setBasics({ ...basics, bio: e.target.value }); markBasicsDirty(); }} onBlur={() => { if (dirtyBasics) saveBasics(); }} placeholder="3rd-year CS student at XYZ. Comfortable with Python + SQL. Love cleaning messy data and writing scripts that save hours." />
             </Field>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Location">
-                <Input value={basics.location} onChange={(e) => setBasics({ ...basics, location: e.target.value })} placeholder="Bangalore, India" />
+                <Input value={basics.location} onChange={(e) => { setBasics({ ...basics, location: e.target.value }); markBasicsDirty(); }} onBlur={() => { if (dirtyBasics) saveBasics(); }} placeholder="Bangalore, India" />
               </Field>
               <Field label="Experience">
                 <select
                   className="flex h-10 w-full rounded-md border bg-background px-3 text-sm"
                   value={basics.experience_type}
-                  onChange={(e) => setBasics({ ...basics, experience_type: e.target.value })}
+                  onChange={(e) => { setBasics({ ...basics, experience_type: e.target.value }); markBasicsDirty(); }}
+                  onBlur={() => { if (dirtyBasics) saveBasics(); }}
                 >
                   <option value="fresher">Student / fresher</option>
                   <option value="experienced">Have work experience</option>
                 </select>
               </Field>
               <Field label="Hourly rate (₹)" hint="Your minimum. Buyers can offer higher.">
-                <Input type="number" min={50} value={basics.hourly_rate_paise ? Math.round(basics.hourly_rate_paise / 100) : ""} onChange={(e) => setBasics({ ...basics, hourly_rate_paise: e.target.value ? Math.round(Number(e.target.value) * 100) : null })} placeholder="500" />
+                <Input type="number" min={50} value={basics.hourly_rate_paise ? Math.round(basics.hourly_rate_paise / 100) : ""} onChange={(e) => { setBasics({ ...basics, hourly_rate_paise: e.target.value ? Math.round(Number(e.target.value) * 100) : null }); markBasicsDirty(); }} onBlur={() => { if (dirtyBasics) saveBasics(); }} placeholder="500" />
               </Field>
               <Field label="Hours / week available">
-                <Input type="number" min={1} max={168} value={basics.availability_hours ?? ""} onChange={(e) => setBasics({ ...basics, availability_hours: e.target.value ? Number(e.target.value) : null })} placeholder="20" />
+                <Input type="number" min={1} max={168} value={basics.availability_hours ?? ""} onChange={(e) => { setBasics({ ...basics, availability_hours: e.target.value ? Number(e.target.value) : null }); markBasicsDirty(); }} onBlur={() => { if (dirtyBasics) saveBasics(); }} placeholder="20" />
               </Field>
             </div>
-            <div className="flex justify-end">
-              <Button onClick={saveBasics} disabled={busy === "basics"}>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">{dirtyBasics ? "Unsaved changes — auto-saving..." : "All changes saved"}</span>
+              <Button onClick={saveBasics} disabled={busy === "basics"} variant={dirtyBasics ? "default" : "outline"}>
                 {busy === "basics" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                Save basics
+                {dirtyBasics ? "Save now" : "Saved"}
               </Button>
             </div>
           </CardContent>
@@ -392,7 +445,7 @@ export function ProfileBuilder({
         <Card>
           <CardHeader>
             <CardTitle>Skills</CardTitle>
-            <CardDescription>Search and tag the skills you can offer. Buyers filter by skill when looking for help.</CardDescription>
+            <CardDescription>Search and tag the skills you can offer. Buyers filter by skill when looking for help. Changes auto-save.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <Input
@@ -451,10 +504,11 @@ export function ProfileBuilder({
                 </div>
               </div>
             )}
-            <div className="flex justify-end">
-              <Button onClick={saveSkills} disabled={busy === "skills"}>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">{skillsDirty ? "Unsaved — auto-saving..." : "All changes saved"}</span>
+              <Button onClick={saveSkills} disabled={busy === "skills"} variant={skillsDirty ? "default" : "outline"}>
                 {busy === "skills" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                Save skills
+                {skillsDirty ? "Save now" : "Saved"}
               </Button>
             </div>
           </CardContent>
@@ -702,7 +756,7 @@ export function ProfileBuilder({
             <CardDescription>Public profile links (no personal phone/email — that&apos;s the workspace&apos;s job).</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            <p className="text-xs text-muted-foreground">All fields below are public on your profile. Never put personal phone numbers or emails here.</p>
+            <p className="text-xs text-muted-foreground">These links are <strong>private</strong> — stored for profile completeness scoring but never shown on your public profile.</p>
             {SOCIAL_PLATFORMS.map(p => {
               const existing = initial.socialLinks.find((l: any) => l.platform === p);
               return (
@@ -767,7 +821,6 @@ export function ProfileBuilder({
                         const skills = (initial.resumeParsed.parsed_skills ?? []) as string[];
                         const years = initial.resumeParsed.parsed_years as number | null;
                         if (Array.isArray(skills) && skills.length) {
-                          // Open the Skills tab so the user can confirm the pre-fill
                           alert(
                             `Detected ${skills.length} skills from your resume.\n\nGo to the "Skills" tab and click "Add skill" to map them to a category.\n\nThe auto-mapper requires a manual confirmation because we don't want to claim categories without your approval.`
                           );
@@ -793,7 +846,7 @@ export function ProfileBuilder({
   );
 }
 
-function TabBtn({ active, onClick, Icon, label, count, badge, tabId }: { active: boolean; onClick: () => void; Icon: any; label: string; count?: number; badge?: string; tabId?: string }) {
+function TabBtn({ active, onClick, Icon, label, count, badge, tabId, dirty }: { active: boolean; onClick: () => void; Icon: any; label: string; count?: number; badge?: string; tabId?: string; dirty?: boolean }) {
   return (
     <button
       type="button"
@@ -803,6 +856,7 @@ function TabBtn({ active, onClick, Icon, label, count, badge, tabId }: { active:
     >
       <Icon className="h-3.5 w-3.5" />
       {label}
+      {dirty && <span className="ml-1 h-2 w-2 rounded-full bg-amber-400" />}
       {badge && <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">{badge}</span>}
       {count !== undefined && count > 0 && <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold">{count}</span>}
     </button>

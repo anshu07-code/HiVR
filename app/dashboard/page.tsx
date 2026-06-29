@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Wallet, Briefcase, Award, TrendingUp, ShieldCheck, Star, ArrowRight, ListChecks, FileText, MessageSquare, Plus, Users, Clock, CheckCircle2, AlertCircle, Sparkles, Hammer, UserSearch, EyeOff, IndianRupee } from "lucide-react";
-import { formatINR, timeAgo } from "@/lib/utils";
+import { formatPaise, formatINR, timeAgo } from "@/lib/utils";
 import { WalletSection } from "@/components/wallet-section";
 import { RealtimeActivityPanel, type Activity } from "@/components/dashboard/realtime-activity-panel";
 import { MonthlyStatsPanel } from "@/components/dashboard/monthly-stats-panel";
@@ -659,7 +659,7 @@ function EmployeeHome({ contracts, ep, skills, points, verifications, currentUse
                   <div className="text-xs text-muted-foreground capitalize">{s.verification_status.replace("_", " ")}</div>
                 </div>
                 <Badge variant={s.verification_status === "verified" ? "success" : "secondary"}>
-                  ₹{Math.round(s.current_wage_band_min / 100)}–₹{Math.round(s.current_wage_band_max / 100)}
+                  {formatPaise(s.current_wage_band_min)}–{formatPaise(s.current_wage_band_max)}
                 </Badge>
               </div>
             ))}
@@ -888,7 +888,7 @@ function BothHome({ contracts, ep, bp, skills, points, tasksPosted, payments, ve
                   <div className="text-sm font-semibold">{s.category?.name}</div>
                   <div className="text-xs text-muted-foreground capitalize">{s.verification_status.replace("_", " ")}</div>
                 </div>
-                <Badge variant={s.verification_status === "verified" ? "success" : "secondary"}>₹{Math.round(s.current_wage_band_min / 100)}–{Math.round(s.current_wage_band_max / 100)}</Badge>
+                <Badge variant={s.verification_status === "verified" ? "success" : "secondary"}>{formatPaise(s.current_wage_band_min)}–{formatPaise(s.current_wage_band_max)}</Badge>
               </div>
             ))}
             <Button asChild variant="outline" className="w-full">

@@ -17,10 +17,21 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * No negotiation round needed — the "Hire directly" path bypasses
  * the offer/accept flow entirely (that's the Instant Hire flow).
  */
-export async function hireApplicantAction(_taskId: string, applicationId: string, buyerMessage?: string) {
+/**
+ * Hire an applicant directly at the agreed price (employee's full standing rate).
+ * If agreedPricePaise is provided, the application's bid_paise is updated
+ * to that price before calling the RPC so the contract uses the agreed rate.
+ */
+export async function hireApplicantAction(_taskId: string, applicationId: string, buyerMessage?: string, agreedPricePaise?: number) {
   const sb = createClient();
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return { ok: false, reason: "Not signed in" };
+
+  // If an agreed price is provided, update the application's bid so the RPC
+  // picks it up when creating the contract.
+  if (agreedPricePaise != null && agreedPricePaise > 0) {
+    await sb.from("task_applications").update({ bid_paise: agreedPricePaise }).eq("id", applicationId);
+  }
 
   const { data, error } = await sb.rpc("hire_applicant" as any, {
     p_application_id: applicationId,
@@ -31,7 +42,6 @@ export async function hireApplicantAction(_taskId: string, applicationId: string
     return { ok: false, reason: error.message };
   }
 
-  // The RPC returns a setof row: (ok boolean, error_text text, contract_id uuid)
   const row = Array.isArray(data) ? data[0] : data;
   if (!row || row.ok !== true) {
     return { ok: false, reason: row?.error_text ?? "Hire failed" };
@@ -87,6 +97,59 @@ export async function extendDeadlineAction(taskId: string, newDeadlineIso: strin
   revalidatePath(`/browse/${taskId}`);
   revalidatePath("/dashboard/tasks");
   return { ok: true, newDeadline: data };
+}
+
+/**
+ * Edit a posted task. Cannot edit a task that already has hired applicants.
+ * Sets is_edited, edited_at, increments edit_count.
+ */
+export async function editTaskAction(taskId: string, patch: {
+  title?: string;
+  description?: string;
+  budget_min?: number;
+  budget_max?: number;
+  deadline?: string | null;
+  estimated_hours?: number | null;
+  openings?: number;
+  brief?: any;
+  skills_required?: string[];
+}) {
+  const sb = createClient();
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) return { ok: false, reason: "Not signed in" };
+
+  const { data, error } = await sb.rpc("edit_task" as any, {
+    p_task_id: taskId,
+    p_patch: patch as any,
+  } as any);
+  if (error) return { ok: false, reason: error.message };
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || row.ok !== true) return { ok: false, reason: row?.error_text ?? "Edit failed" };
+
+  revalidatePath(`/dashboard/tasks`);
+  revalidatePath(`/browse/${taskId}`);
+  revalidatePath(`/dashboard/tasks/${taskId}/applicants`);
+  return { ok: true };
+}
+
+/**
+ * Delete a task. Hard delete if no applications, otherwise soft-delete (cancelled).
+ */
+export async function deleteTaskAction(taskId: string) {
+  const sb = createClient();
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) return { ok: false, reason: "Not signed in" };
+
+  const { data, error } = await sb.rpc("delete_task" as any, {
+    p_task_id: taskId,
+  } as any);
+  if (error) return { ok: false, reason: error.message };
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || row.ok !== true) return { ok: false, reason: row?.error_text ?? "Delete failed" };
+
+  revalidatePath(`/dashboard/tasks`);
+  revalidatePath("/browse");
+  return { ok: true, mode: row.error_text };
 }
 
 /**

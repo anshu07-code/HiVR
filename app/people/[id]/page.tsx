@@ -7,9 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
-  ArrowLeft, MapPin, Briefcase, GraduationCap, FolderGit2, Award, Globe,
-  FileText, Star, ExternalLink, ShieldCheck, Calendar, Clock, Mail,
-  Download, IndianRupee, Languages,
+  ArrowLeft, MapPin, Briefcase, GraduationCap, FolderGit2, Award,
+  FileText, Star, ExternalLink, ShieldCheck, Calendar, Clock,
+  Download, IndianRupee,
 } from "lucide-react";
 import { formatPaise, timeAgo } from "@/lib/utils";
 import { VideoGrid } from "@/components/profile/video-grid";
@@ -39,7 +39,6 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
     { data: certifications },
     { data: verifs },
     { data: resume },
-    { data: socials },
   ] = await Promise.all([
     sb.from("users").select("id, full_name, avatar_url, current_mode, created_at").eq("id", userId).maybeSingle(),
     sb.from("employee_profiles").select("*").eq("user_id", userId).maybeSingle(),
@@ -50,7 +49,6 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
     sb.from("employee_certifications").select("*").eq("user_id", userId).order("issued_at", { ascending: false, nullsFirst: false }),
     sb.from("verifications").select("doc_type, status, purpose, metadata, verified_at").eq("user_id", userId).eq("status", "verified"),
     sb.from("employee_resume").select("filename, uploaded_at").eq("user_id", userId).maybeSingle(),
-    sb.from("employee_social_links").select("platform, url").eq("user_id", userId),
   ]);
 
   if (!u) notFound();
@@ -290,24 +288,6 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
                       </li>
                     ))}
                   </ul>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Social links */}
-            {(socials ?? []).length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm">Links</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-1">
-                  {(socials ?? []).map((l: any) => (
-                    <a key={l.platform} href={l.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-xs text-primary hover:underline">
-                      <Globe className="h-3 w-3" />
-                      <span className="capitalize">{l.platform}</span>
-                      <ExternalLink className="ml-auto h-2.5 w-2.5" />
-                    </a>
-                  ))}
                 </CardContent>
               </Card>
             )}

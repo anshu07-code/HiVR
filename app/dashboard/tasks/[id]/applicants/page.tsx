@@ -64,16 +64,19 @@ export default async function TaskApplicantsPage({ params }: { params: { id: str
     .eq("task_id", taskId)
     .order("created_at", { ascending: false });
 
+  // Fetch employee standing rates for this task's category to compute bargain prices
+  const taskCategoryId = (task as any).category_id;
+  const taskPricingModel = (task as any).pricing_model ?? "fixed";
+
   let apps: any[] = [];
   if (!appErr && appsBase && appsBase.length > 0) {
     const empIds = Array.from(new Set(appsBase.map((a: any) => a.employee_id).filter(Boolean)));
-    const [{ data: emps }, { data: profiles }, { data: skills }, { data: verifs }] = await Promise.all([
-      // Only valid columns: `users` has id/full_name/avatar_url/current_mode.
-      // `is_verified` and `trust_tier` don't exist on `users`.
+    const [{ data: emps }, { data: profiles }, { data: skills }, { data: verifs }, { data: standingRates }] = await Promise.all([
       sb.from("users").select("id, full_name, avatar_url, current_mode").in("id", empIds),
       sb.from("employee_profiles").select("user_id, bio, languages, location, experience_type, overall_trust_tier, lifetime_earnings, completion_rate, avg_rating, total_reviews").in("user_id", empIds),
       sb.from("employee_skills").select("employee_id, verification_status, current_wage_band_min, current_wage_band_max, category:skill_categories(name, slug)").in("employee_id", empIds),
       sb.from("verifications").select("user_id, doc_type, status, purpose, metadata").in("user_id", empIds).eq("status", "verified"),
+      sb.from("employee_standing_rates").select("user_id, rate_per_hour_paise, rate_per_task_paise, rate_per_day_paise, rate_per_week_paise").in("user_id", empIds).eq("category_id", taskCategoryId),
     ]);
     const empMap = new Map((emps ?? []).map((e: any) => [e.id, e]));
     const profMap = new Map((profiles ?? []).map((p: any) => [p.user_id, p]));
@@ -89,13 +92,28 @@ export default async function TaskApplicantsPage({ params }: { params: { id: str
       arr.push(v);
       verifsByUser.set((v as any).user_id, arr);
     }
-    apps = (appsBase as any[]).map((a) => ({
-      ...a,
-      employee: empMap.get(a.employee_id) ?? null,
-      employee_profile: profMap.get(a.employee_id) ?? null,
-      skills: skillsByUser.get(a.employee_id) ?? [],
-      verifications: verifsByUser.get(a.employee_id) ?? [],
-    }));
+    const ratesMap = new Map((standingRates ?? []).map((r: any) => [r.user_id, r]));
+
+    apps = (appsBase as any[]).map((a) => {
+      const rate = ratesMap.get(a.employee_id);
+      let effectiveRatePaise: number | null = null;
+      if (rate) {
+        effectiveRatePaise =
+          taskPricingModel === "hourly" ? rate.rate_per_hour_paise :
+          taskPricingModel === "fixed" ? rate.rate_per_task_paise :
+          taskPricingModel === "daily" ? rate.rate_per_day_paise :
+          rate.rate_per_week_paise ?? null;
+      }
+      return {
+        ...a,
+        employee_rate_paise: effectiveRatePaise, // full rate for this pricing model
+        bargain_min_paise: effectiveRatePaise ? Math.floor(effectiveRatePaise * 0.8) : null, // floor for bargaining
+        employee: empMap.get(a.employee_id) ?? null,
+        employee_profile: profMap.get(a.employee_id) ?? null,
+        skills: skillsByUser.get(a.employee_id) ?? [],
+        verifications: verifsByUser.get(a.employee_id) ?? [],
+      };
+    });
   }
 
   // Quick stats

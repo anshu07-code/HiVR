@@ -63,12 +63,22 @@ export async function POST(req: NextRequest) {
       }
       throw e;
     }
+    let cancellationPolicy = "cancellable";
     if (body.task_post_id) {
       try { requireUuid(body.task_post_id, "task_post_id"); } catch (e) {
         if (e instanceof SecurityError) {
           return NextResponse.json({ error: e.message }, { status: e.status });
         }
         throw e;
+      }
+      // Inherit cancellation_policy from the task_post
+      const { data: tp } = await sb
+        .from("task_posts")
+        .select("cancellation_policy")
+        .eq("id", body.task_post_id)
+        .maybeSingle();
+      if (tp && (tp as any).cancellation_policy === "non-cancellable") {
+        cancellationPolicy = "non-cancellable";
       }
     }
 
@@ -156,6 +166,7 @@ export async function POST(req: NextRequest) {
       pricing_model: body.pricing_model,
       agreed_price: amountPaise,
       platform_fee_pct: feePct,
+      cancellation_policy: cancellationPolicy,
     }).select().single();
     if (cErr || !contract) throw cErr ?? new Error("contract insert failed");
 

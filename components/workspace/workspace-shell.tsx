@@ -71,7 +71,7 @@ export function WorkspaceShell({
   workspace, contract, task, brief, counterparty, me, currentUserRole, initialChecklist,
 }: {
   workspace: Workspace;
-  contract: { id: string; agreed_price: number; status: string; incentive_earned: boolean; incentive_paid_at: string | null };
+  contract: { id: string; agreed_price: number; status: string; incentive_earned: boolean; incentive_paid_at: string | null; cancellation_policy: string };
   task: { id: string; title: string; pricing_model: string; incentive_condition_type: string | null; incentive_threshold: string | null; incentive_amount_paise: number | null };
   brief: any;
   counterparty: { id: string; full_name: string | null; avatar_url: string | null };
@@ -273,7 +273,10 @@ export function WorkspaceShell({
         currentUserRole={currentUserRole}
         workspaceStatus={workspace.status}
         cancellable={workspace.status === "funded" || workspace.status === "delivered" || workspace.status === "in_review"}
+        cancellationPolicy={contract.cancellation_policy as "cancellable" | "non-cancellable"}
         agreedPaise={Number(workspace.escrow_amount_paise ?? contract?.agreed_price ?? 0)}
+        totalDeliverables={initialChecklist.length}
+        approvedDeliverables={initialChecklist.filter(c => c.status === "done" || c.status === "resolved").length}
       />
 
       {/* Frozen banner */}

@@ -80,16 +80,15 @@ export function BriefBuilder({
 
   const addChecklistItem = () => {
     const idx = checklist.length;
-    setChecklist([...checklist, { key: makeKey(`item_${idx + 1}`, idx), text: "" }]);
+    setChecklist([...checklist, { key: crypto.randomUUID(), text: "" }]);
   };
   const updateChecklistItem = (i: number, text: string) => {
     const next = [...checklist];
-    next[i] = { ...next[i], text, key: makeKey(text, i) };
+    next[i] = { ...next[i], text };
     setChecklist(next);
   };
   const removeChecklistItem = (i: number) => {
-    const next = checklist.filter((_, idx) => idx !== i).map((c, idx) => ({ ...c, key: makeKey(c.text, idx) }));
-    setChecklist(next);
+    setChecklist(checklist.filter((_, idx) => idx !== i));
   };
 
   if (fields.length === 0) {
@@ -126,7 +125,7 @@ export function BriefBuilder({
               {f.hint && <p className="text-xs text-muted-foreground">{f.hint}</p>}
               <div className="space-y-2">
                 {checklist.map((c, i) => (
-                  <div key={c.key} className="flex items-center gap-2">
+                  <div key={c.key || i} className="flex items-center gap-2">
                     <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full border bg-muted/30 text-[10px] font-medium text-muted-foreground">
                       {i + 1}
                     </span>

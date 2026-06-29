@@ -84,7 +84,7 @@ export function RecentContracts({ initial, role, currentUserId }: { initial: any
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="truncate text-sm font-medium">
-                        {c.task_title ?? "Untitled task"}
+                        {c.task_title ?? c.task_post?.title ?? `Contract (${c.id?.slice(0, 8)})`}
                       </span>
                       <Badge variant={badge.variant} className="shrink-0 text-[10px]">
                         {badge.label}

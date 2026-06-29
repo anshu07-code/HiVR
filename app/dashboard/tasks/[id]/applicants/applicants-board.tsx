@@ -24,6 +24,8 @@ type App = {
   id: string;
   cover_note: string | null;
   bid_paise: number | null;
+  employee_rate_paise: number | null;
+  bargain_min_paise: number | null;
   status: string;
   created_at: string;
   employee_id: string;
@@ -107,7 +109,7 @@ export function ApplicantsBoard({
   const [viewMode, setViewMode] = React.useState<"list" | "grid">("list");
   // Modals for offer + interview + hire
   const [hireFor, setHireFor] = React.useState<{ appId: string; amount: number } | null>(null);
-  const [offerFor, setOfferFor] = React.useState<{ appId: string; amount: number; message: string; days: number } | null>(null);
+  const [offerFor, setOfferFor] = React.useState<{ appId: string; amount: number; bargainMin: number | null; message: string; days: number } | null>(null);
   const [scheduleFor, setScheduleFor] = React.useState<{ appId: string; round: "interview_r1" | "interview_r2" | "test"; at: string; duration: number; location: string; meetingUrl: string; agenda: string } | null>(null);
 
   const STAGE_RANK: Record<string, number> = {
@@ -123,14 +125,12 @@ export function ApplicantsBoard({
     return ra - rb;
   });
 
-  async function hire(appId: string, amount: number) {
+  async function hire(appId: string, amount: number | null) {
     setBusyId(appId); setError(null);
-    const r = await hireApplicantAction(taskId, appId);
+    const r = await hireApplicantAction(taskId, appId, undefined, amount ?? undefined);
     setBusyId(null);
     if (!r.ok) { setError(r.reason ?? "Failed to hire"); return; }
     setHireFor(null);
-    // Redirect the buyer straight to the new contract page so they can
-    // fund the escrow and coordinate next steps immediately.
     if (r.contract_id) {
       router.push(`/dashboard/contracts/${r.contract_id}`);
     } else {
@@ -281,10 +281,10 @@ export function ApplicantsBoard({
                 <div className="mt-auto flex flex-col gap-1.5">
                   {cur !== "hired" && cur !== "offer" && (
                     <>
-                      <Button size="sm" variant="gradient" className="w-full text-[11px]" disabled={busyId === a.id} onClick={() => setHireFor({ appId: a.id, amount: a.bid_paise ?? taskBudgetMin })}>
+                      <Button size="sm" variant="gradient" className="w-full text-[11px]" disabled={busyId === a.id} onClick={() => setHireFor({ appId: a.id, amount: a.employee_rate_paise ?? a.bid_paise ?? taskBudgetMin })}>
                         Hire directly
                       </Button>
-                      <Button size="sm" variant="outline" className="w-full text-[11px]" disabled={busyId === a.id} onClick={() => setOfferFor({ appId: a.id, amount: a.bid_paise ?? taskBudgetMin, message: "", days: 7 })}>
+                      <Button size="sm" variant="outline" className="w-full text-[11px]" disabled={busyId === a.id} onClick={() => setOfferFor({ appId: a.id, amount: a.employee_rate_paise ?? a.bid_paise ?? taskBudgetMin, bargainMin: a.bargain_min_paise, message: "", days: 7 })}>
                         <Send className="h-3 w-3" />Send offer
                       </Button>
                     </>
@@ -384,10 +384,10 @@ export function ApplicantsBoard({
                       )}
                       {cur === "shortlist" && isTierA && (
                         <>
-                          <Button size="sm" variant="outline" disabled={busyId === a.id} onClick={() => setHireFor({ appId: a.id, amount: a.bid_paise ?? taskBudgetMin })}>
+                          <Button size="sm" variant="outline" disabled={busyId === a.id} onClick={() => setHireFor({ appId: a.id, amount: a.employee_rate_paise ?? a.bid_paise ?? taskBudgetMin })}>
                             Hire directly
                           </Button>
-                          <Button size="sm" variant="outline" disabled={busyId === a.id} onClick={() => setOfferFor({ appId: a.id, amount: a.bid_paise ?? taskBudgetMin, message: "", days: 7 })}>
+                          <Button size="sm" variant="outline" disabled={busyId === a.id} onClick={() => setOfferFor({ appId: a.id, amount: a.employee_rate_paise ?? a.bid_paise ?? taskBudgetMin, bargainMin: a.bargain_min_paise, message: "", days: 7 })}>
                             <Send className="h-3.5 w-3.5" />Send offer
                           </Button>
                         </>
@@ -403,7 +403,7 @@ export function ApplicantsBoard({
                         </Button>
                       )}
                       {cur === "interview_r1" && !isTierA && (
-                        <Button size="sm" variant="gradient" disabled={busyId === a.id} onClick={() => setOfferFor({ appId: a.id, amount: a.bid_paise ?? taskBudgetMin, message: "", days: 7 })}>
+                        <Button size="sm" variant="gradient" disabled={busyId === a.id} onClick={() => setOfferFor({ appId: a.id, amount: a.employee_rate_paise ?? a.bid_paise ?? taskBudgetMin, bargainMin: a.bargain_min_paise, message: "", days: 7 })}>
                           <Send className="h-3.5 w-3.5" />Send offer
                         </Button>
                       )}
@@ -415,11 +415,11 @@ export function ApplicantsBoard({
                       {/* SECONDARY: direct hire + send offer (skip if Tier A at shortlist — already shown as primary) */}
                       {!["hired", "offer"].includes(cur) && !(isTierA && cur === "shortlist") && (
                         <>
-                          <Button size="sm" variant="outline" disabled={busyId === a.id} onClick={() => setHireFor({ appId: a.id, amount: a.bid_paise ?? taskBudgetMin })}>
+                          <Button size="sm" variant="outline" disabled={busyId === a.id} onClick={() => setHireFor({ appId: a.id, amount: a.employee_rate_paise ?? a.bid_paise ?? taskBudgetMin })}>
                             Hire directly
                           </Button>
                           {cur !== "test" && (
-                            <Button size="sm" variant="outline" disabled={busyId === a.id} onClick={() => setOfferFor({ appId: a.id, amount: a.bid_paise ?? taskBudgetMin, message: "", days: 7 })}>
+                            <Button size="sm" variant="outline" disabled={busyId === a.id} onClick={() => setOfferFor({ appId: a.id, amount: a.employee_rate_paise ?? a.bid_paise ?? taskBudgetMin, bargainMin: a.bargain_min_paise, message: "", days: 7 })}>
                               <Send className="h-3.5 w-3.5" />Send offer
                             </Button>
                           )}
@@ -531,24 +531,24 @@ export function ApplicantsBoard({
       {hireFor && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={() => setHireFor(null)}>
           <div className="w-full max-w-md rounded-lg border bg-card p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-display text-lg font-semibold">Hire this person directly?</h3>
+            <h3 className="font-display text-lg font-semibold">Hire at their rate?</h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              This skips the offer/interview flow. A contract will be created at the agreed price.
+              A contract will be created at the employee&apos;s full standing rate for this pricing model. Use <em>Send offer</em> if you want to negotiate.
             </p>
-            <div className="mt-3">
-              <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Agreed amount (₹)</label>
-              <Input
-                type="number"
-                value={Math.round(hireFor.amount / 100)}
-                onChange={(e) => setHireFor({ ...hireFor, amount: Math.round(Number(e.target.value) * 100) })}
-                className="mt-1 h-9"
-              />
+            <div className="mt-3 rounded-md border bg-muted/30 p-3 text-sm">
+              <div className="flex items-center justify-between font-semibold">
+                <span>Contract amount</span>
+                <span>{formatPaise(hireFor.amount)}</span>
+              </div>
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                This is the employee&apos;s posted rate. The contract is created at this price.
+              </p>
             </div>
             <div className="mt-3 flex justify-end gap-2">
               <Button variant="ghost" size="sm" onClick={() => setHireFor(null)}>Cancel</Button>
               <Button size="sm" variant="gradient" disabled={busyId === hireFor.appId} onClick={() => hire(hireFor.appId, hireFor.amount)}>
                 {busyId === hireFor.appId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                Hire now
+                Hire at {formatPaise(hireFor.amount)}
               </Button>
             </div>
           </div>
@@ -561,17 +561,35 @@ export function ApplicantsBoard({
           <div className="w-full max-w-md rounded-lg border bg-card p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-display text-lg font-semibold">Send an offer</h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              The employee will get a notification and can accept or decline within the window.
+              Pre-filled at the employee&apos;s full rate. Negotiate down to <strong>20% off</strong> if needed. The employee can accept, counter, or decline.
             </p>
+            {offerFor.bargainMin != null && (
+              <div className="mt-2 rounded-md border bg-muted/30 p-2.5 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Employee rate</span>
+                  <span className="font-medium">{formatPaise(offerFor.amount)}</span>
+                </div>
+                <div className="mt-1 flex items-center justify-between">
+                  <span className="text-muted-foreground">Min (20% off)</span>
+                  <span className="font-medium text-amber-700">{formatPaise(offerFor.bargainMin)}</span>
+                </div>
+              </div>
+            )}
             <div className="mt-3 space-y-2">
               <div>
-                <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Amount (₹)</label>
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Offer amount (₹)</label>
                 <Input
                   type="number"
+                  min={offerFor.bargainMin != null ? Math.round(offerFor.bargainMin / 100) : 1}
                   value={Math.round(offerFor.amount / 100)}
                   onChange={(e) => setOfferFor({ ...offerFor, amount: Math.round(Number(e.target.value) * 100) })}
                   className="mt-1 h-9"
                 />
+                {offerFor.bargainMin != null && offerFor.amount < offerFor.bargainMin && (
+                  <p className="mt-1 text-[10px] text-destructive">
+                    Below the bargaining minimum ({formatPaise(offerFor.bargainMin)}).
+                  </p>
+                )}
               </div>
               <div>
                 <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Response window (days)</label>
@@ -597,9 +615,14 @@ export function ApplicantsBoard({
             </div>
             <div className="mt-3 flex justify-end gap-2">
               <Button variant="ghost" size="sm" onClick={() => setOfferFor(null)}>Cancel</Button>
-              <Button size="sm" variant="gradient" disabled={busyId === offerFor.appId} onClick={sendOffer}>
+              <Button
+                size="sm"
+                variant="gradient"
+                disabled={busyId === offerFor.appId || (offerFor.bargainMin != null && offerFor.amount < offerFor.bargainMin)}
+                onClick={sendOffer}
+              >
                 {busyId === offerFor.appId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                Send offer
+                Send offer at {formatPaise(offerFor.amount)}
               </Button>
             </div>
           </div>

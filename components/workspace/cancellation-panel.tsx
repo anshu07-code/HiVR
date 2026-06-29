@@ -2,26 +2,10 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Ban, Loader2, ShieldAlert, CheckCircle2, X } from "lucide-react";
+import { Ban, Loader2, ShieldAlert, CheckCircle2, X, AlertTriangle, Lock } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { cn, formatPaise } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
-
-type Cancellation = {
-  id: string;
-  contract_id: string;
-  requested_by: string;
-  responded_by: string | null;
-  reason: string;
-  status: "pending" | "agreed" | "rejected" | "withdrawn" | "expired";
-  refund_paise: number;
-  platform_retained_paise: number;
-  employee_penalty_paise: number;
-  created_at: string;
-  responded_at: string | null;
-  completed_at: string | null;
-};
+import { formatINR, formatPaise } from "@/lib/utils";
 
 type Props = {
   contractId: string;
@@ -31,253 +15,174 @@ type Props = {
   employeeId: string;
   currentUserRole: "buyer" | "employee";
   workspaceStatus: string;
-  /** True if the contract is in a state where a cancellation can still be initiated. */
   cancellable: boolean;
-  /** Optional: the agreed_price (for showing the refund/penalty preview). */
+  cancellationPolicy: "cancellable" | "non-cancellable";
   agreedPaise: number;
+  totalDeliverables: number;
+  approvedDeliverables: number;
 };
 
 export function CancellationPanel({
   contractId, workspaceId, currentUserId, buyerId, employeeId,
-  currentUserRole, workspaceStatus, cancellable, agreedPaise,
+  currentUserRole, workspaceStatus, cancellable, cancellationPolicy,
+  agreedPaise, totalDeliverables, approvedDeliverables,
 }: Props) {
   const router = useRouter();
-  const sbRef = React.useRef<ReturnType<typeof createClient> | null>(null);
-  const [cancellation, setCancellation] = React.useState<Cancellation | null>(null);
-  const [reason, setReason] = React.useState("");
-  const [submitting, setSubmitting] = React.useState(false);
-  const [responding, setResponding] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
   const [expanded, setExpanded] = React.useState(false);
-
-  const counterpartyId = currentUserRole === "buyer" ? employeeId : buyerId;
-
-  const fetchCancellation = React.useCallback(async () => {
-    if (!sbRef.current) sbRef.current = createClient();
-    const sb = sbRef.current;
-    const { data } = await sb
-      .from("contract_cancellations")
-      .select("id, contract_id, requested_by, responded_by, reason, status, refund_paise, platform_retained_paise, employee_penalty_paise, created_at, responded_at, completed_at")
-      .eq("contract_id", contractId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    setCancellation((data ?? null) as Cancellation | null);
-  }, [contractId]);
-
-  React.useEffect(() => { fetchCancellation(); }, [fetchCancellation]);
-
-  React.useEffect(() => {
-    if (!sbRef.current) sbRef.current = createClient();
-    const sb = sbRef.current;
-    const ch = sb
-      .channel(`cancellation-${contractId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "contract_cancellations", filter: `contract_id=eq.${contractId}` }, () => fetchCancellation())
-      .subscribe();
-    return () => { sb.removeChannel(ch); };
-  }, [contractId, fetchCancellation]);
-
-  async function submitRequest() {
-    if (reason.trim().length < 3) {
-      setError("Please provide a reason (at least 3 characters).");
-      return;
-    }
-    setError(null);
-    setSubmitting(true);
-    const r = await fetch(`/api/contracts/${contractId}/cancel/request`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ reason: reason.trim() }),
-    });
-    setSubmitting(false);
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      setError(data?.error ?? "Failed to submit request");
-      return;
-    }
-    setReason("");
-    setExpanded(false);
-    await fetchCancellation();
-  }
-
-  async function respond(agree: boolean) {
-    if (!cancellation) return;
-    setError(null);
-    setResponding(true);
-    const r = await fetch(`/api/contracts/${contractId}/cancel/respond`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ cancellation_id: cancellation.id, agree }),
-    });
-    setResponding(false);
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      setError(data?.error ?? "Failed to respond");
-      return;
-    }
-    await fetchCancellation();
-    router.refresh();
-  }
+  const [submitting, setSubmitting] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [result, setResult] = React.useState<{
+    refund_paise: number; penalty_paise: number;
+    earned_paise: number; approved_count: number;
+  } | null>(null);
 
   const isTerminal = workspaceStatus === "completed" || workspaceStatus === "cancelled" || workspaceStatus === "frozen";
-  const showInitiator = cancellable && !cancellation && !isTerminal;
+  const isBuyer = currentUserRole === "buyer";
 
-  // ---- Render: terminal cancellation (agreed) ----
-  if (cancellation && cancellation.status === "agreed" && isTerminal) {
-    const iRequestedIt = cancellation.requested_by === currentUserId;
+  if (isTerminal && workspaceStatus === "cancelled" && result) {
     return (
       <Card className="border-rose-500/30 bg-rose-500/5">
         <CardContent className="flex items-start gap-3 p-4 text-sm">
           <Ban className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
           <div className="space-y-1">
-            <p className="font-semibold text-rose-700">
-              Contract cancelled by mutual agreement
-              {iRequestedIt ? " (you raised the request)" : " (the other party raised the request)"}.
-            </p>
+            <p className="font-semibold text-rose-700">Workspace cancelled</p>
             <p className="text-xs text-rose-700/80">
-              Reason on file: &ldquo;{cancellation.reason}&rdquo;
+              {result.approved_count} of {totalDeliverables} deliverables approved.
+              {isBuyer
+                ? <> You received <strong>{formatPaise(result.refund_paise)}</strong> as refund.</>
+                : <> You earned <strong>{formatPaise(result.earned_paise)}</strong> for approved work.</>}
             </p>
-            {cancellation.refund_paise > 0 && (
-              <p className="text-xs text-rose-700/80">
-                {formatPaise(cancellation.refund_paise)} was credited to the buyer&apos;s HiVR wallet.
-                {cancellation.platform_retained_paise > 0 && (
-                  <> HiVR retained {formatPaise(cancellation.platform_retained_paise)} as a platform fee.</>
-                )}
-              </p>
-            )}
-            {cancellation.employee_penalty_paise > 0 && (
-              <p className="text-xs text-rose-700/80">
-                A cancellation fee of {formatPaise(cancellation.employee_penalty_paise)} has been recorded
-                against the employee and will reduce their payout on their next contract.
-              </p>
-            )}
           </div>
         </CardContent>
       </Card>
     );
   }
 
-  // ---- Render: pending request that the current user must respond to ----
-  if (cancellation && cancellation.status === "pending" && cancellation.requested_by !== currentUserId) {
-    const requesterLabel = cancellation.requested_by === buyerId ? "Buyer" : "Employee";
+  // Non-cancellable
+  if (cancellationPolicy === "non-cancellable" && !isTerminal) {
     return (
-      <Card className="border-amber-500/40 bg-amber-500/5">
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-sm text-amber-800">
-            <Ban className="h-4 w-4 text-amber-600" />
-            {requesterLabel} requested to cancel this contract
-          </CardTitle>
-          <CardDescription>
-            Both parties must agree for a mutual cancellation to take effect.
-          </CardDescription>
-        </CardHeader>
+      <Card className="border-sky-500/30 bg-sky-500/5">
+        <CardContent className="flex items-start gap-3 p-4 text-sm">
+          <Lock className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" />
+          <div>
+            <p className="font-semibold text-sky-700">Non-cancellable contract</p>
+            <p className="text-xs text-sky-700/80">
+              Once funded, the full amount is locked. No refunds or cancellations permitted.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!cancellable || isTerminal) return null;
+
+  const deliverablePrice = totalDeliverables > 0 ? Math.floor(agreedPaise / totalDeliverables) : 0;
+  const remaining = agreedPaise - (deliverablePrice * approvedDeliverables);
+  const penaltyEstimate = Math.floor(remaining * 0.20);
+  const refundEstimate = remaining - penaltyEstimate;
+
+  async function handleCancel() {
+    setError(null);
+    setSubmitting(true);
+    try {
+      const r = await fetch("/api/workspace/cancel", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ workspaceId }),
+      });
+      const data = await r.json();
+      if (!r.ok || !data.ok) {
+        setError(data?.error ?? "Cancellation failed");
+        return;
+      }
+      setResult({
+        refund_paise: data.refund_paise,
+        penalty_paise: data.penalty_paise,
+        earned_paise: data.earned_paise,
+        approved_count: data.approved_count,
+      });
+      router.refresh();
+    } catch (e: any) {
+      setError(e.message ?? "Cancellation failed");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Card className="border-rose-500/30">
+      <CardHeader className="pb-2">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="flex w-full items-center justify-between text-left"
+        >
+          <div>
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Ban className="h-4 w-4 text-rose-600" />
+              Cancel this contract
+            </CardTitle>
+            <CardDescription>
+              {isBuyer
+                ? `Cancel and get a partial refund. ${approvedDeliverables}/${totalDeliverables} deliverables approved.`
+                : `Cancel and forfeit remaining balance. ${approvedDeliverables}/${totalDeliverables} deliverables approved.`}
+            </CardDescription>
+          </div>
+          <span className="text-xs text-muted-foreground">{expanded ? "Hide" : "Details"}</span>
+        </button>
+      </CardHeader>
+      {expanded && (
         <CardContent className="space-y-3 pb-4 text-sm">
-          <div className="rounded-md border bg-background/50 p-3 text-xs">
-            <p className="font-medium text-foreground/80">Reason given</p>
-            <p className="mt-1 text-muted-foreground">&ldquo;{cancellation.reason}&rdquo;</p>
+          <div className="space-y-2 rounded-md border bg-muted/30 p-3 text-xs">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Contract amount</span>
+              <span className="font-medium">{formatPaise(agreedPaise)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Deliverables</span>
+              <span className="font-medium">{approvedDeliverables} of {totalDeliverables} approved</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Earned by employee</span>
+              <span className="font-medium">{formatPaise(deliverablePrice * approvedDeliverables)}</span>
+            </div>
+            <div className="flex justify-between border-t pt-2">
+              <span className="text-muted-foreground">Remaining</span>
+              <span className="font-medium">{formatPaise(remaining)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Cancellation fee (20% of remaining)</span>
+              <span className="font-medium text-rose-600">-{formatPaise(penaltyEstimate)}</span>
+            </div>
+            <div className="flex justify-between border-t pt-2 text-sm">
+              <span className="font-semibold">Estimated refund to buyer</span>
+              <span className="font-semibold text-emerald-600">{formatPaise(refundEstimate)}</span>
+            </div>
+            {!isBuyer && (
+              <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-2">
+                <AlertTriangle className="mr-1 inline h-3 w-3 text-amber-600" />
+                If you cancel, <strong>{formatPaise(penaltyEstimate)} (20%)</strong> is charged as a penalty on the remaining balance.
+              </div>
+            )}
           </div>
-          <div className="rounded-md border border-sky-500/30 bg-sky-500/5 p-3 text-xs text-sky-700">
-            <ShieldAlert className="mr-1 inline h-3.5 w-3.5" />
-            <strong>What happens if you agree:</strong>{" "}
-            {cancellation.requested_by === buyerId
-              ? `The buyer will be refunded 70% of the escrowed amount (${formatPaise(Math.floor(agreedPaise * 0.7))}) to their HiVR wallet; HiVR will retain 30% (${formatPaise(Math.floor(agreedPaise * 0.3))}) as a platform fee.`
-              : `The buyer will be refunded the full escrowed amount (${formatPaise(agreedPaise)}) to their HiVR wallet. The employee will receive a penalty on their next contract.`}
-          </div>
+
           {error && (
             <p className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">{error}</p>
           )}
-          <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="destructive" onClick={() => respond(true)} disabled={responding}>
-              {responding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-              Agree to cancel
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => respond(false)} disabled={responding}>
-              <X className="h-3.5 w-3.5" />Decline
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
 
-  // ---- Render: pending request raised by ME (awaiting other party) ----
-  if (cancellation && cancellation.status === "pending" && cancellation.requested_by === currentUserId) {
-    return (
-      <Card className="border-amber-500/40 bg-amber-500/5">
-        <CardContent className="flex items-start gap-3 p-3 text-sm">
-          <Ban className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-          <div>
-            <p className="font-semibold text-amber-800">Cancellation request sent</p>
-            <p className="text-xs text-amber-700/80">
-              Reason: &ldquo;{cancellation.reason}&rdquo;. Waiting for the other party to respond.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  // ---- Render: rejected request ----
-  if (cancellation && cancellation.status === "rejected") {
-    return (
-      <Card>
-        <CardContent className="flex items-start gap-3 p-3 text-sm">
-          <X className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-          <div>
-            <p className="font-medium text-foreground">Previous cancellation request was declined</p>
-            <p className="text-xs text-muted-foreground">The contract continues normally.</p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  // ---- Render: cancellable + no current request (initiator UI) ----
-  if (showInitiator) {
-    return (
-      <Card>
-        <CardHeader className="pb-2">
-          <button
-            type="button"
-            onClick={() => setExpanded((v) => !v)}
-            className="flex w-full items-center justify-between text-left"
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={handleCancel}
+            disabled={submitting}
+            className="w-full"
           >
-            <div>
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <Ban className="h-4 w-4 text-rose-600" />
-                Request mutual cancellation
-              </CardTitle>
-              <CardDescription>
-                Both parties must agree. {currentUserRole === "buyer"
-                  ? "If you raise it and the employee agrees, you'll be refunded 70% to your HiVR wallet; HiVR retains 30%."
-                  : "If you raise it and the buyer agrees, the buyer is fully refunded and a 30% cancellation fee is recorded against you for your next contract."}
-              </CardDescription>
-            </div>
-            <span className="text-xs text-muted-foreground">{expanded ? "Hide" : "Open"}</span>
-          </button>
-        </CardHeader>
-        {expanded && (
-          <CardContent className="space-y-3 pb-4 text-sm">
-            <textarea
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="Tell the other party why you want to cancel (visible to both)…"
-              maxLength={500}
-              rows={3}
-              className="w-full rounded-md border bg-background p-2 text-sm outline-none focus:ring-1 focus:ring-primary"
-            />
-            {error && (
-              <p className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">{error}</p>
-            )}
-            <Button size="sm" variant="destructive" onClick={submitRequest} disabled={submitting}>
-              {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Ban className="h-3.5 w-3.5" />}
-              Send cancellation request
-            </Button>
-          </CardContent>
-        )}
-      </Card>
-    );
-  }
-
-  return null;
+            {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Ban className="h-3.5 w-3.5" />}
+            {isBuyer ? `Cancel & refund ${formatINR(Math.round(refundEstimate / 100))}` : "Cancel contract"}
+          </Button>
+        </CardContent>
+      )}
+    </Card>
+  );
 }

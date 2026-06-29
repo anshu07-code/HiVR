@@ -25,18 +25,16 @@ const Schema = z.object({
   pricing_model: z.string().min(2).max(40),
   budget_min: z.coerce.number().int().positive(),
   budget_max: z.coerce.number().int().positive(),
-  deadline: z.string().optional(),
+  deadline: z.string().min(1, "Deadline is required"),
   estimated_hours: z.coerce.number().int().positive().max(720).optional(),
   skills_required: z.array(z.string().min(1).max(60)).max(20).default([]),
   scheduled_publish_at: z.string().optional(),
   show_in_upcoming: z.boolean().default(true),
   brief: z.string().min(2),
-  scope_flag: z.enum(["standard", "custom"]).default("standard"),
-  incentive_condition_type: z.string().nullable().optional(),
-  incentive_threshold: z.string().nullable().optional(),
-  incentive_amount_paise: z.coerce.number().int().positive().nullable().optional(),
+  cancellation_policy: z.enum(["cancellable", "non-cancellable"]).default("cancellable"),
   openings: z.coerce.number().int().min(1).max(50).default(1),
 }).refine(d => d.budget_max >= d.budget_min, { message: "Max budget must be ≥ min" })
+  .refine(d => new Date(d.deadline) > new Date(), { message: "Deadline must be in the future", path: ["deadline"] })
   .refine(d => !d.scheduled_publish_at || new Date(d.scheduled_publish_at) > new Date(), { message: "Schedule time must be in the future", path: ["scheduled_publish_at"] });
 
 export async function createTaskAction(formData: FormData): Promise<void> {
@@ -59,10 +57,7 @@ export async function createTaskAction(formData: FormData): Promise<void> {
     scheduled_publish_at: formData.get("scheduled_publish_at") ? String(formData.get("scheduled_publish_at")) : undefined,
     show_in_upcoming: String(formData.get("show_in_upcoming") ?? "true") !== "false",
     brief: String(formData.get("brief") ?? ""),
-    scope_flag: String(formData.get("scope_flag") ?? "standard"),
-    incentive_condition_type: formData.get("incentive_condition_type") ? String(formData.get("incentive_condition_type")) : null,
-    incentive_threshold: formData.get("incentive_threshold") ? String(formData.get("incentive_threshold")) : null,
-    incentive_amount_paise: formData.get("incentive_amount_paise") ? String(formData.get("incentive_amount_paise")) : null,
+    cancellation_policy: String(formData.get("cancellation_policy") ?? "cancellable"),
     openings: formData.get("openings") ? String(formData.get("openings")) : "1",
   };
   const parsed = Schema.safeParse(raw);
@@ -80,8 +75,8 @@ export async function createTaskAction(formData: FormData): Promise<void> {
   const cleaned = items
     .map((it: any, idx: number) => ({ key: String(it?.key ?? `item_${idx + 1}`), text: String(it?.text ?? "").trim() }))
     .filter((it: { text: string }) => it.text.length > 0);
-  if (cleaned.length === 0) {
-    redirect(`/dashboard/post?error=${encodeURIComponent("Brief must include at least one checklist item")}`);
+  if (cleaned.length < 2) {
+    redirect(`/dashboard/post?error=${encodeURIComponent("Brief must include at least 2 checklist items (deliverables)")}`);
   }
   const briefPayload = {
     checklist_items: cleaned,
@@ -120,16 +115,14 @@ export async function createTaskAction(formData: FormData): Promise<void> {
     pricing_model: parsed.data.pricing_model,
     budget_min: Math.round(parsed.data.budget_min * 100),
     budget_max: Math.round(parsed.data.budget_max * 100),
-    deadline: parsed.data.deadline && parsed.data.deadline.length > 0 ? parsed.data.deadline : null,
+    deadline: parsed.data.deadline,
     estimated_hours: parsed.data.estimated_hours ?? null,
     skills_required: parsed.data.skills_required ?? [],
     scheduled_publish_at: scheduled ? parsed.data.scheduled_publish_at : null,
     show_in_upcoming: parsed.data.show_in_upcoming ?? true,
     brief: briefPayload,
-    scope_flag: parsed.data.scope_flag ?? "standard",
-    incentive_condition_type: parsed.data.incentive_condition_type ?? null,
-    incentive_threshold: parsed.data.incentive_threshold ?? null,
-    incentive_amount_paise: parsed.data.incentive_amount_paise ?? null,
+    cancellation_policy: parsed.data.cancellation_policy,
+    scope_flag: "standard",
     openings: parsed.data.openings ?? 1,
     status: scheduled ? "upcoming" : "open",
     published_at: scheduled ? null : new Date().toISOString(),

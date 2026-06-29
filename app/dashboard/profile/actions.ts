@@ -45,6 +45,33 @@ export async function updateProfileBasicsAction(input: {
 }
 
 /* ========================================================================
+ * Buyer profile basics (full_name, company_name, buyer_type)
+ * ====================================================================== */
+
+export async function updateBuyerProfileAction(input: {
+  full_name?: string;
+  company_name?: string;
+  buyer_type?: string;
+}) {
+  const { sb, user } = await requireUser();
+  if (input.full_name !== undefined) {
+    const { error: nameErr } = await sb.from("users").update({ full_name: input.full_name }).eq("id", user.id);
+    if (nameErr) return { ok: false, reason: nameErr.message };
+  }
+  const bpUpdate: Record<string, any> = {};
+  if (input.company_name !== undefined) bpUpdate.company_name = input.company_name;
+  if (input.buyer_type !== undefined) bpUpdate.buyer_type = input.buyer_type;
+  if (Object.keys(bpUpdate).length > 0) {
+    const { error } = await sb.from("buyer_profiles").upsert({
+      user_id: user.id, ...bpUpdate,
+    }, { onConflict: "user_id" });
+    if (error) return { ok: false, reason: error.message };
+  }
+  revalidatePath("/dashboard/profile");
+  return { ok: true };
+}
+
+/* ========================================================================
  * Photo upload — uses supabase storage (avatar in users table is a URL;
  * we upload to the public employee-projects bucket, but for the avatar
  * we use the users.avatar_url column directly via signed upload).

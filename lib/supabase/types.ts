@@ -27,7 +27,8 @@ export type PricingModel =
   | "monthly"
   | "fixed"
   | "daily_rate"
-  | "fixed_milestone";
+  | "fixed_milestone"
+  | "weekly_rate";
 export type ContractStatus =
   | "active"
   | "delivered"

@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Sparkles, Loader2, ArrowRight, Info, ChevronDown } from "lucide-react";
+import {   Sparkles, Loader2, ArrowRight, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,9 +15,6 @@ import { SearchableCategorySelect } from "@/components/ui/searchable-category-se
 import { TaskPostSchema, type TaskPost } from "@/lib/schemas";
 import { allowedPricingModels, PRICING_MODEL_LABELS } from "@/lib/constants";
 import { BriefBuilder, type BriefValue, type BriefTemplate, validateBrief } from "@/components/brief/brief-builder";
-import { MarketRateWarning } from "@/components/brief/market-rate-warning";
-import { ScopeIncentiveForm, type ScopeIncentiveValue } from "@/components/brief/scope-incentive-form";
-import { rupeesToPaise } from "@/lib/utils";
 
 type Cat = {
   id: string;
@@ -37,10 +34,8 @@ export function PostTaskForm({ categories, kycComplete = true, remainingHour, re
   const [draftDesc, setDraftDesc] = React.useState("");
   const [improving, setImproving] = React.useState(false);
   const [briefValue, setBriefValue] = React.useState<BriefValue>({ checklist_items: [], notes: "" });
-  const [scopeIncentive, setScopeIncentive] = React.useState<ScopeIncentiveValue>({
-    scopeFlag: "standard", incentiveType: null, incentiveThreshold: null, incentiveAmountPaise: null,
-  });
   const [openings, setOpenings] = React.useState<number>(1);
+  const [cancellationPolicy, setCancellationPolicy] = React.useState<"cancellable" | "non-cancellable">("cancellable");
   const errorRef = React.useRef<HTMLDivElement | null>(null);
 
   // Auto-scroll the error message into view when it appears.
@@ -82,7 +77,7 @@ export function PostTaskForm({ categories, kycComplete = true, remainingHour, re
     const t = (selectedChild as any)?.brief_template;
     if (t && Array.isArray((t as any).fields)) return t as BriefTemplate;
     return { fields: [
-      { key: "checklist_items", type: "checklist", label: "Deliverables (each approved individually)", min_items: 1, required: true },
+      { key: "checklist_items", type: "checklist", label: "Deliverables (each approved individually)", min_items: 2, required: true },
       { key: "notes", type: "textarea", label: "Anything else the worker should know", required: false },
     ] };
   }, [selectedChild?.id]);
@@ -168,10 +163,7 @@ export function PostTaskForm({ categories, kycComplete = true, remainingHour, re
         notes: briefValue.notes ?? "",
         sample_url: briefValue.sample_url ?? undefined,
       }));
-      fd.set("scope_flag", scopeIncentive.scopeFlag);
-      if (scopeIncentive.incentiveType) fd.set("incentive_condition_type", scopeIncentive.incentiveType);
-      if (scopeIncentive.incentiveThreshold) fd.set("incentive_threshold", scopeIncentive.incentiveThreshold);
-      if (scopeIncentive.incentiveAmountPaise) fd.set("incentive_amount_paise", String(scopeIncentive.incentiveAmountPaise));
+      fd.set("cancellation_policy", cancellationPolicy);
       fd.set("openings", String(openings));
       await createTaskAction(fd);
       setSubmitting(false);
@@ -212,22 +204,7 @@ export function PostTaskForm({ categories, kycComplete = true, remainingHour, re
         />
 
         {selectedChild && (
-          <div className="mt-3 space-y-2">
-            <div className="rounded-md border bg-muted/30 p-3 text-xs">
-              <p className="text-foreground">{stripExclusion(selectedChild.description)}</p>
-            </div>
-            {extractExclusion(selectedChild.description) && (
-              <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs">
-                <div className="flex items-start gap-2">
-                  <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
-                  <div>
-                    <p className="font-semibold text-amber-700 dark:text-amber-300">What this subcategory excludes</p>
-                    <p className="mt-1 text-muted-foreground">{extractExclusion(selectedChild.description)}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+          <p className="mt-2 text-xs text-muted-foreground">Selected: <span className="font-medium text-foreground">{selectedChild.name}</span></p>
         )}
       </div>
 
@@ -296,19 +273,9 @@ export function PostTaskForm({ categories, kycComplete = true, remainingHour, re
             </div>
           )}
           {selectedChild && (
-            <ScopeIncentiveForm
-              taskTier={selectedChild.tier}
-              value={scopeIncentive}
-              onChange={setScopeIncentive}
-            />
-          )}
-          {selectedChild && (
-            <MarketRateWarning
-              categoryId={selectedChild.id}
-              tier={selectedChild.tier}
-              budgetMinPaise={rupeesToPaise(Number(watch("budget_min")) || 0)}
-              budgetMaxPaise={rupeesToPaise(Number(watch("budget_max")) || 0)}
-            />
+            <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">{selectedChild.name}</span> — market range varies by skill and experience. Set a fair budget to attract quality applicants.
+            </div>
           )}
         </div>
       </div>
@@ -353,9 +320,38 @@ export function PostTaskForm({ categories, kycComplete = true, remainingHour, re
 
       {/* ---------- DEADLINE ---------- */}
       <div className="space-y-1.5">
-        <Label htmlFor="deadline">Apply-by deadline (optional)</Label>
-        <Input id="deadline" type="datetime-local" {...register("deadline")} />
+        <Label htmlFor="deadline">Apply-by deadline <span className="text-destructive">*</span></Label>
+        <Input id="deadline" type="datetime-local" {...register("deadline", { required: "Deadline is required" })} />
+        {errors.deadline && <p className="text-xs text-destructive">{errors.deadline.message as string}</p>}
         <p className="text-xs text-muted-foreground">After this, the task auto-closes. You can extend or close it manually later from the task page.</p>
+      </div>
+
+      {/* ---------- CANCELLATION POLICY ---------- */}
+      <div className="space-y-2 rounded-lg border p-4">
+        <Label className="text-base">Cancellation policy</Label>
+        <p className="text-xs text-muted-foreground">
+          Choose whether employees can earn per-deliverable with partial refunds, or lock the full amount with no cancellations.
+        </p>
+        <div className="flex gap-3">
+          <label className={`flex flex-1 cursor-pointer items-start gap-3 rounded-md border p-3 text-sm transition-colors ${cancellationPolicy === "cancellable" ? "border-primary bg-primary/5" : "hover:bg-muted"}`}>
+            <input type="radio" name="cancellation" value="cancellable" checked={cancellationPolicy === "cancellable"} onChange={() => setCancellationPolicy("cancellable")} className="mt-0.5" />
+            <div>
+              <p className="font-medium">Cancellable</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Price divided across deliverables. Buyer approves each one — partial refunds available if cancelled.
+              </p>
+            </div>
+          </label>
+          <label className={`flex flex-1 cursor-pointer items-start gap-3 rounded-md border p-3 text-sm transition-colors ${cancellationPolicy === "non-cancellable" ? "border-primary bg-primary/5" : "hover:bg-muted"}`}>
+            <input type="radio" name="cancellation" value="non-cancellable" checked={cancellationPolicy === "non-cancellable"} onChange={() => setCancellationPolicy("non-cancellable")} className="mt-0.5" />
+            <div>
+              <p className="font-medium">Non-cancellable</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Once funded, full amount is locked. No refunds or cancellations. Best for fixed-price jobs.
+              </p>
+            </div>
+          </label>
+        </div>
       </div>
 
       {/* ---------- SCHEDULING ---------- */}
@@ -417,18 +413,4 @@ export function PostTaskForm({ categories, kycComplete = true, remainingHour, re
   );
 }
 
-/**
- * Pulls the "EXCLUDED ..." clause out of a subcategory description so we can
- * show it as a separate callout on the post-task form.
- */
-function extractExclusion(desc: string | null | undefined): string {
-  if (!desc) return "";
-  const m = desc.match(/(EXCLUDED[^.]*\.|EXPLICITLY EXCLUDED[^.]*\.)/i);
-  return m ? m[0] : "";
-}
 
-/** Removes the EXCLUDED clause from the main description for cleaner display. */
-function stripExclusion(desc: string | null | undefined): string {
-  if (!desc) return "";
-  return desc.replace(/(EXCLUDED[^.]*\.|EXPLICITLY EXCLUDED[^.]*\.)/i, "").trim();
-}

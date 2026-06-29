@@ -134,6 +134,7 @@ export default async function WorkspaceById({ params }: { params: { id: string }
         status: bundle.contract.status,
         incentive_earned: !!bundle.contract.incentive_earned,
         incentive_paid_at: bundle.contract.incentive_paid_at,
+        cancellation_policy: bundle.contract.cancellation_policy ?? "cancellable",
       }}
       task={{
         id: task?.id ?? "",

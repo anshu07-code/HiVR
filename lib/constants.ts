@@ -9,15 +9,15 @@ import type { PricingModel, CategoryTier } from "./supabase/types";
 /** Pricing models allowed for Tier A (micro-tasks). */
 export const TIER_A_PRICING_MODELS: PricingModel[] = [
   "hourly",
-  "daily",
-  "monthly",
   "fixed",
 ];
 
-/** Pricing models allowed for Tier B (role engagements). Hourly is banned here by design. */
+/** Pricing models allowed for Tier B (role engagements). */
 export const TIER_B_PRICING_MODELS: PricingModel[] = [
+  "hourly",
+  "fixed",
   "daily_rate",
-  "fixed_milestone",
+  "weekly_rate",
 ];
 
 /** Returns the allowed pricing models for a category tier. */
@@ -30,9 +30,10 @@ export const PRICING_MODEL_LABELS: Record<PricingModel, string> = {
   hourly: "Per hour",
   daily: "Per day",
   monthly: "Per month",
-  fixed: "Fixed per task",
+  fixed: "Per task",
   daily_rate: "Per day",
   fixed_milestone: "Fixed per milestone",
+  weekly_rate: "Per week",
 };
 
 /** Wage bands (₹) for the launch categories. Tweak in admin settings later. */

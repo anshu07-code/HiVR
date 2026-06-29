@@ -5,9 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Plus, Briefcase, Clock, Users, ArrowRight, SearchX, Inbox, ChevronRight, Sparkles,
+  Pencil, Trash2, AlertCircle,
 } from "lucide-react";
 import { formatINR, timeAgo } from "@/lib/utils";
 import { CategoryIcon } from "@/components/marketing/category-icon";
+import { TaskActions } from "./task-actions";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -40,7 +42,7 @@ export default async function MyTasks() {
   // only counts, not the full rows.
   const { data: tasks } = await sb
     .from("task_posts")
-    .select("id, title, description, status, pricing_model, budget_min, budget_max, created_at, deadline, estimated_hours, category:skill_categories(name, icon, tier)")
+    .select("id, title, description, status, pricing_model, budget_min, budget_max, created_at, updated_at, deadline, estimated_hours, openings, is_edited, edit_count, deleted_at, category:skill_categories(name, icon, tier)")
     .eq("buyer_id", user.id)
     .order("created_at", { ascending: false });
 
@@ -134,6 +136,10 @@ function TaskCard({ task, applicantCount }: { task: any; applicantCount: number 
     ? formatINR(min)
     : `${formatINR(min)} – ${formatINR(max)}`;
 
+  const isCancelled = task.status === "cancelled" || !!task.deleted_at;
+  const canEdit = !isCancelled && task.status !== "closed";
+  const wasEdited = !!task.is_edited && task.edit_count > 0;
+
   return (
     <div className="group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-2xl">
       <Card className="h-full transition-all duration-200 hover:border-primary/40 hover:shadow-md group-hover:bg-accent/30">
@@ -147,6 +153,14 @@ function TaskCard({ task, applicantCount }: { task: any; applicantCount: number 
               </h3>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 {task.category?.name ?? "Uncategorised"} · {timeAgo(task.created_at)}
+                {wasEdited && (
+                  <>
+                    {" · "}
+                    <span className="inline-flex items-center gap-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-amber-700">
+                      edited
+                    </span>
+                  </>
+                )}
               </p>
             </div>
             {meta.live && (
@@ -194,6 +208,16 @@ function TaskCard({ task, applicantCount }: { task: any; applicantCount: number 
               {meta.label}
             </span>
             <div className="flex items-center gap-1.5">
+              {canEdit && (
+                <>
+                  <Button asChild size="sm" variant="ghost" className="h-7 text-[11px]" title="Edit task">
+                    <Link href={`/dashboard/tasks/${task.id}/edit`}>
+                      <Pencil className="h-3 w-3" />
+                    </Link>
+                  </Button>
+                  <TaskActions taskId={task.id} taskTitle={task.title} />
+                </>
+              )}
               <Button asChild size="sm" variant="outline" className="h-7 text-[11px]">
                 <Link href={`/browse/${task.id}`}>View</Link>
               </Button>
