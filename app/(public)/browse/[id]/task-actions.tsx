@@ -23,6 +23,9 @@ type ApplyCtxLite = {
   hasPan: boolean;
   applicationsThisHour: number;
   applicationsPerHourLimit: number;
+  profileCompleteness: number;
+  matchedSkills: string[];
+  missingSkills: string[];
 };
 
 export function TaskActions({
@@ -234,13 +237,45 @@ export function TaskActions({
             <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-2.5 text-xs text-amber-800">
               <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <div>
-                <p className="font-medium">This skill isn't in your profile</p>
+                <p className="font-medium">This skill isn&apos;t in your profile</p>
                 <p className="text-amber-800/80">
                   You can still apply, but a failed delivery may result in a dispute. 2+ disputes pause your profile for review.
                 </p>
               </div>
             </div>
           )
+        )}
+
+        {/* ---------- skill match detail (matched / missing) ---------- */}
+        {applyCtx && !applied && (applyCtx.matchedSkills.length > 0 || applyCtx.missingSkills.length > 0) && (
+          <div className="rounded-md border bg-muted/20 p-2.5 text-[11px]">
+            <p className="mb-1 font-semibold uppercase tracking-wider text-muted-foreground">Skill match</p>
+            {applyCtx.matchedSkills.length > 0 && (
+              <p className="text-emerald-700">
+                ✓ Matched: {applyCtx.matchedSkills.join(", ")}
+              </p>
+            )}
+            {applyCtx.missingSkills.length > 0 && (
+              <p className="mt-0.5 text-amber-700">
+                ✗ Missing from your profile: {applyCtx.missingSkills.join(", ")}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* ---------- profile completeness warning ---------- */}
+        {applyCtx && !applied && applyCtx.profileCompleteness < 60 && (
+          <div className="flex items-start gap-2 rounded-md border border-rose-500/30 bg-rose-500/5 p-2.5 text-xs text-rose-700">
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <div>
+              <p className="font-medium">Profile only {applyCtx.profileCompleteness}% complete</p>
+              <p className="text-rose-700/80">
+                Build your profile to at least 60% before applying.
+                {" "}
+                <a href="/dashboard/profile" className="underline font-medium">Build profile →</a>
+              </p>
+            </div>
+          </div>
         )}
 
         {/* ---------- Aadhaar / PAN reminders ---------- */}

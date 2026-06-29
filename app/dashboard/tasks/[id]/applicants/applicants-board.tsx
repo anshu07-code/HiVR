@@ -125,9 +125,13 @@ export function ApplicantsBoard({
     return ra - rb;
   });
 
-  async function hire(appId: string, amount: number | null) {
+  async function hire(appId: string) {
     setBusyId(appId); setError(null);
-    const r = await hireApplicantAction(taskId, appId, undefined, amount ?? undefined);
+    // Hire directly — the contract is created at the employee's full
+    // standing rate (no bargaining). The hire_applicant RPC computes
+    // the rate from the employee's per-skill rate for the task's pricing
+    // model.
+    const r = await hireApplicantAction(taskId, appId);
     setBusyId(null);
     if (!r.ok) { setError(r.reason ?? "Failed to hire"); return; }
     setHireFor(null);
@@ -546,7 +550,7 @@ export function ApplicantsBoard({
             </div>
             <div className="mt-3 flex justify-end gap-2">
               <Button variant="ghost" size="sm" onClick={() => setHireFor(null)}>Cancel</Button>
-              <Button size="sm" variant="gradient" disabled={busyId === hireFor.appId} onClick={() => hire(hireFor.appId, hireFor.amount)}>
+              <Button size="sm" variant="gradient" disabled={busyId === hireFor.appId} onClick={() => hire(hireFor.appId)}>
                 {busyId === hireFor.appId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
                 Hire at {formatPaise(hireFor.amount)}
               </Button>

@@ -83,7 +83,6 @@ export default async function ProfilePage() {
   completeness = Math.min(100, completeness);
 
   const avatarUrl = (userRow as any)?.avatar_url ?? null;
-  const coverUrl = (userRow as any)?.cover_url ?? null;
   const fullName = (userRow as any)?.full_name ?? "";
 
   return isBuyerMode ? (
@@ -107,7 +106,6 @@ export default async function ProfilePage() {
       <BuyerProfileBuilder
         userId={user.id}
         avatarUrl={avatarUrl}
-        coverUrl={coverUrl}
         fullName={fullName}
         email={(userRow as any)?.email ?? ""}
         buyerProfile={bp as any}
@@ -144,7 +142,6 @@ export default async function ProfilePage() {
           fullName,
           email: (userRow as any)?.email ?? "",
           avatarUrl,
-          coverUrl,
           phone: (userRow as any)?.phone ?? null,
           headline: (ep as any)?.headline ?? "",
           bio: (ep as any)?.bio ?? "",

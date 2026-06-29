@@ -13,12 +13,12 @@ export type ApplyState = { ok?: true; error?: string };
  *
  * Server-side gates (defence in depth):
  *   * Role check (employee / admin)
+ *   * Profile completeness >= 60% (the employee must have built out their
+ *     profile before applying — see migration 0119)
  *   * Application pause flag (2+ disputes lost → auto-paused)
  *   * Per-hour application rate limit
- *   * (Note: missing Aadhaar / missing skill are NOT blockers — the
- *     client UI surfaces those as warnings per the user's policy:
- *     "don't stop employees from taking tasks outside their verified
- *     skills, but clearly alert them".)
+ *   * Skill match check (informational: the client surfaces missing
+ *     skills as a warning, but apply still goes through)
  */
 export async function applyToTaskAction(
   taskId: string,
@@ -44,6 +44,15 @@ export async function applyToTaskAction(
     return { error: "Add a short cover note (10+ characters) so the buyer knows why you." };
   }
 
+  // Profile-completeness gate — must be at least 60% to apply
+  const { data: completeness } = await sb.rpc("compute_profile_completeness" as any, { p_user_id: user.id } as any);
+  const score = Number(completeness ?? 0);
+  if (score < 60) {
+    return {
+      error: `Your profile is only ${score}% complete. Build your profile to at least 60% before applying — buyers shortlist employees with full profiles.`,
+    };
+  }
+
   // Pause / rate-limit check.
   const ctx = await getEmployeeApplyContext({ userId: user.id, taskId });
   if (!ctx.canApply) return { error: ctx.blockedReason ?? "Not allowed to apply right now." };
@@ -63,6 +72,7 @@ export async function applyToTaskAction(
     );
   if (error) return { error: error.message };
   revalidatePath(`/browse/${taskId}`);
+  revalidatePath("/dashboard/applications");
   return { ok: true };
 }
 

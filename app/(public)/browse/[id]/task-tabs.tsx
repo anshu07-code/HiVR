@@ -30,6 +30,7 @@ type TaskLite = {
   created_at: string;
   deadline: string | null;
   estimated_hours: number | null;
+  skills_required: string[] | null;
   category: { slug: string; name: string; icon: string; tier: string } | null;
 };
 
@@ -182,13 +183,26 @@ function OverviewTab({ task }: { task: TaskLite }) {
       <aside className="space-y-4">
         <Card>
           <CardContent className="p-5">
-            <h3 className="font-display text-sm font-semibold">Skills you'll use</h3>
-            <p className="mt-1 text-xs text-muted-foreground">Inferred from the description. No formal skills test required for this listing.</p>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {inferSkills(task).map((s) => (
-                <Badge key={s} variant="secondary" className="text-xs">{s}</Badge>
-              ))}
-            </div>
+            <h3 className="font-display text-sm font-semibold">Skills required</h3>
+            {task.skills_required && task.skills_required.length > 0 ? (
+              <>
+                <p className="mt-1 text-xs text-muted-foreground">Tagged by the buyer — make sure your profile includes these.</p>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {task.skills_required.map((s) => (
+                    <Badge key={s} variant="secondary" className="text-xs">{s}</Badge>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="mt-1 text-xs text-muted-foreground">Inferred from the description.</p>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {inferSkills(task).map((s) => (
+                    <Badge key={s} variant="secondary" className="text-xs">{s}</Badge>
+                  ))}
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
         <Card>

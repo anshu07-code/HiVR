@@ -30,7 +30,7 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
   // Fetch task + current user in parallel.
   const [{ data: task }, { data: { user } }] = await Promise.all([
     sb.from("task_posts")
-      .select("id, title, description, pricing_model, budget_min, budget_max, status, created_at, deadline, estimated_hours, buyer_id, category_id, openings, category:skill_categories(slug, name, icon, tier)")
+      .select("id, title, description, pricing_model, budget_min, budget_max, status, created_at, deadline, estimated_hours, buyer_id, category_id, openings, skills_required, category:skill_categories(slug, name, icon, tier)")
       .eq("id", taskId)
       .maybeSingle(),
     sb.auth.getUser(),
@@ -237,6 +237,17 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
               <h1 className="font-display text-2xl font-bold tracking-tight md:text-3xl lg:text-4xl">
                 {task.title}
               </h1>
+
+              {/* Skills required chips (buyer's own tags) */}
+              {(task as any).skills_required && (task as any).skills_required.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {(task as any).skills_required.map((s: string) => (
+                    <Badge key={s} variant="secondary" className="text-xs">
+                      <Sparkles className="mr-1 h-3 w-3 text-primary" />{s}
+                    </Badge>
+                  ))}
+                </div>
+              )}
 
               {/* Buyer line */}
               <div className="mt-4 flex items-center gap-2 text-sm">

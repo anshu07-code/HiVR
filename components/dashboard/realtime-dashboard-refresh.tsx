@@ -23,6 +23,8 @@ export function RealtimeDashboardRefresh({
       .on("postgres_changes", { event: "*", schema: "public", table: "contracts", filter: `or(buyer_id.eq.${userId},employee_id.eq.${userId})` }, () => router.refresh())
       .on("postgres_changes", { event: "*", schema: "public", table: "workspaces", filter: `or(buyer_id.eq.${userId},employee_id.eq.${userId})` }, () => router.refresh())
       .on("postgres_changes", { event: "*", schema: "public", table: "reviews", filter: `or(reviewer_id.eq.${userId},reviewee_id.eq.${userId})` }, () => router.refresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "task_posts", filter: `buyer_id=eq.${userId}` }, () => router.refresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "task_applications", filter: `employee_id=eq.${userId}` }, () => router.refresh())
       .subscribe();
     return () => { sb.removeChannel(ch); };
   }, [userId, router]);

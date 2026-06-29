@@ -31,6 +31,7 @@ type VaultReviewItem = {
   reviewed_by: string | null;
   created_at: string;
   uploaded_by: string;
+  delivered_at: string | null;
   uploader_name?: string | null;
 };
 
@@ -73,8 +74,11 @@ export function VaultReviewPanel({
     // 1. Files (non-folder) + folder list (folders are auto-approved display-only)
     const { data: rows } = await sb
       .from("workspace_vault")
-      .select("id, name, original_name, is_folder, file_type, mime_type, file_size, storage_object_id, review_status, review_comment, reviewed_at, reviewed_by, created_at, uploaded_by")
+      .select("id, name, original_name, is_folder, file_type, mime_type, file_size, storage_object_id, review_status, review_comment, reviewed_at, reviewed_by, created_at, uploaded_by, delivered_at")
       .eq("workspace_id", workspaceId)
+      // Only show files that are part of the current delivery
+      // (snapshot taken at submit_workspace_delivery time).
+      .not("delivered_at", "is", null)
       .order("is_folder", { ascending: false })
       .order("name");
     const list = (rows ?? []) as VaultReviewItem[];

@@ -6,32 +6,23 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
  * Hire an applicant directly. Calls the `hire_applicant` RPC which:
- *   1. Inserts a contract row (status='active')
- *   2. Lets the trg_create_workspace_for_contract trigger create the
+ *   1. Computes the contract price from the EMPLOYEE'S per-skill rate
+ *      for the task's pricing model (via compute_contract_price_from_skill_rate).
+ *      The buyer cannot bargain here — the contract is always at the
+ *      employee's full standing rate. To bargain, the buyer should use
+ *      "Send offer" instead.
+ *   2. Inserts a contract row (status='active')
+ *   3. Lets the trg_create_workspace_for_contract trigger create the
  *      workspace (status='awaiting_funding')
- *   3. Materializes the delivery_checklist_items from the brief
- *   4. Marks the task as 'in_contract'
- *   5. Marks the application as 'hired'
- *   6. Notifies the employee
- *
- * No negotiation round needed — the "Hire directly" path bypasses
- * the offer/accept flow entirely (that's the Instant Hire flow).
+ *   4. Materializes the delivery_checklist_items from the brief
+ *   5. Marks the task as 'in_contract'
+ *   6. Marks the application as 'hired'
+ *   7. Notifies the employee
  */
-/**
- * Hire an applicant directly at the agreed price (employee's full standing rate).
- * If agreedPricePaise is provided, the application's bid_paise is updated
- * to that price before calling the RPC so the contract uses the agreed rate.
- */
-export async function hireApplicantAction(_taskId: string, applicationId: string, buyerMessage?: string, agreedPricePaise?: number) {
+export async function hireApplicantAction(_taskId: string, applicationId: string, buyerMessage?: string) {
   const sb = createClient();
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return { ok: false, reason: "Not signed in" };
-
-  // If an agreed price is provided, update the application's bid so the RPC
-  // picks it up when creating the contract.
-  if (agreedPricePaise != null && agreedPricePaise > 0) {
-    await sb.from("task_applications").update({ bid_paise: agreedPricePaise }).eq("id", applicationId);
-  }
 
   const { data, error } = await sb.rpc("hire_applicant" as any, {
     p_application_id: applicationId,

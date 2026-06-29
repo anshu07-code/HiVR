@@ -25,6 +25,8 @@ import {
 } from "./actions";
 import { VideoGrid } from "@/components/profile/video-grid";
 import { ProfileGuide } from "@/components/dashboard/profile-guide";
+import { SaveIndicator } from "@/components/dashboard/save-indicator";
+import { ToastProvider, useToast } from "@/components/ui/toast";
 import { InstantHireSection } from "./instant-hire-section";
 import { ResumeUploader } from "./resume-uploader";
 import { ImageCropModal } from "@/components/profile/image-crop-modal";
@@ -33,7 +35,7 @@ import { ImageCropModal } from "@/components/profile/image-crop-modal";
 type Cat = { id: string; name: string; slug: string; icon: string; tier: string; status: string; parent_category_id: string | null };
 
 type Initial = {
-  fullName: string; email: string; avatarUrl: string | null; coverUrl: string | null; phone: string | null;
+  fullName: string; email: string; avatarUrl: string | null; phone: string | null;
   headline: string; bio: string; location: string; experienceType: string;
   hourlyRatePaise: number | null; availabilityHours: number | null; timezone: string;
   skills: { category_id: string; name?: string; slug?: string; icon?: string; tier?: string; is_primary?: boolean; years_experience?: number; rate_per_hour_paise?: number | null; rate_per_task_paise?: number | null; rate_per_day_paise?: number | null; rate_per_week_paise?: number | null }[];
@@ -63,19 +65,56 @@ export function ProfileBuilder({
   childrenByParent: Record<string, Cat[]>;
   initialCompleteness: number;
 }) {
+  return (
+    <ToastProvider>
+      <ProfileBuilderInner
+        userId={userId}
+        initial={initial}
+        categories={categories}
+        childrenByParent={childrenByParent}
+        initialCompleteness={initialCompleteness}
+      />
+    </ToastProvider>
+  );
+}
+
+function ProfileBuilderInner({
+  userId, initial, categories, childrenByParent, initialCompleteness,
+}: {
+  userId: string;
+  initial: Initial;
+  categories: Cat[];
+  childrenByParent: Record<string, Cat[]>;
+  initialCompleteness: number;
+}) {
   const router = useRouter();
+  const { toast } = useToast();
   const [tab, setTab] = React.useState<"basics" | "skills" | "videos" | "instant" | "education" | "experience" | "projects" | "certs" | "links" | "resume">(typeof window !== "undefined" ? (sessionStorage.getItem("pb_tab") as any) ?? "basics" : "basics");
   const [completeness, setCompleteness] = React.useState(initialCompleteness);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [saved, setSaved] = React.useState<string | null>(null);
+  // Tracked state for the global "Saving…/Saved/Failed" pill.
+  const [saveStatus, setSaveStatus] = React.useState<"idle" | "saving" | "saved" | "failed">("idle");
+  const [hasUnsavedChanges, setHasUnsavedChanges] = React.useState(false);
+
+  // Warn the user if they try to leave the page with unsaved changes.
+  React.useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+      return "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [hasUnsavedChanges]);
   const [avatarUrl, setAvatarUrl] = React.useState<string | null>(initial.avatarUrl);
-  const [coverUrl, setCoverUrl] = React.useState<string | null>(initial.coverUrl);
   const [uploading, setUploading] = React.useState(false);
 
   // Crop modal state
   const [cropFile, setCropFile] = React.useState<File | null>(null);
-  const [cropField, setCropField] = React.useState<"avatar" | "cover" | null>(null);
+  const [cropField, setCropField] = React.useState<"avatar" | null>(null);
 
   React.useEffect(() => {
     if (tab) sessionStorage.setItem("pb_tab", tab);
@@ -85,17 +124,16 @@ export function ProfileBuilder({
     const field = cropField;
     setCropFile(null);
     setCropField(null);
-    if (!field) return;
+    if (!field || field !== "avatar") return;
     setUploading(true); setError(null);
     const fd = new FormData();
-    fd.append("file", blob, `${field}.jpg`);
-    const res = await fetch(`/api/profile/upload-${field === "avatar" ? "avatar" : "cover"}`, { method: "POST", body: fd });
+    fd.append("file", blob, `avatar.jpg`);
+    const res = await fetch(`/api/profile/upload-avatar`, { method: "POST", body: fd });
     const data = await res.json().catch(() => ({}));
     setUploading(false);
     if (data.ok && data.url) {
-      if (field === "avatar") setAvatarUrl(data.url);
-      else setCoverUrl(data.url);
-      setSaved(`${field === "avatar" ? "Photo" : "Cover image"} updated`);
+      setAvatarUrl(data.url);
+      setSaved(`Photo updated`);
       setTimeout(() => setSaved(null), 3000);
       recompute();
     } else {
@@ -103,7 +141,7 @@ export function ProfileBuilder({
     }
   }
 
-  async function uploadPhoto(field: "avatar" | "cover") {
+  async function uploadPhoto(field: "avatar") {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
@@ -136,6 +174,8 @@ export function ProfileBuilder({
 
   function markBasicsDirty() {
     setDirtyBasics(true);
+    setHasUnsavedChanges(true);
+    setSaveStatus("saving");
     if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
     autoSaveRef.current = setTimeout(() => {
       saveBasics();
@@ -145,6 +185,7 @@ export function ProfileBuilder({
   async function saveBasics() {
     if (autoSaveRef.current) { clearTimeout(autoSaveRef.current); autoSaveRef.current = null; }
     setBusy("basics"); setError(null); setSaved(null);
+    setSaveStatus("saving");
     const r = await updateProfileBasicsAction({
       full_name: basics.full_name,
       headline: basics.headline,
@@ -156,8 +197,19 @@ export function ProfileBuilder({
       timezone: basics.timezone,
     });
     setBusy(null);
-    if (!r.ok) setError(r.reason ?? "Failed");
-    else { setSaved("Basics saved."); setDirtyBasics(false); recompute(); }
+    if (!r.ok) {
+      setError(r.reason ?? "Failed");
+      setSaveStatus("failed");
+    } else {
+      setSaved("Basics saved.");
+      setDirtyBasics(false);
+      setHasUnsavedChanges(false);
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 2500);
+      // Server returns the new completeness — update the progress bar immediately.
+      if (typeof r.completeness === "number") setCompleteness(r.completeness);
+      else recompute();
+    }
   }
 
   React.useEffect(() => {
@@ -187,10 +239,46 @@ export function ProfileBuilder({
 
   async function saveSkills() {
     setBusy("skills"); setError(null); setSaved(null);
+    setSaveStatus("saving");
+    // Every skill MUST have at least one rate set, and the rate must
+    // match the skill's tier. Tier A skills require per-hour and/or
+    // per-task rates. Tier B skills can also have per-day and per-week.
+    for (const s of selectedSkills) {
+      const cat = flatSkills.find(c => c.id === s.category_id);
+      const isTierB = cat?.tier === "role_engagement";
+      const hasHour = (s.rate_per_hour_paise ?? 0) > 0;
+      const hasTask = (s.rate_per_task_paise ?? 0) > 0;
+      const hasDay = (s.rate_per_day_paise ?? 0) > 0;
+      const hasWeek = (s.rate_per_week_paise ?? 0) > 0;
+      if (!isTierB && !hasHour && !hasTask) {
+        setError(`${cat?.name ?? "Skill"} (Tier A) needs a per-hour OR per-task rate.`);
+        setSaveStatus("failed");
+        setBusy(null);
+        return;
+      }
+      if (isTierB && !hasHour && !hasTask && !hasDay && !hasWeek) {
+        setError(`${cat?.name ?? "Skill"} (Tier B) needs at least one rate (per-hour, per-task, per-day, or per-week).`);
+        setSaveStatus("failed");
+        setBusy(null);
+        return;
+      }
+    }
     const r = await updateEmployeeSkillsAction(selectedSkills);
     setBusy(null);
-    if (!r.ok) setError(r.reason ?? "Failed");
-    else { setSaved("Skills updated."); setSkillsDirty(false); recompute(); router.refresh(); }
+    if (!r.ok) {
+      setError(r.reason ?? "Failed");
+      setSaveStatus("failed");
+    } else {
+      setSaved("Skills updated.");
+      setSkillsDirty(false);
+      setHasUnsavedChanges(false);
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 2500);
+      // Server returns the new completeness — update the progress bar immediately.
+      if (typeof r.completeness === "number") setCompleteness(r.completeness);
+      else recompute();
+      router.refresh();
+    }
   }
 
   // Auto-save skills when they change after a delay
@@ -206,6 +294,8 @@ export function ProfileBuilder({
 
   function toggleSkill(catId: string) {
     setSkillsDirty(true);
+    setHasUnsavedChanges(true);
+    setSaveStatus("saving");
     setSelectedSkills(prev => {
       if (prev.find(s => s.category_id === catId)) {
         return prev.filter(s => s.category_id !== catId);
@@ -224,6 +314,8 @@ export function ProfileBuilder({
 
   function updateSkillRate(catId: string, key: string, value: number | null) {
     setSkillsDirty(true);
+    setHasUnsavedChanges(true);
+    setSaveStatus("saving");
     setSelectedSkills(prev => prev.map(s =>
       s.category_id === catId ? { ...s, [key]: value } : s
     ));
@@ -233,7 +325,7 @@ export function ProfileBuilder({
   const [eduForm, setEduForm] = React.useState<{ institution: string; degree: string; field: string; start: string; end: string; current: boolean }>({ institution: "", degree: "", field: "", start: "", end: "", current: false });
   async function addEducation() {
     if (!eduForm.institution.trim()) { setError("Institution is required"); return; }
-    setBusy("edu"); setError(null);
+    setBusy("edu"); setError(null); setSaveStatus("saving");
     const r = await addEducationAction({
       institution: eduForm.institution, degree: eduForm.degree, field_of_study: eduForm.field,
       start_year: eduForm.start ? Number(eduForm.start) : undefined,
@@ -241,30 +333,49 @@ export function ProfileBuilder({
       is_current: eduForm.current, description: undefined,
     });
     setBusy(null);
-    if (!r.ok) setError(r.reason ?? "Failed");
-    else { setEduForm({ institution: "", degree: "", field: "", start: "", end: "", current: false }); setSaved("Education added."); recompute(); router.refresh(); }
+    if (!r.ok) {
+      setError(r.reason ?? "Failed"); setSaveStatus("failed");
+      toast({ type: "error", title: "Could not save education", description: r.reason });
+    }
+    else {
+      setEduForm({ institution: "", degree: "", field: "", start: "", end: "", current: false });
+      setSaved("Education added."); setHasUnsavedChanges(false); setSaveStatus("saved");
+      toast({ type: "success", title: "Education added", description: r.completeness !== undefined ? `Profile is now ${r.completeness}% complete` : undefined });
+      if (typeof r.completeness === "number") setCompleteness(r.completeness);
+      else recompute();
+      setTimeout(() => setSaveStatus("idle"), 2500);
+      router.refresh();
+    }
   }
 
   // ----- Experience -----
   const [expForm, setExpForm] = React.useState<{ company: string; role: string; type: string; location: string; start: string; end: string; current: boolean; description: string }>({ company: "", role: "", type: "full_time", location: "", start: "", end: "", current: false, description: "" });
   async function addExp() {
     if (!expForm.company.trim() || !expForm.role.trim() || !expForm.start) { setError("Company, role, and start date are required"); return; }
-    setBusy("exp"); setError(null);
+    setBusy("exp"); setError(null); setSaveStatus("saving");
     const r = await addExperienceAction({
       company: expForm.company, role: expForm.role, employment_type: expForm.type, location: expForm.location || undefined,
       start_date: expForm.start, end_date: expForm.current ? undefined : (expForm.end || undefined),
       is_current: expForm.current, description: expForm.description || undefined,
     });
     setBusy(null);
-    if (!r.ok) setError(r.reason ?? "Failed");
-    else { setExpForm({ company: "", role: "", type: "full_time", location: "", start: "", end: "", current: false, description: "" }); setSaved("Experience added."); recompute(); router.refresh(); }
+    if (!r.ok) { setError(r.reason ?? "Failed"); setSaveStatus("failed"); toast({ type: "error", title: "Could not save experience", description: r.reason }); }
+    else {
+      setExpForm({ company: "", role: "", type: "full_time", location: "", start: "", end: "", current: false, description: "" });
+      setSaved("Experience added."); setHasUnsavedChanges(false); setSaveStatus("saved");
+      toast({ type: "success", title: "Experience added", description: r.completeness !== undefined ? `Profile is now ${r.completeness}% complete` : undefined });
+      if (typeof r.completeness === "number") setCompleteness(r.completeness);
+      else recompute();
+      setTimeout(() => setSaveStatus("idle"), 2500);
+      router.refresh();
+    }
   }
 
   // ----- Projects -----
   const [projForm, setProjForm] = React.useState<{ title: string; description: string; url: string; role: string; tech: string; featured: boolean }>({ title: "", description: "", url: "", role: "", tech: "", featured: false });
   async function addProject() {
     if (!projForm.title.trim() || !projForm.description.trim()) { setError("Title and description are required"); return; }
-    setBusy("proj"); setError(null);
+    setBusy("proj"); setError(null); setSaveStatus("saving");
     const tech = projForm.tech.split(",").map(t => t.trim()).filter(Boolean);
     const r = await addProjectAction({
       title: projForm.title, description: projForm.description,
@@ -272,33 +383,56 @@ export function ProfileBuilder({
       tech_stack: tech, is_featured: projForm.featured,
     });
     setBusy(null);
-    if (!r.ok) setError(r.reason ?? "Failed");
-    else { setProjForm({ title: "", description: "", url: "", role: "", tech: "", featured: false }); setSaved("Project added."); recompute(); router.refresh(); }
+    if (!r.ok) { setError(r.reason ?? "Failed"); setSaveStatus("failed"); toast({ type: "error", title: "Could not save project", description: r.reason }); }
+    else {
+      setProjForm({ title: "", description: "", url: "", role: "", tech: "", featured: false });
+      setSaved("Project added."); setHasUnsavedChanges(false); setSaveStatus("saved");
+      toast({ type: "success", title: "Project added", description: r.completeness !== undefined ? `Profile is now ${r.completeness}% complete` : undefined });
+      if (typeof r.completeness === "number") setCompleteness(r.completeness);
+      else recompute();
+      setTimeout(() => setSaveStatus("idle"), 2500);
+      router.refresh();
+    }
   }
 
   // ----- Certifications -----
   const [certForm, setCertForm] = React.useState<{ name: string; issuer: string; issued: string; expires: string; url: string; cid: string }>({ name: "", issuer: "", issued: "", expires: "", url: "", cid: "" });
   async function addCert() {
     if (!certForm.name.trim() || !certForm.issuer.trim()) { setError("Name and issuer are required"); return; }
-    setBusy("cert"); setError(null);
+    setBusy("cert"); setError(null); setSaveStatus("saving");
     const r = await addCertificationAction({
       name: certForm.name, issuer: certForm.issuer,
       issued_at: certForm.issued || undefined, expires_at: certForm.expires || undefined,
       credential_id: certForm.cid || undefined, url: certForm.url || undefined,
     });
     setBusy(null);
-    if (!r.ok) setError(r.reason ?? "Failed");
-    else { setCertForm({ name: "", issuer: "", issued: "", expires: "", url: "", cid: "" }); setSaved("Certification added."); recompute(); router.refresh(); }
+    if (!r.ok) { setError(r.reason ?? "Failed"); setSaveStatus("failed"); toast({ type: "error", title: "Could not save certification", description: r.reason }); }
+    else {
+      setCertForm({ name: "", issuer: "", issued: "", expires: "", url: "", cid: "" });
+      setSaved("Certification added."); setHasUnsavedChanges(false); setSaveStatus("saved");
+      toast({ type: "success", title: "Certification added", description: r.completeness !== undefined ? `Profile is now ${r.completeness}% complete` : undefined });
+      if (typeof r.completeness === "number") setCompleteness(r.completeness);
+      else recompute();
+      setTimeout(() => setSaveStatus("idle"), 2500);
+      router.refresh();
+    }
   }
 
   // ----- Social links -----
   async function setLink(platform: string, url: string) {
     if (!url.trim()) { setError("URL is required"); return; }
-    setBusy(`sl-${platform}`); setError(null);
+    setBusy(`sl-${platform}`); setError(null); setSaveStatus("saving");
     const r = await setSocialLinkAction(platform, url);
     setBusy(null);
-    if (!r.ok) setError(r.reason ?? "Failed");
-    else { setSaved(`${SOCIAL_LABELS[platform]} added.`); recompute(); router.refresh(); }
+    if (!r.ok) { setError(r.reason ?? "Failed"); setSaveStatus("failed"); toast({ type: "error", title: "Could not save link", description: r.reason }); }
+    else {
+      setSaved(`${SOCIAL_LABELS[platform]} added.`); setHasUnsavedChanges(false); setSaveStatus("saved");
+      toast({ type: "success", title: `${SOCIAL_LABELS[platform]} added`, description: r.completeness !== undefined ? `Profile is now ${r.completeness}% complete` : undefined });
+      if (typeof r.completeness === "number") setCompleteness(r.completeness);
+      else recompute();
+      setTimeout(() => setSaveStatus("idle"), 2500);
+      router.refresh();
+    }
   }
 
   // ----- Recompute completeness client-side -----
@@ -306,7 +440,6 @@ export function ProfileBuilder({
     let s = 0;
     if (basics.full_name) s += 5;
     if (avatarUrl) s += 5;
-    if (coverUrl) s += 2;
     if (basics.headline) s += 5;
     if (basics.bio && basics.bio.length > 20) s += 15;
     if (basics.location) s += 5;
@@ -327,23 +460,13 @@ export function ProfileBuilder({
         open={!!cropFile}
         onClose={() => { setCropFile(null); setCropField(null); }}
         file={cropFile}
-        aspect={cropField === "avatar" ? 1 : 21/9}
-        cropShape={cropField === "avatar" ? "round" : "rect"}
+        aspect={1}
+        cropShape={"round"}
         onCropComplete={handleCropComplete}
       />
 
-      {/* Progress + avatar row */}
+      {/* Progress + avatar row (cover image removed) */}
       <Card className="overflow-hidden">
-        <div className="relative h-48 w-full bg-gradient-to-br from-muted to-muted/50">
-          {coverUrl ? (
-            <img src={coverUrl} alt="Cover" className="h-full w-full object-contain bg-muted" />
-          ) : (
-            <div className="flex h-full items-center justify-center text-xs text-muted-foreground/50">Add a cover image</div>
-          )}
-          <button type="button" onClick={() => uploadPhoto("cover")} disabled={uploading} className="absolute bottom-2 right-2 rounded-md bg-black/50 p-1.5 text-white backdrop-blur-sm transition-colors hover:bg-black/70">
-            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
-          </button>
-        </div>
         <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center">
           <div className="relative shrink-0">
             <Avatar className="h-20 w-20">
@@ -365,12 +488,7 @@ export function ProfileBuilder({
               {completeness < 40 ? "A stronger profile gets 3-5x more invites." : completeness < 80 ? "Good. Add a few more sections to stand out." : "Profile complete. You're ready to be discovered."}
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => uploadPhoto("cover")} disabled={uploading}>
-              {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
-              {coverUrl ? "Change cover" : "Add cover"}
-            </Button>
-          </div>
+          <SaveIndicator status={saveStatus} />
         </CardContent>
       </Card>
 
@@ -382,7 +500,6 @@ export function ProfileBuilder({
           fullName: basics.full_name,
           email: initial.email,
           avatarUrl,
-          coverUrl,
           headline: basics.headline,
           bio: basics.bio,
           location: basics.location,

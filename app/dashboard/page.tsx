@@ -190,24 +190,43 @@ export default async function DashboardHome() {
         </div>
       </header>
 
-      {hasEmployee && profileCompleteness < 80 && (
+      {hasEmployee && profileCompleteness < 60 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-rose-500/40 bg-rose-500/5 p-4">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-full bg-rose-500/15 text-rose-600">
+              <AlertCircle className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-rose-700">You can't apply to tasks until your profile is at least 60% complete</p>
+              <p className="text-xs text-rose-700/80">
+                Currently {profileCompleteness}% complete — finish the basics, add skills with rates, and link a portfolio. This unlocks the apply button everywhere.
+              </p>
+            </div>
+          </div>
+          <Button asChild size="sm" variant="gradient">
+            <Link href="/dashboard/profile">
+              {profileCompleteness === 0 ? "Start building" : "Finish profile"}
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </Button>
+        </div>
+      )}
+
+      {hasEmployee && profileCompleteness >= 60 && profileCompleteness < 80 && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4">
           <div className="flex items-center gap-3">
             <div className="grid h-10 w-10 place-items-center rounded-full bg-primary/10 text-primary">
               <Sparkles className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-sm font-semibold">Build your profile so buyers can discover you</p>
+              <p className="text-sm font-semibold">Profile ready — you can apply to tasks!</p>
               <p className="text-xs text-muted-foreground">
-                Currently {profileCompleteness}% complete — add your bio, skills, and experience to be visible in <Link href="/find-people" className="text-primary hover:underline">Find people</Link>.
+                {profileCompleteness}% complete — add a few more sections to stand out in <Link href="/find-people" className="text-primary hover:underline">Find people</Link>.
               </p>
             </div>
           </div>
-          <Button asChild size="sm">
-            <Link href="/dashboard/profile">
-              {profileCompleteness === 0 ? "Start building" : "Continue building"}
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
+          <Button asChild size="sm" variant="outline">
+            <Link href="/dashboard/profile">Polish profile</Link>
           </Button>
         </div>
       )}

@@ -11,6 +11,49 @@ async function requireUser() {
   return { sb, user };
 }
 
+/**
+ * Mirrors the SQL compute_profile_completeness() but in JS so we can
+ * return the new score from each action without a round-trip to the DB.
+ * Single source of truth for both the server action responses and the
+ * `getProfileCompletenessAction` used by the dashboard gate.
+ */
+async function computeCompleteness(sb: ReturnType<typeof createClient>, userId: string): Promise<number> {
+  const [
+    { data: u },
+    { data: ep },
+    { count: skills },
+    { count: edu },
+    { count: exp },
+    { count: proj },
+    { count: cert },
+    { count: links },
+  ] = await Promise.all([
+    sb.from("users").select("full_name, avatar_url").eq("id", userId).maybeSingle(),
+    sb.from("employee_profiles").select("bio, location, headline, hourly_rate_paise").eq("user_id", userId).maybeSingle(),
+    sb.from("employee_skills").select("id", { count: "exact", head: true }).eq("employee_id", userId),
+    sb.from("employee_education").select("id", { count: "exact", head: true }).eq("user_id", userId),
+    sb.from("employee_experience").select("id", { count: "exact", head: true }).eq("user_id", userId),
+    sb.from("employee_projects").select("id", { count: "exact", head: true }).eq("user_id", userId),
+    sb.from("employee_certifications").select("id", { count: "exact", head: true }).eq("user_id", userId),
+    sb.from("employee_social_links").select("platform", { count: "exact", head: true }).eq("user_id", userId),
+  ]);
+  let score = 0;
+  if ((u as any)?.full_name) score += 5;
+  if ((u as any)?.avatar_url) score += 5;
+  if ((ep as any)?.headline) score += 5;
+  if ((ep as any)?.bio && (ep as any).bio.length > 20) score += 15;
+  if ((ep as any)?.location) score += 5;
+  if ((ep as any)?.hourly_rate_paise) score += 5;
+  if ((skills ?? 0) >= 1) score += 15;
+  if ((skills ?? 0) >= 3) score += 5;
+  if ((edu ?? 0) >= 1) score += 10;
+  if ((exp ?? 0) >= 1) score += 15;
+  if ((proj ?? 0) >= 1) score += 10;
+  if ((cert ?? 0) >= 1) score += 5;
+  if ((links ?? 0) >= 1) score += 5;
+  return Math.min(100, score);
+}
+
 /* ========================================================================
  * Profile basics (name, bio, headline, location, rate, availability)
  * ====================================================================== */
@@ -41,7 +84,9 @@ export async function updateProfileBasicsAction(input: {
   revalidatePath("/dashboard/profile");
   revalidatePath(`/people/${user.id}`);
   revalidatePath("/find-people");
-  return { ok: true };
+  revalidatePath("/dashboard");
+  const completeness = await computeCompleteness(sb, user.id);
+  return { ok: true, completeness };
 }
 
 /* ========================================================================
@@ -68,6 +113,7 @@ export async function updateBuyerProfileAction(input: {
     if (error) return { ok: false, reason: error.message };
   }
   revalidatePath("/dashboard/profile");
+  revalidatePath("/dashboard");
   return { ok: true };
 }
 
@@ -79,12 +125,15 @@ export async function updateBuyerProfileAction(input: {
  * ====================================================================== */
 
 export async function updateAvatarUrlAction(avatarUrl: string) {
+  const sb = createClient();
   const { user } = await requireUser();
   const admin = createAdminClient();
   const { error } = await admin.from("users").update({ avatar_url: avatarUrl }).eq("id", user.id);
   if (error) return { ok: false, reason: error.message };
   revalidatePath("/dashboard/profile");
-  return { ok: true };
+  revalidatePath("/dashboard");
+  const completeness = await computeCompleteness(sb, user.id);
+  return { ok: true, completeness };
 }
 
 /* ========================================================================
@@ -125,7 +174,9 @@ export async function updateEmployeeSkillsAction(skills: {
   }
   revalidatePath("/dashboard/profile");
   revalidatePath("/find-people");
-  return { ok: true };
+  revalidatePath("/dashboard");
+  const completeness = await computeCompleteness(sb, user.id);
+  return { ok: true, completeness };
 }
 
 /* ========================================================================
@@ -144,7 +195,9 @@ export async function addEducationAction(input: {
   if (error) return { ok: false, reason: error.message };
   revalidatePath("/dashboard/profile");
   revalidatePath(`/people/${user.id}`);
-  return { ok: true };
+  revalidatePath("/dashboard");
+  const completeness = await computeCompleteness(sb, user.id);
+  return { ok: true, completeness };
 }
 
 export async function deleteEducationAction(id: string) {
@@ -172,7 +225,9 @@ export async function addExperienceAction(input: {
   if (error) return { ok: false, reason: error.message };
   revalidatePath("/dashboard/profile");
   revalidatePath(`/people/${user.id}`);
-  return { ok: true };
+  revalidatePath("/dashboard");
+  const completeness = await computeCompleteness(sb, user.id);
+  return { ok: true, completeness };
 }
 
 export async function deleteExperienceAction(id: string) {
@@ -200,7 +255,9 @@ export async function addProjectAction(input: {
   if (error) return { ok: false, reason: error.message };
   revalidatePath("/dashboard/profile");
   revalidatePath(`/people/${user.id}`);
-  return { ok: true };
+  revalidatePath("/dashboard");
+  const completeness = await computeCompleteness(sb, user.id);
+  return { ok: true, completeness };
 }
 
 export async function deleteProjectAction(id: string) {
@@ -228,7 +285,9 @@ export async function addCertificationAction(input: {
   if (error) return { ok: false, reason: error.message };
   revalidatePath("/dashboard/profile");
   revalidatePath(`/people/${user.id}`);
-  return { ok: true };
+  revalidatePath("/dashboard");
+  const completeness = await computeCompleteness(sb, user.id);
+  return { ok: true, completeness };
 }
 
 export async function deleteCertificationAction(id: string) {
@@ -252,7 +311,9 @@ export async function setSocialLinkAction(platform: string, url: string) {
   if (error) return { ok: false, reason: error.message };
   revalidatePath("/dashboard/profile");
   revalidatePath(`/people/${user.id}`);
-  return { ok: true };
+  revalidatePath("/dashboard");
+  const completeness = await computeCompleteness(sb, user.id);
+  return { ok: true, completeness };
 }
 
 export async function deleteSocialLinkAction(platform: string) {
@@ -270,29 +331,5 @@ export async function deleteSocialLinkAction(platform: string) {
 
 export async function getProfileCompletenessAction(): Promise<number> {
   const { sb, user } = await requireUser();
-  const [{ data: ep }, { data: skills }, { data: edu }, { data: exp }, { data: proj }, { data: cert }, { data: links }, { data: u }] = await Promise.all([
-    sb.from("employee_profiles").select("bio, location, headline, hourly_rate_paise").eq("user_id", user.id).maybeSingle(),
-    sb.from("employee_skills").select("id").eq("employee_id", user.id),
-    sb.from("employee_education").select("id").eq("user_id", user.id),
-    sb.from("employee_experience").select("id").eq("user_id", user.id),
-    sb.from("employee_projects").select("id").eq("user_id", user.id),
-    sb.from("employee_certifications").select("id").eq("user_id", user.id),
-    sb.from("employee_social_links").select("platform").eq("user_id", user.id),
-    sb.from("users").select("full_name, avatar_url").eq("id", user.id).maybeSingle(),
-  ]);
-  let score = 0;
-  if (u?.full_name) score += 5;
-  if (u?.avatar_url) score += 5;
-  if (ep?.headline) score += 5;
-  if (ep?.bio && (ep.bio as string).length > 20) score += 15;
-  if (ep?.location) score += 5;
-  if (ep?.hourly_rate_paise) score += 5;
-  if ((skills?.length ?? 0) >= 1) score += 15;
-  if ((skills?.length ?? 0) >= 3) score += 5;
-  if ((edu?.length ?? 0) >= 1) score += 10;
-  if ((exp?.length ?? 0) >= 1) score += 15;
-  if ((proj?.length ?? 0) >= 1) score += 10;
-  if ((cert?.length ?? 0) >= 1) score += 5;
-  if ((links?.length ?? 0) >= 1) score += 5;
-  return Math.min(100, score);
+  return computeCompleteness(sb, user.id);
 }

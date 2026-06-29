@@ -1,23 +1,22 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { AUTO_RELEASE_HOURS } from "@/lib/constants";
 import { timingSafeEqual } from "@/lib/security";
 
 /**
- * Cron job: auto-release escrowed payments whose contract has reached
- * its `release_at` (set to approved_at + AUTO_RELEASE_HOURS) AND no
- * dispute has been raised.
+ * Cron job: safety-net wallet credit for already-COMPLETED contracts
+ * whose wallet-funded payments haven't been released yet.
  *
- * For legacy rows without `release_at` we fall back to `started_at +
- * AUTO_RELEASE_HOURS` so old data isn't stranded.
+ * IMPORTANT: This cron must NEVER set contracts.status = 'completed'.
+ * Workspace completion is the buyer's exclusive action — see
+ * migration 0117 and POST /api/workspace/mark-done. The auto-release
+ * cron's previous behaviour of completing 'delivered' contracts
+ * automatically has been removed because it closed workspaces before
+ * the buyer could approve.
  *
  * Configure in vercel.json or your scheduler of choice:
  *   { "crons": [{ "path": "/api/cron/auto-release", "schedule": "0 * * * *" }] }
  *
  * Auth: requires the `Authorization: Bearer ${CRON_SECRET}` header.
- * The secret MUST be set in production; we refuse to run with a missing
- * or weak default value. Comparisons use `timingSafeEqual` to prevent
- * timing side-channels.
  */
 export async function GET(req: Request) {
   const cronSecret = process.env.CRON_SECRET;
@@ -32,17 +31,13 @@ export async function GET(req: Request) {
   }
 
   const admin = createAdminClient();
-  const cutoff = new Date(Date.now() - AUTO_RELEASE_HOURS * 3600 * 1000).toISOString();
 
-  // Find contracts awaiting release:
-  //  - status in (active, delivered) AND
-  //  - either release_at <= now (the new path) OR
-  //    release_at IS NULL AND started_at <= cutoff (legacy fallback)
+  // Only consider contracts the BUYER has already marked as done.
+  // Do NOT complete any pending contracts here.
   const { data: candidates } = await admin
     .from("contracts")
-    .select("id, employee_id, status, started_at, delivered_at, release_at, employee_payout_paise, payments(id, status, amount, platform_fee_amount, razorpay_payment_id, razorpay_route_transfer_id, escrow_released)")
-    .or(`status.eq.active,status.eq.delivered`)
-    .or(`release_at.lte.${new Date().toISOString()},and(release_at.is.null,started_at.lte.${cutoff})`);
+    .select("id, employee_id, status, employee_payout_paise, payments(id, status, amount, platform_fee_amount, razorpay_payment_id, escrow_released)")
+    .eq("status", "completed");
 
   let released = 0;
   for (const c of (candidates ?? []) as any[]) {
@@ -57,12 +52,6 @@ export async function GET(req: Request) {
       .neq("status", "closed");
     if ((disputes ?? 0) > 0) continue;
 
-    // Mark contract complete and release any unreleased payment rows.
-    await admin.from("contracts").update({
-      status: "completed",
-      approved_at: new Date().toISOString(),
-    }).eq("id", c.id);
-
     const employeePayout = Number(c.employee_payout_paise ?? 0);
     let employeeWalletCreditPaise = 0;
 
@@ -76,9 +65,7 @@ export async function GET(req: Request) {
 
         // If this payment was funded from the buyer's HiVR wallet (no
         // Razorpay transfer to release), credit the employee wallet now
-        // so the money actually lands. Wallet-funded payments have no
-        // razorpay_payment_id and the amount was already debited from
-        // the buyer's wallet at funding time.
+        // so the money actually lands.
         if (!p.razorpay_payment_id) {
           employeeWalletCreditPaise += Math.max(
             0,
@@ -88,29 +75,24 @@ export async function GET(req: Request) {
       }
     }
 
-    // Credit the employee's wallet with the agreed_price - platform_fee
-    // (or employee_payout_paise if set, e.g. after a cancellation penalty).
-    // We use the contract-level effective payout so cancellation penalties
-    // are respected.
-    if (employeePayout > 0) {
-      // Try RPC wallet_credit (uses service_role). Fallback to direct insert
-      // if RPC isn't available in this context.
+    // Safety-net credit: if the mark-done API route failed to credit
+    // the wallet (e.g. transient network error), the cron will catch it
+    // on the next run.
+    if (employeeWalletCreditPaise > 0) {
       const { error: walletErr } = await admin.rpc("wallet_credit" as any, {
         p_user_id: (c as any).employee_id,
-        p_amount_paise: employeePayout,
+        p_amount_paise: employeeWalletCreditPaise,
         p_kind: "escrow_release",
-        p_description: "Auto-release of escrow for contract " + c.id,
+        p_description: "Safety-net credit for contract " + c.id,
         p_ref_type: "contract",
         p_ref_id: c.id,
-        p_metadata: { trigger: "auto_release_cron", contract_id: c.id },
+        p_metadata: { trigger: "auto_release_cron_safety_net", contract_id: c.id },
       } as any);
       if (walletErr) {
         // eslint-disable-next-line no-console
         console.error("[auto-release] wallet_credit failed for contract", c.id, walletErr);
       }
     }
-    // TODO: call Razorpay Route transfer for razorpay-funded payments when
-    // real keys are configured.
   }
 
   return NextResponse.json({ ok: true, candidates: candidates?.length ?? 0, released });

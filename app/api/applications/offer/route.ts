@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-/** POST /api/applications/offer — buyer sends an offer to the applicant. */
+/** POST /api/applications/offer — buyer sends an offer to the applicant.
+ *  The offer is bargainable but the buyer cannot go below 80% of the
+ *  employee's standing rate for the task's pricing model. The employee
+ *  decides whether to accept or decline.
+ */
 export async function POST(req: NextRequest) {
   const sb = createClient();
   const { data: { user } } = await sb.auth.getUser();
@@ -17,12 +21,38 @@ export async function POST(req: NextRequest) {
   // Verify the user is the task's buyer
   const { data: app } = await sb
     .from("task_applications")
-    .select("id, task_id, employee_id, task_posts!inner(buyer_id)")
+    .select("id, task_id, employee_id, task_posts!inner(buyer_id, category_id, pricing_model)")
     .eq("id", applicationId)
     .maybeSingle();
   if (!app) return NextResponse.json({ error: "Application not found" }, { status: 404 });
   if (((app as any).task_posts as any)?.buyer_id !== user.id) {
     return NextResponse.json({ error: "Not your task" }, { status: 403 });
+  }
+
+  // Enforce the -20% floor: the offer must be >= 80% of the employee's
+  // standing rate for the task's pricing model.
+  const task = (app as any).task_posts;
+  const { data: rateRow } = await sb
+    .from("employee_skills")
+    .select("rate_per_hour_paise, rate_per_task_paise, rate_per_day_paise, rate_per_week_paise")
+    .eq("employee_id", (app as any).employee_id)
+    .eq("category_id", task.category_id)
+    .maybeSingle();
+  const pm = task.pricing_model ?? "fixed";
+  const employeeRatePaise =
+    pm === "hourly" ? rateRow?.rate_per_hour_paise :
+    pm === "fixed"  ? rateRow?.rate_per_task_paise :
+    pm === "daily_rate" ? rateRow?.rate_per_day_paise :
+    pm === "fixed_milestone" ? rateRow?.rate_per_week_paise :
+    null;
+  if (employeeRatePaise && amountPaise > 0) {
+    const minPaise = Math.round(employeeRatePaise * 0.8);
+    if (amountPaise < minPaise) {
+      return NextResponse.json(
+        { error: `Offer must be at least ₹${(minPaise / 100).toFixed(2)} (80% of the employee's standing rate of ₹${(employeeRatePaise / 100).toFixed(2)}). Send Offer is for bargaining — Hire Directly is for the full rate.` },
+        { status: 400 },
+      );
+    }
   }
 
   // Create the offer

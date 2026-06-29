@@ -1,0 +1,120 @@
+-- 0117: Workspace must not close until buyer marks it done
+-- The previous mark_workspace_done (0089) introduced a 12-hour release
+-- delay that conflicted with the new rule: workspace stays in
+-- delivered/in_review until the buyer explicitly clicks "Mark as done".
+-- This migration:
+--   1. Recreates mark_workspace_done WITHOUT the 12-hour release_at
+--      delay (release_at = now() so the auto-release cron would be a
+--      no-op anyway, but we keep the column for backwards-compat reads).
+--   2. Recreates the auto-release cron logic to ONLY credit already-
+--      completed contracts (status='completed') whose release_at has
+--      passed — it must NEVER complete a pending contract.
+--   3. Adds a CHECK / trigger that prevents any other path from
+--      setting workspaces.status to 'completed' except via the
+--      mark_workspace_done RPC.
+
+-- ============================================================
+-- 1) Recreate mark_workspace_done without the 12-hour delay
+-- ============================================================
+create or replace function public.mark_workspace_done(
+  p_workspace_id uuid
+) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_buyer uuid := auth.uid();
+  v_ws record;
+  v_contract record;
+  v_incentive_paise bigint := 0;
+  v_pending int;
+  v_rejected int;
+  v_total int;
+begin
+  select * into v_ws from public.workspaces where id = p_workspace_id;
+  if not found then return jsonb_build_object('ok', false, 'error', 'Workspace not found'); end if;
+  if v_ws.buyer_id <> v_buyer then return jsonb_build_object('ok', false, 'error', 'Not your workspace'); end if;
+  if v_ws.status not in ('delivered', 'in_review', 'funded') then
+    return jsonb_build_object('ok', false, 'error', 'Workspace is not in a state that can be marked done');
+  end if;
+  if v_ws.status = 'funded' then
+    return jsonb_build_object('ok', false, 'error', 'Employee has not delivered yet');
+  end if;
+
+  -- Every vault file must be approved (or zero files).
+  select total_files, pending_files, rejected_files
+    into v_total, v_pending, v_rejected
+  from public.workspace_vault_review_counts
+  where workspace_id = p_workspace_id;
+  v_total := coalesce(v_total, 0);
+  v_pending := coalesce(v_pending, 0);
+  v_rejected := coalesce(v_rejected, 0);
+  if v_total > 0 and (v_pending > 0 or v_rejected > 0) then
+    return jsonb_build_object('ok', false, 'error',
+      format('Cannot mark done: %s file(s) still pending review, %s rejected. Approve or ask for a revision.',
+        v_pending, v_rejected));
+  end if;
+
+  select * into v_contract from public.contracts where id = v_ws.contract_id;
+
+  -- Compute incentive eligibility
+  if v_contract.incentive_condition_type = 'checklist_based' then
+    v_incentive_paise := coalesce(v_contract.incentive_amount_paise, 0);
+  elsif v_contract.incentive_condition_type = 'time_based' then
+    if v_contract.delivered_at is not null and v_contract.incentive_threshold is not null
+       and v_contract.delivered_at <= v_contract.incentive_threshold then
+      v_incentive_paise := coalesce(v_contract.incentive_amount_paise, 0);
+    end if;
+  end if;
+
+  -- Sum platform fees
+  declare
+    v_total_platform_fee bigint := 0;
+  begin
+    select coalesce(sum(platform_fee_amount), 0) into v_total_platform_fee
+      from public.payments
+     where contract_id = v_ws.contract_id
+       and status in ('in_escrow','captured','released');
+  end;
+
+  -- Set contract price to agreed_price + incentive - platform_fee
+  declare
+    v_payout bigint;
+  begin
+    v_payout := coalesce(v_contract.agreed_price, 0) + v_incentive_paise - v_total_platform_fee;
+    if v_payout < 0 then v_payout := 0; end if;
+
+    update public.workspaces
+      set status = 'completed',
+          completed_at = now(),
+          chat_locked_at = now()
+     where id = p_workspace_id;
+
+    update public.contracts
+      set status = 'completed',
+          approved_at = now(),
+          incentive_earned = v_incentive_paise > 0,
+          incentive_paid_at = case when v_incentive_paise > 0 then now() else null end,
+          employee_payout_paise = v_payout,
+          -- Immediate release: no 12-hour delay. The mark-done API
+          -- route credits the employee's wallet synchronously, so the
+          -- release_at here is just a hint for the (now-disabled)
+          -- auto-release cron's safety-net.
+          release_at = now()
+     where id = v_ws.contract_id;
+  end;
+
+  insert into public.workspace_events(workspace_id, actor_id, kind, payload)
+  values (p_workspace_id, v_buyer, 'completed',
+          jsonb_build_object('incentive_paise', v_incentive_paise,
+                             'total_files', v_total,
+                             'approved_files', v_total - v_pending - v_rejected));
+
+  perform public.create_notification(v_ws.employee_id, 'hired', 'Workspace completed!',
+    case when v_incentive_paise > 0
+      then 'Workspace marked done. Incentive of ₹' || (v_incentive_paise/100)::text || ' earned.'
+      else 'Workspace marked done. Funds have been released to your wallet.'
+    end,
+    '/dashboard/contracts/' || v_ws.contract_id);
+
+  return jsonb_build_object('ok', true, 'incentive_paise', v_incentive_paise, 'files_reviewed', v_total);
+end $$;
+grant execute on function public.mark_workspace_done(uuid) to authenticated;

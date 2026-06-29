@@ -23,6 +23,7 @@ import { MarkDoneButton } from "./mark-done-button";
 import { DeliveryChecklist } from "./delivery-checklist";
 import { VaultActivityTimeline } from "./vault-activity-timeline";
 import { WorkspaceFlowHelp } from "./workspace-flow-help";
+import { SubmitDeliveryButton } from "./submit-delivery-button";
 import { ReviewPopup } from "./review-popup";
 import { FileScopeDisputeModal } from "@/components/disputes/file-scope-dispute-modal";
 
@@ -132,18 +133,27 @@ export function WorkspaceShell({
   // Workspace is "locked" (no uploads, no edits) when:
   //   - frozen, completed, or cancelled (terminal states)
   //   - chat is explicitly locked
-  //   - the workspace is in 'delivered' or 'in_review' (employee can't
-  //     add more files once they've submitted; the buyer is reviewing)
-  //   - the workspace is 'awaiting_funding' (employee can't upload
-  //     until the buyer has paid)
-  const isLocked =
+  // Lock rules for the workspace vault and chat panel:
+  //   - 'awaiting_funding' : both locked (no escrow yet)
+  //   - 'funded'            : both UNLOCKED (employee uploads, both chat)
+  //   - 'delivered'         : both locked (buyer is reviewing)
+  //   - 'in_review'         : both UNLOCKED (buyer requested changes;
+  //                          employee MUST be able to re-upload the
+  //                          rejected file AND chat to ask follow-up
+  //                          questions)
+  //   - 'frozen' / 'completed' / 'cancelled' : both locked
+  //
+  // The isLocked export below is for the "all actions are disabled"
+  // banner. The vault + chat components each take isVaultLocked /
+  // isChatLocked separately.
+  const isVaultLocked =
        workspace.status === "frozen"
     || workspace.status === "completed"
     || workspace.status === "cancelled"
     || workspace.status === "delivered"
-    || workspace.status === "in_review"
-    || workspace.status === "awaiting_funding"
-    || !!workspace.chat_locked_at;
+    || workspace.status === "awaiting_funding";
+  const isChatLocked = isVaultLocked;
+  const isLocked = isVaultLocked; // (back-compat)
   const statusMeta = STATUS_META[workspace.status] ?? STATUS_META.awaiting_funding;
 
   const checklist = initialChecklist;
@@ -561,14 +571,33 @@ export function WorkspaceShell({
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
-              {workspace.status === "delivered" || workspace.status === "in_review" || workspace.status === "completed" ? (
+            <CardContent className="space-y-3">
+              {workspace.status === "delivered" || workspace.status === "completed" ? (
                 <VaultReviewPanel
                   workspaceId={workspace.id}
                   currentUserId={me.id}
                   isBuyer={isBuyer}
                   workspaceStatus={workspace.status}
                 />
+              ) : workspace.status === "in_review" ? (
+                <>
+                  <VaultReviewPanel
+                    workspaceId={workspace.id}
+                    currentUserId={me.id}
+                    isBuyer={isBuyer}
+                    workspaceStatus={workspace.status}
+                  />
+                  <WorkspaceVault
+                    workspaceId={workspace.id}
+                    currentUserId={me.id}
+                    isLocked={isVaultLocked}
+                    escrowFunded={!!workspace.escrow_funded}
+                    incentiveAmountPaise={workspace.incentive_amount_paise}
+                    ownerFilter={vaultOwnerFilter}
+                    onOwnerFilterChange={setVaultOwnerFilter}
+                    isBuyer={isBuyer}
+                  />
+                </>
               ) : (
                 <WorkspaceVault
                   workspaceId={workspace.id}
@@ -750,16 +779,12 @@ function ActionBar({
               <Button size="sm" variant="ghost" onClick={onFileDispute}>
                 <ShieldAlert className="h-3.5 w-3.5" />Dispute
               </Button>
-              <Button
-                size="sm"
-                variant="gradient"
+              <SubmitDeliveryButton
+                workspaceId={workspaceId}
                 disabled={!allDone || busy}
-                onClick={onSubmitDelivery}
-                title={!allDone ? "All checklist items must be marked done first" : ""}
-              >
-                {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                Submit delivery
-              </Button>
+                hint={!allDone ? "All checklist items must be marked done first" : undefined}
+                onDone={onSubmitDelivery}
+              />
             </div>
           </CardContent>
         </Card>
@@ -841,9 +866,13 @@ function ActionBar({
             <Button size="sm" variant="ghost" onClick={onFileDispute}>
               <ShieldAlert className="h-3.5 w-3.5" />Dispute
             </Button>
-            <Button size="sm" variant="gradient" disabled={!allDone || busy} onClick={onSubmitDelivery}>
-              <Send className="h-3.5 w-3.5" />Re-submit delivery
-            </Button>
+            <SubmitDeliveryButton
+              workspaceId={workspaceId}
+              disabled={!allDone || busy}
+              hint={!allDone ? "All checklist items must be marked done first" : undefined}
+              isResubmit
+              onDone={onSubmitDelivery}
+            />
           </div>
         </CardContent>
       </Card>

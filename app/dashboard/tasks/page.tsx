@@ -10,6 +10,7 @@ import {
 import { formatINR, timeAgo } from "@/lib/utils";
 import { CategoryIcon } from "@/components/marketing/category-icon";
 import { TaskActions } from "./task-actions";
+import { MyTasksRealtime } from "./my-tasks-realtime";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -104,6 +105,7 @@ export default async function MyTasks() {
       )}
 
       {/* ======== LIST ======== */}
+      <MyTasksRealtime userId={user.id} taskIds={taskIds} />
       {taskList.length === 0 ? (
         <EmptyState />
       ) : (

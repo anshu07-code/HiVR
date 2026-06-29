@@ -247,6 +247,12 @@ export type EmployeeApplyContext = {
   /** How many applications the user has submitted in the last hour. */
   applicationsThisHour: number;
   applicationsPerHourLimit: number;
+  /** Profile completeness 0-100. Below 60 = blocked from applying. */
+  profileCompleteness: number;
+  /** Skills the task wants that the employee has (overlap). */
+  matchedSkills: string[];
+  /** Skills the task wants that the employee does NOT have. */
+  missingSkills: string[];
 };
 
 /**
@@ -259,19 +265,26 @@ export async function getEmployeeApplyContext(opts: { userId: string; taskId: st
   const now = Date.now();
   const since1h = new Date(now - 60 * 60_000).toISOString();
 
-  const [{ data: ep }, { data: task }, { data: vs }, { data: skills }, { data: settings }, { count: apps1h }] = await Promise.all([
+  const [{ data: ep }, { data: task }, { data: vs }, { data: skills }, { data: settings }, { count: apps1h }, { data: completenessRpc }, { data: skillMatchRpc }] = await Promise.all([
     sb.from("employee_profiles").select("dispute_loss_count, application_paused, application_paused_reason").eq("user_id", opts.userId).maybeSingle(),
     sb.from("task_posts").select("id, category_id").eq("id", opts.taskId).maybeSingle(),
     sb.from("verifications").select("doc_type, status, purpose").eq("user_id", opts.userId).eq("purpose", "employee").eq("status", "verified"),
     sb.from("employee_skills").select("category_id, verification_status, current_wage_band_min, current_wage_band_max").eq("employee_id", opts.userId),
     sb.from("platform_settings").select("key, value").in("key", ["application_rate_limit_per_hour"]),
     sb.from("task_applications").select("id", { count: "exact", head: true }).eq("employee_id", opts.userId).gte("created_at", since1h),
+    sb.rpc("compute_profile_completeness" as any, { p_user_id: opts.userId } as any),
+    sb.rpc("compute_skill_match" as any, { p_user_id: opts.userId, p_task_id: opts.taskId } as any),
   ]);
 
   const perHour = Number((settings ?? []).find((s: any) => s.key === "application_rate_limit_per_hour")?.value?.value ?? 10);
   const skillMatch = (skills ?? []).find((s: any) => s.category_id === task?.category_id);
   const hasSkill = skillMatch?.verification_status === "verified" || skillMatch?.verification_status === "experienced" || skillMatch?.verification_status === "top_rated";
   const docTypes = new Set((vs ?? []).map((v: any) => v.doc_type));
+
+  const profileCompleteness = Number(completenessRpc ?? 0);
+  const skillMatchRow = (skillMatchRpc as any)?.[0] ?? skillMatchRpc;
+  const matchedSkills: string[] = (skillMatchRow?.matched_skills as string[]) ?? [];
+  const missingSkills: string[] = (skillMatchRow?.missing_skills as string[]) ?? [];
 
   const paused = !!ep?.application_paused;
   const disputeLossCount = ep?.dispute_loss_count ?? 0;
@@ -284,6 +297,8 @@ export async function getEmployeeApplyContext(opts: { userId: string; taskId: st
     } else {
       blockedReason = ep?.application_paused_reason ?? "Your profile is paused. Contact support to request an unpause.";
     }
+  } else if (profileCompleteness < 60) {
+    blockedReason = `Your profile is only ${profileCompleteness}% complete. Build it to at least 60% before applying — buyers shortlist full profiles.`;
   } else if (applicationsThisHour >= perHour) {
     blockedReason = `Application rate limit: max ${perHour} per hour. Try again in a few minutes.`;
   }
@@ -304,6 +319,9 @@ export async function getEmployeeApplyContext(opts: { userId: string; taskId: st
     hasPan: docTypes.has("pan"),
     applicationsThisHour,
     applicationsPerHourLimit: perHour,
+    profileCompleteness,
+    matchedSkills,
+    missingSkills,
   };
 }
 
