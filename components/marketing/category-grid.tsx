@@ -54,7 +54,7 @@ export function CategoryGrid({ categories }: { categories: Cat[] }) {
 }
 
 function CategoryCard({ c, index, compact = false }: { c: Cat; index: number; compact?: boolean }) {
-  const href = c.status === "active" ? `/browse?category=${c.slug}` : `/categories/${c.slug}?waitlist=1`;
+  const href = `/categories/${c.slug}`;
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}

@@ -22,6 +22,12 @@ const DEFAULT_SHOW = 5;
 
 export function RecentContracts({ initial, role, currentUserId }: { initial: any[]; role: "employee" | "buyer" | "both"; currentUserId?: string }) {
   const [contracts, setContracts] = React.useState(initial);
+  // Keep client state in sync with server-rendered initial data so
+  // router.refresh() / re-renders pick up fresh server values instead
+  // of being stuck on the first-render snapshot.
+  React.useEffect(() => {
+    setContracts(initial);
+  }, [initial]);
   const [expanded, setExpanded] = React.useState(false);
   const heading = role === "buyer" ? "Recent contracts (you hired)" : role === "employee" ? "Recent contracts (you worked)" : "Recent contracts";
 

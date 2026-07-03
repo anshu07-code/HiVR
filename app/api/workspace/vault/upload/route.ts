@@ -18,10 +18,8 @@ import {
  * Security:
  *   - Caller must be a member of the workspace (enforced server-side
  *     via the `record_vault_file` RPC).
- *   - File is magic-byte-sniffed. Default allow-list: documents (PDF).
- *     We do NOT allow images / videos by default; vault is for files.
- *     (The check below uses `document` group. Loosen if you ever want
- *     media uploads here.)
+ *   - File is magic-byte-sniffed. Accepts all vault-supported formats:
+ *     images, video, audio, PDF, Office docs, CSV, code, archives.
  *   - Storage path uses crypto.randomUUID() — not Math.random().
  *   - 25 MB cap.
  *   - 20 uploads per hour per user (per-user rate limit).
@@ -70,7 +68,7 @@ export async function POST(req: NextRequest) {
 
     let fmt;
     try {
-      fmt = await validateUploadedFile(file, "document", MAX_BYTES);
+      fmt = await validateUploadedFile(file, "vault", MAX_BYTES);
     } catch (e) {
       if (e instanceof SecurityError) {
         return NextResponse.json({ error: e.message }, { status: e.status });

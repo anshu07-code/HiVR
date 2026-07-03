@@ -25,6 +25,7 @@ import { createClient } from "@/lib/supabase/client";
 import { formatINR, cn } from "@/lib/utils";
 
 type Day = { day: string; value: number; paise?: number };
+type ActivityDay = { day: string; tasks: number; contracts: number };
 
 type Role = "buyer" | "employee" | "both";
 
@@ -51,7 +52,7 @@ type Props = {
     avgRating: number;
     totalReviews: number;
     // Time series (last 30 days)
-    buyerActivitySeries: Day[]; // tasks posted + contracts signed per day
+    buyerActivitySeries: ActivityDay[]; // tasks posted + contracts signed per day
     employeeActivitySeries: Day[]; // contracts completed per day
     earningsSeries: Day[]; // paise earned per day
     spendSeries: Day[]; // paise spent per day
@@ -60,6 +61,12 @@ type Props = {
 
 export function MonthlyStatsPanel({ userId, role, initial }: Props) {
   const [stats, setStats] = React.useState(initial);
+  // Keep client state in sync with server-rendered initial data so
+  // router.refresh() / re-renders pick up fresh server values instead
+  // of being stuck on the first-render snapshot.
+  React.useEffect(() => {
+    setStats(initial);
+  }, [initial]);
   const sbRef = React.useRef<ReturnType<typeof createClient> | null>(null);
 
   React.useEffect(() => {
@@ -70,13 +77,17 @@ export function MonthlyStatsPanel({ userId, role, initial }: Props) {
       // Buyer
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "task_posts", filter: `buyer_id=eq.${userId}` }, () => refresh())
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "contracts", filter: `buyer_id=eq.${userId}` }, () => refresh())
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "payments" }, () => refresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, () => refresh())
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "loyalty_points" }, () => refresh())
       // Employee
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "contracts", filter: `employee_id=eq.${userId}` }, () => refresh())
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "wallet_transactions" }, () => refresh())
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "reviews" }, () => refresh())
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "workspaces", filter: `buyer_id=eq.${userId}` }, () => refresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "wallet_transactions" }, () => refresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "reviews", filter: `reviewer_id=eq.${userId}` }, () => refresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "reviews", filter: `reviewee_id=eq.${userId}` }, () => refresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "employee_profiles", filter: `user_id=eq.${userId}` }, () => refresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "user_wallets", filter: `user_id=eq.${userId}` }, () => refresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "workspaces", filter: `buyer_id=eq.${userId}` }, () => refresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "workspaces", filter: `employee_id=eq.${userId}` }, () => refresh())
       .subscribe();
     return () => { sb.removeChannel(ch); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -94,7 +105,7 @@ export function MonthlyStatsPanel({ userId, role, initial }: Props) {
     // (e.g. `contract.buyer_id`).
     const [tasks, contracts, payments, reviews, employeeProfile, loyalty, walletTxns, allEscrow] = (await Promise.all([
       sb.from("task_posts").select("id, created_at, status").eq("buyer_id", userId).gte("created_at", thirtyDaysAgo),
-      sb.from("contracts").select("id, status, started_at, completed_at, buyer_id, employee_id, agreed_price").or(`buyer_id.eq.${userId},employee_id.eq.${userId}`).gte("started_at", thirtyDaysAgo),
+      sb.from("contracts").select("id, status, started_at, completed_at, buyer_id, employee_id, agreed_price, task_post_id").or(`buyer_id.eq.${userId},employee_id.eq.${userId}`).or(`started_at.gte.${thirtyDaysAgo},completed_at.gte.${thirtyDaysAgo}`),
       sb.from("payments").select("id, amount, status, created_at, contract:contracts(buyer_id)").gte("created_at", thirtyDaysAgo),
       sb.from("reviews").select("id, rating, reviewee_id, created_at").eq("reviewee_id", userId).gte("created_at", thirtyDaysAgo),
       sb.from("employee_profiles").select("lifetime_earnings, avg_rating, total_reviews, lifetime_tasks_completed").eq("user_id", userId).maybeSingle(),
@@ -178,16 +189,16 @@ export function MonthlyStatsPanel({ userId, role, initial }: Props) {
     }
     const idx = new Map(days.map((d, i) => [d.day, i]));
 
-    const buyerActivitySeries = days.map((d) => ({ ...d }));
+    const buyerActivitySeries: ActivityDay[] = days.map((d) => ({ day: d.day, tasks: 0, contracts: 0 }));
     for (const t of tasksArr) {
       const day = t.created_at?.slice(0, 10);
       const i = day ? idx.get(day) : undefined;
-      if (i != null) buyerActivitySeries[i].value += 1;
+      if (i != null) buyerActivitySeries[i].tasks += 1;
     }
     for (const c of contractsArr) {
       const day = c.started_at?.slice(0, 10);
       const i = day ? idx.get(day) : undefined;
-      if (i != null) buyerActivitySeries[i].value += 1;
+      if (i != null) buyerActivitySeries[i].contracts += 1;
     }
 
     const employeeActivitySeries = days.map((d) => ({ ...d }));
@@ -289,18 +300,18 @@ function BuyerStatsBlock({ stats }: { stats: Props["initial"] }) {
             accent="amber"
           />
         </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <SectionLabel>Activity · last 30 days</SectionLabel>
-            <BarChart data={stats.buyerActivitySeries} />
-            <p className="mt-1 text-[10px] text-muted-foreground">Tasks posted + contracts started, per day.</p>
+        <div>
+          <SectionLabel>Activity · last 30 days</SectionLabel>
+          <StackedBarChart data={stats.buyerActivitySeries} />
+          <div className="mt-1 flex items-center gap-3 text-[10px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-primary" /> Tasks</span>
+            <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-emerald-500" /> Contracts</span>
           </div>
-          <div>
-            <SectionLabel>Total spent · last 30 days</SectionLabel>
-            <SpendPill paise={stats.totalSpentLast30dPaise} />
-            <LineChart data={stats.spendSeries as any} valueKey="paise" color="#10b981" />
-            <p className="mt-1 text-[10px] text-muted-foreground">Captured + released payments.</p>
-          </div>
+        </div>
+        <div className="mt-3 rounded-lg border border-dashed bg-muted/20 p-3 text-center">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total spent · last 30 days</p>
+          <p className="mt-1 font-display text-2xl font-bold tabular-nums">{formatINR(Math.round(stats.totalSpentLast30dPaise / 100))}</p>
+          <p className="text-[10px] text-muted-foreground">Captured + released payments.</p>
         </div>
       </CardContent>
     </Card>
@@ -354,17 +365,10 @@ function EmployeeStatsBlock({ stats }: { stats: Props["initial"] }) {
             accent="primary"
           />
         </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <SectionLabel>Contracts · last 30 days</SectionLabel>
-            <BarChart data={stats.employeeActivitySeries} />
-            <p className="mt-1 text-[10px] text-muted-foreground">Contracts completed per day.</p>
-          </div>
-          <div>
-            <SectionLabel>Earnings trend</SectionLabel>
-            <LineChart data={stats.earningsSeries as any} valueKey="paise" color="#0ea5e9" />
-            <p className="mt-1 text-[10px] text-muted-foreground">Estimated per-day earnings, smooth line.</p>
-          </div>
+        <div>
+          <SectionLabel>Contracts · last 30 days</SectionLabel>
+          <BarChart data={stats.employeeActivitySeries} />
+          <p className="mt-1 text-[10px] text-muted-foreground">Contracts completed per day.</p>
         </div>
       </CardContent>
     </Card>
@@ -420,21 +424,81 @@ function StatTile({
    ============================================================================= */
 function BarChart({ data }: { data: Day[] }) {
   const max = Math.max(1, ...data.map((d) => d.value));
+  const [hoverIdx, setHoverIdx] = React.useState<number | null>(null);
   return (
-    <div className="flex h-20 w-full items-end gap-px">
+    <div className="relative flex h-20 w-full items-end gap-px">
       {data.map((d, i) => {
         const h = Math.max(2, (d.value / max) * 78);
+        const isHovered = hoverIdx === i;
         return (
-          <div
-            key={d.day}
-            title={`${d.day}: ${d.value}`}
-            className="stat-bar flex-1 rounded-t bg-primary/70 hover:bg-primary"
-            style={{ height: `${h}px`, animationDelay: `${(i % 30) * 12}ms` }}
-          />
+          <div key={d.day} className="relative flex-1">
+            {isHovered && (
+              <div className="absolute -top-9 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border bg-popover px-2 py-1 text-[10px] font-medium text-popover-foreground shadow-md">
+                {d.value} · {d.day.slice(5)}
+              </div>
+            )}
+            <div
+              onMouseEnter={() => setHoverIdx(i)}
+              onMouseLeave={() => setHoverIdx(null)}
+              className="stat-bar rounded-t bg-primary/70 hover:bg-primary hover:shadow-lg hover:scale-105 transition-all cursor-pointer"
+              style={{ height: `${h}px`, animationDelay: `${(i % 30) * 12}ms` }}
+            />
+          </div>
         );
       })}
       <style jsx>{`
         .stat-bar {
+          transform-origin: center bottom;
+          animation: barRise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        @keyframes barRise {
+          0%   { transform: scaleY(0); opacity: 0; }
+          100% { transform: scaleY(1); opacity: 1; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+/* =============================================================================
+   Stacked bar chart — two-colored (tasks + contracts)
+   ============================================================================= */
+function StackedBarChart({ data }: { data: ActivityDay[] }) {
+  const max = Math.max(1, ...data.map((d) => d.tasks + d.contracts));
+  const [hoverIdx, setHoverIdx] = React.useState<number | null>(null);
+  return (
+    <div className="relative flex h-20 w-full items-end gap-px">
+      {data.map((d, i) => {
+        const tasksH = Math.max(1, (d.tasks / max) * 78);
+        const contractsH = Math.max(1, (d.contracts / max) * 78);
+        const isHovered = hoverIdx === i;
+        return (
+          <div key={d.day} className="relative flex-1">
+            {isHovered && (
+              <div className="absolute -top-9 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border bg-popover px-2 py-1 text-[10px] font-medium text-popover-foreground shadow-md">
+                {d.tasks} tasks · {d.contracts} contracts · {d.day.slice(5)}
+              </div>
+            )}
+            <div
+              onMouseEnter={() => setHoverIdx(i)}
+              onMouseLeave={() => setHoverIdx(null)}
+              className="relative w-full cursor-pointer"
+              style={{ height: `${tasksH + contractsH}px` }}
+            >
+              <div
+                className="absolute bottom-0 left-0 right-0 rounded-t bg-emerald-500/80 hover:bg-emerald-500 transition-all"
+                style={{ height: `${contractsH}px`, animationDelay: `${(i % 30) * 12}ms` }}
+              />
+              <div
+                className="absolute bottom-0 left-0 right-0 rounded-t bg-primary/70 hover:bg-primary transition-all"
+                style={{ height: `${tasksH}px`, animationDelay: `${(i % 30) * 12}ms` }}
+              />
+            </div>
+          </div>
+        );
+      })}
+      <style jsx>{`
+        div > div > div {
           transform-origin: center bottom;
           animation: barRise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
         }

@@ -25,6 +25,8 @@ declare
   v_ws record;
   v_contract record;
   v_incentive_paise bigint := 0;
+  v_total_platform_fee bigint := 0;
+  v_payout bigint;
   v_pending int;
   v_rejected int;
   v_total int;
@@ -66,41 +68,33 @@ begin
   end if;
 
   -- Sum platform fees
-  declare
-    v_total_platform_fee bigint := 0;
-  begin
-    select coalesce(sum(platform_fee_amount), 0) into v_total_platform_fee
-      from public.payments
-     where contract_id = v_ws.contract_id
-       and status in ('in_escrow','captured','released');
-  end;
+  select coalesce(sum(platform_fee_amount), 0) into v_total_platform_fee
+    from public.payments
+   where contract_id = v_ws.contract_id
+     and status in ('in_escrow','captured','released');
 
   -- Set contract price to agreed_price + incentive - platform_fee
-  declare
-    v_payout bigint;
-  begin
-    v_payout := coalesce(v_contract.agreed_price, 0) + v_incentive_paise - v_total_platform_fee;
-    if v_payout < 0 then v_payout := 0; end if;
+  v_payout := coalesce(v_contract.agreed_price, 0) + v_incentive_paise - v_total_platform_fee;
+  if v_payout < 0 then v_payout := 0; end if;
 
-    update public.workspaces
-      set status = 'completed',
-          completed_at = now(),
-          chat_locked_at = now()
-     where id = p_workspace_id;
+  update public.workspaces
+    set status = 'completed',
+        completed_at = now(),
+        chat_locked_at = now()
+   where id = p_workspace_id;
 
-    update public.contracts
-      set status = 'completed',
-          approved_at = now(),
-          incentive_earned = v_incentive_paise > 0,
-          incentive_paid_at = case when v_incentive_paise > 0 then now() else null end,
-          employee_payout_paise = v_payout,
-          -- Immediate release: no 12-hour delay. The mark-done API
-          -- route credits the employee's wallet synchronously, so the
-          -- release_at here is just a hint for the (now-disabled)
-          -- auto-release cron's safety-net.
-          release_at = now()
-     where id = v_ws.contract_id;
-  end;
+  update public.contracts
+    set status = 'completed',
+        approved_at = now(),
+        incentive_earned = v_incentive_paise > 0,
+        incentive_paid_at = case when v_incentive_paise > 0 then now() else null end,
+        employee_payout_paise = v_payout,
+        -- Immediate release: no 12-hour delay. The mark-done API
+        -- route credits the employee's wallet synchronously, so the
+        -- release_at here is just a hint for the (now-disabled)
+        -- auto-release cron's safety-net.
+        release_at = now()
+   where id = v_ws.contract_id;
 
   insert into public.workspace_events(workspace_id, actor_id, kind, payload)
   values (p_workspace_id, v_buyer, 'completed',

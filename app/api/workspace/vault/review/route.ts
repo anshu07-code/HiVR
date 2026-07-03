@@ -91,10 +91,28 @@ export async function POST(req: NextRequest) {
     metadata: { review: true, status, comment: comment?.slice(0, 200) ?? null },
   } as any);
 
-  // 4. Move the workspace into 'in_review' if this is the first review
-  if (w.status === "delivered") {
+  // 4. Move the workspace into 'in_review' ONLY when the buyer
+  //    actually rejected a file (i.e. requested revisions). Pure
+  //    approvals keep the workspace in 'delivered' so the workspace
+  //    shell shows "delivery received" instead of the misleading
+  //    "Revisions requested" card, and so the buyer can hit
+  //    "Mark as done" without first asking for changes.
+  if (status === "rejected" && w.status === "delivered") {
     await admin.from("workspaces").update({ status: "in_review" }).eq("id", w.id);
     await admin.from("contracts").update({ status: "in_review" }).eq("id", w.contract_id);
+    await admin.from("workspace_events").insert({
+      workspace_id: w.id,
+      actor_id: user.id,
+      kind: "revision_requested",
+      payload: { file_name: (item as any).name, comment: comment?.slice(0, 200) ?? null },
+    } as any);
+  } else if (status === "approved") {
+    await admin.from("workspace_events").insert({
+      workspace_id: w.id,
+      actor_id: user.id,
+      kind: "item_reviewed",
+      payload: { file_name: (item as any).name, status: "approved" },
+    } as any);
   }
 
   // 5. Notify the employee

@@ -38,15 +38,16 @@ function isAllowed(filename: string): boolean {
 }
 
 async function readPdf(file: File): Promise<string> {
-  // Dynamic import so this only loads for PDF files (not on every page load).
-  const pdfjs = await import("pdfjs-dist");
-  // Use the bundled worker (Vite picks it up via ?url import below).
-  // We import the worker URL at module load; if it's missing we fall back
-  // to disableWorker which is slower but works.
+  let pdfjs: any;
+  try {
+    pdfjs = await import("pdfjs-dist");
+    pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+  } catch {
+    throw new Error("PDF parser failed to load. Try again or paste the text manually.");
+  }
   const buf = await file.arrayBuffer();
   const loadingTask = pdfjs.getDocument({
     data: buf,
-    // Disable the worker (slower but works without bundler cooperation)
     useWorkerFetch: false,
     isEvalSupported: false,
     disableFontFace: true,
@@ -63,6 +64,25 @@ async function readPdf(file: File): Promise<string> {
     out.push(line);
   }
   return out.join("\n");
+}
+
+/** Strip phone numbers, emails, and personal URLs from text so no
+ *  contact info from a resume bypasses the platform. */
+function stripContactInfo(text: string): string {
+  // Phone numbers (international, Indian, US, etc.)
+  let cleaned = text.replace(/[\+]?(\d[-\s]?){7,14}\d/g, "[contact hidden]");
+  // Email addresses
+  cleaned = cleaned.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, "[email hidden]");
+  // URLs — personal websites, GitHub, LinkedIn, social links
+  cleaned = cleaned.replace(/https?:\/\/[^\s]+/g, (match) => {
+    const lower = match.toLowerCase();
+    // Whitelist a few professional platforms (link text stays, domain visible)
+    if (lower.includes("github.com") || lower.includes("linkedin.com") || lower.includes("stackoverflow.com") || lower.includes("medium.com") || lower.includes("behance.net") || lower.includes("dribbble.com") || lower.includes("gitlab.com") || lower.includes("bitbucket.org")) {
+      return match;
+    }
+    return "[link hidden]";
+  });
+  return cleaned;
 }
 
 async function readDocx(file: File): Promise<string> {
@@ -118,6 +138,8 @@ export function ResumeUploader() {
         text = await readPlain(file);
       }
       text = text.replace(/\r\n?/g, "\n").trim();
+      // Strip contact info before the AI ever sees it
+      text = stripContactInfo(text);
       if (text.length < MIN_TEXT_CHARS) {
         setResult({
           error: `Only extracted ${text.length} characters of text. The file may be a scanned PDF (no text layer) or an image — try pasting the text manually below.`,

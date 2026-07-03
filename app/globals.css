@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /* =========================================================================
-   Mobile-first app-like feel
+   Mobile-first premium app-like feel
    ========================================================================= */
 @layer base {
   * {
@@ -13,6 +13,7 @@
   html {
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: none;
+    scroll-behavior: smooth;
   }
 
   body {
@@ -35,6 +36,57 @@
     button, a, [role="button"], input, select, textarea {
       touch-action: manipulation;
     }
+  }
+
+  /* Slightly larger base font on mobile for readability */
+  @media (max-width: 767px) {
+    html {
+      font-size: 15.5px;
+    }
+  }
+
+  /* Premium card hover lift effect on touch devices */
+  @media (hover: hover) {
+    .card-lift {
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .card-lift:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px -6px hsl(var(--primary) / 0.15);
+    }
+  }
+
+  /* Subtle premium border glow for interactive elements */
+  .premium-border {
+    position: relative;
+  }
+  .premium-border::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, hsl(var(--primary) / 0.3), transparent 50%, hsl(var(--primary) / 0.1));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  /* Gradient shimmer for skeleton/text highlights */
+  .shimmer-glow {
+    background: linear-gradient(90deg, hsl(var(--primary) / 0.08) 0%, hsl(var(--primary) / 0.15) 50%, hsl(var(--primary) / 0.08) 100%);
+    background-size: 200% 100%;
+    animation: shimmerGlow 3s ease-in-out infinite;
+  }
+  @keyframes shimmerGlow {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* Premium gradient border for selected/active cards */
+  .active-glow {
+    box-shadow: 0 0 0 1px hsl(var(--primary) / 0.3), 0 0 20px -4px hsl(var(--primary) / 0.15);
   }
 }
 
@@ -335,6 +387,12 @@
 }
 .animate-float-token { animation: float-token 3s ease-in infinite; }
 
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-12px); }
+}
+.animate-float { animation: float 4s ease-in-out infinite; }
+
 @keyframes fade-in {
   0%   { opacity: 0; transform: scale(0.95); }
   100% { opacity: 1; transform: scale(1); }
@@ -363,3 +421,149 @@
   to { transform: rotate(360deg); }
 }
 .animate-spin-slow { animation: spin-slow 8s linear infinite; }
+
+/* =========================================================================
+   Mobile-only premium UI polish
+   --------------------------------------------------------------------------
+   Gradient touches, button press effects, live animations, and
+   micro-interactions — applied ONLY on small screens so desktop
+   remains untouched.
+   ========================================================================= */
+
+/* --- Button press effect --- */
+@media (max-width: 767px) {
+  button:not(:disabled):active,
+  a:active,
+  [role="button"]:not(:disabled):active {
+    transform: scale(0.97);
+    transition: transform 0.08s ease;
+  }
+
+  /* Slightly larger tap area for icon buttons */
+  button:has(> svg:only-child) {
+    min-width: 40px;
+    min-height: 40px;
+  }
+}
+
+/* --- Premium card styling (mobile only) --- */
+@media (max-width: 767px) {
+  .mobile-card-premium {
+    position: relative;
+    background: linear-gradient(
+      135deg,
+      hsl(var(--card)) 0%,
+      hsl(var(--primary) / 0.03) 100%
+    );
+    border: 1px solid hsl(var(--border));
+    transition: box-shadow 0.2s ease;
+  }
+  .mobile-card-premium:active {
+    box-shadow: 0 0 0 1px hsl(var(--primary) / 0.2), 0 4px 16px -6px hsl(var(--primary) / 0.15);
+  }
+
+  /* Gradient accent bar at top of cards */
+  .mobile-card-accent {
+    overflow: hidden;
+  }
+  .mobile-card-accent::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2.5px;
+    background: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--primary) / 0.4));
+    border-radius: 0 0 2px 2px;
+  }
+}
+
+/* --- Page entrance animation (mobile only) --- */
+@media (max-width: 767px) {
+  .mobile-page-enter {
+    animation: mobilePageIn 0.3s ease-out both;
+  }
+
+  @keyframes mobilePageIn {
+    0%   { opacity: 0; transform: translateY(6px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+}
+
+/* --- Staggered card entrance (for lists) --- */
+@media (max-width: 767px) {
+  .mobile-stagger > * {
+    animation: mobileFadeUp 0.3s ease-out backwards;
+  }
+  .mobile-stagger > *:nth-child(1)  { animation-delay: 0.02s; }
+  .mobile-stagger > *:nth-child(2)  { animation-delay: 0.06s; }
+  .mobile-stagger > *:nth-child(3)  { animation-delay: 0.10s; }
+  .mobile-stagger > *:nth-child(4)  { animation-delay: 0.14s; }
+  .mobile-stagger > *:nth-child(5)  { animation-delay: 0.18s; }
+  .mobile-stagger > *:nth-child(6)  { animation-delay: 0.22s; }
+  .mobile-stagger > *:nth-child(7)  { animation-delay: 0.26s; }
+  .mobile-stagger > *:nth-child(8)  { animation-delay: 0.30s; }
+  .mobile-stagger > *:nth-child(9)  { animation-delay: 0.34s; }
+  .mobile-stagger > *:nth-child(10) { animation-delay: 0.38s; }
+
+  @keyframes mobileFadeUp {
+    0%   { opacity: 0; transform: translateY(8px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+}
+
+/* --- Live shimmer accent line for section dividers --- */
+@media (max-width: 767px) {
+  .mobile-shimmer-line {
+    height: 2px;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      hsl(var(--primary) / 0.4) 20%,
+      hsl(var(--primary) / 0.6) 50%,
+      hsl(var(--primary) / 0.4) 80%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: mobileShimmerLine 2.5s ease-in-out infinite;
+    border-radius: 999px;
+  }
+
+  @keyframes mobileShimmerLine {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+}
+
+/* --- Gradient nav active dot --- */
+@media (max-width: 767px) {
+  .mobile-nav-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.5));
+    box-shadow: 0 1px 6px hsl(var(--primary) / 0.4);
+  }
+}
+
+/* --- Bottom sheet pull handle --- */
+@media (max-width: 767px) {
+  .mobile-pull-handle {
+    width: 36px;
+    height: 4px;
+    border-radius: 999px;
+    background: hsl(var(--muted-foreground) / 0.3);
+    margin: 0 auto;
+  }
+}
+
+/* --- Smooth card tap feedback --- */
+@media (max-width: 767px) {
+  .mobile-tap-feedback {
+    -webkit-tap-highlight-color: hsl(var(--primary) / 0.1);
+    transition: background-color 0.15s ease;
+  }
+  .mobile-tap-feedback:active {
+    background-color: hsl(var(--primary) / 0.05);
+  }
+}

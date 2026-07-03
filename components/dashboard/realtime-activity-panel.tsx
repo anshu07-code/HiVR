@@ -16,12 +16,17 @@ import Link from "next/link";
 import {
   Wallet, MessageSquare, Star, ChevronRight, Briefcase,
   CheckCircle2, Send, Loader2, Sparkles, Activity, FileText, IndianRupee,
+  ChevronDown, ChevronUp, Calendar,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { cn, formatPaise, timeAgo } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+
+type TimeRange = "today" | "10d" | "month" | "all";
 
 export type Activity = {
   id: string;
@@ -90,6 +95,24 @@ export function RealtimeActivityPanel({
     unreadMessages: initialUnread,
     pendingReviews: pendingReviewCount,
   });
+
+  const [collapsed, setCollapsed] = React.useState(true);
+  const [timeRange, setTimeRange] = React.useState<TimeRange>("month");
+  const [customDate, setCustomDate] = React.useState<Date | undefined>(undefined);
+
+  const filteredActivity = React.useMemo(() => {
+    const now = Date.now();
+    const msInDay = 86400000;
+    const startOfToday = new Date(new Date().toISOString().slice(0, 10)).getTime();
+    const cutoff = timeRange === "today" ? startOfToday
+      : timeRange === "10d" ? now - 10 * msInDay
+      : timeRange === "month" ? now - 30 * msInDay
+      : 0;
+    return activity.filter((a) => new Date(a.at).getTime() >= cutoff);
+  }, [activity, timeRange]);
+
+  const displayActivity = collapsed ? filteredActivity.slice(0, 4) : filteredActivity;
+  const hasMore = filteredActivity.length > 4;
 
   React.useEffect(() => {
     if (!sbRef.current) sbRef.current = createClient();
@@ -294,8 +317,6 @@ export function RealtimeActivityPanel({
     setRefreshing(false);
   }
 
-  const visible = activity.slice(0, 8);
-
   return (
     <Card>
       <CardHeader className="space-y-2 pb-3">
@@ -310,11 +331,14 @@ export function RealtimeActivityPanel({
               </Badge>
             )}
           </CardTitle>
-          <Button asChild size="sm" variant="ghost">
-            <Link href="/dashboard/messages">
-              View messages<ChevronRight className="h-3.5 w-3.5" />
-            </Link>
-          </Button>
+          <div className="flex items-center gap-1">
+            <TimeFilter value={timeRange} onChange={setTimeRange} />
+            <Button asChild size="sm" variant="ghost">
+              <Link href="/dashboard/messages">
+                View messages<ChevronRight className="h-3.5 w-3.5" />
+              </Link>
+            </Button>
+          </div>
         </div>
         {/* Quick links row — role-aware */}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -347,8 +371,8 @@ export function RealtimeActivityPanel({
           />
         </div>
       </CardHeader>
-      <CardContent>
-        {visible.length === 0 ? (
+      <CardContent className="space-y-2">
+        {displayActivity.length === 0 ? (
           <p className="rounded-md border border-dashed bg-muted/20 py-8 text-center text-[11px] text-muted-foreground">
             {role === "employee"
               ? "No activity yet. Apply to a task or wait for an offer to land here."
@@ -358,7 +382,7 @@ export function RealtimeActivityPanel({
           </p>
         ) : (
           <ol className="space-y-1.5">
-            {visible.map((a) => {
+            {displayActivity.map((a) => {
               const Icon = iconForKind(a.kind);
               return (
                 <li key={a.id}>
@@ -387,6 +411,15 @@ export function RealtimeActivityPanel({
             })}
           </ol>
         )}
+        {hasMore && (
+          <Button variant="ghost" size="sm" className="w-full text-xs" onClick={() => setCollapsed(!collapsed)}>
+            {collapsed ? (
+              <><ChevronDown className="mr-1 h-3.5 w-3.5" /> Show all ({filteredActivity.length})</>
+            ) : (
+              <><ChevronUp className="mr-1 h-3.5 w-3.5" /> Show less</>
+            )}
+          </Button>
+        )}
       </CardContent>
     </Card>
   );
@@ -406,6 +439,31 @@ function QuickLink({ href, icon: Icon, label, tone, badge }: { href: string; ico
         <Badge variant="default" className="ml-auto text-[9px]">{badge}</Badge>
       )}
     </Link>
+  );
+}
+
+function TimeFilter({ value, onChange }: { value: TimeRange; onChange: (v: TimeRange) => void }) {
+  const opts: { label: string; value: TimeRange }[] = [
+    { label: "Today", value: "today" },
+    { label: "10d", value: "10d" },
+    { label: "Month", value: "month" },
+    { label: "All", value: "all" },
+  ];
+  return (
+    <div className="flex items-center gap-0.5 rounded-md border p-0.5">
+      {opts.map((o) => (
+        <button
+          key={o.value}
+          onClick={() => onChange(o.value)}
+          className={cn(
+            "rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors",
+            value === o.value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
   );
 }
 

@@ -19,7 +19,7 @@ import { OfferStatusCard } from "@/components/applicants/offer-status-card";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export default async function TaskApplicantsPage({ params }: { params: { id: string } }) {
+export default async function TaskApplicantsPage({ params, searchParams }: { params: { id: string }; searchParams: { settleAppId?: string } }) {
   noStore();
   const sb = createClient();
   const taskId = params.id;
@@ -204,6 +204,12 @@ export default async function TaskApplicantsPage({ params }: { params: { id: str
         taskBudgetMin={(task as any).budget_min}
         taskBudgetMax={(task as any).budget_max}
         taskTier={(task as any).category?.tier ?? "micro_task"}
+        currentUserId={user.id}
+        buyerId={user.id}
+        taskPricingModel={(task as any).pricing_model ?? "fixed"}
+        estimatedHours={(task as any).estimated_hours ?? null}
+        taskTitle={task.title}
+        settleAppId={searchParams.settleAppId}
       />
     </div>
   );

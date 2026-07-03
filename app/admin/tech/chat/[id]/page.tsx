@@ -4,8 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, ShieldAlert, MessageSquare, Users } from "lucide-react";
-import { timeAgo } from "@/lib/utils";
+import { ArrowLeft, ShieldAlert, MessageSquare, Users, Handshake, CheckCircle2 } from "lucide-react";
+import { formatPaise, timeAgo } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export const dynamic = "force-dynamic";
@@ -24,10 +24,33 @@ export default async function TechChatView({ params }: { params: { id: string } 
   // Fetch the task
   const { data: task } = await sb
     .from("task_posts")
-    .select("id, title, status, buyer_id, buyer:users!task_posts_buyer_id_fkey(id, full_name, avatar_url)")
+    .select("id, title, status, budget_min, budget_max, pricing_model, buyer_id, buyer:users!task_posts_buyer_id_fkey(id, full_name, avatar_url)")
     .eq("id", params.id)
     .maybeSingle();
   if (!task) notFound();
+
+  // Fetch related settlement rounds (across all applications for this task)
+  const { data: appIds } = await sb
+    .from("task_applications")
+    .select("id")
+    .eq("task_id", params.id);
+  const applicationIds = (appIds ?? []).map((a: any) => a.id);
+  let settlements: any[] = [];
+  if (applicationIds.length > 0) {
+    const { data: s } = await sb
+      .from("settlement_rounds")
+      .select(`
+        id, application_id, round_number, offered_by, amount_paise,
+        time_minutes, message, status, created_at,
+        application:task_applications!inner(
+          employee_id,
+          employee:users!task_applications_employee_id_fkey(full_name)
+        )
+      `)
+      .in("application_id", applicationIds)
+      .order("created_at", { ascending: true }) as any;
+    settlements = s ?? [];
+  }
 
   // Fetch all pre-hiring messages for this task
   const { data: messages } = await sb
@@ -99,6 +122,60 @@ export default async function TechChatView({ params }: { params: { id: string } 
           })}
         </CardContent>
       </Card>
+
+      {settlements.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Handshake className="h-4 w-4 text-purple-600" />Settlement rounds ({settlements.length})
+            </CardTitle>
+            <CardDescription>Negotiations between buyer and applicants for this task.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {settlements.map((r: any) => {
+              const app = r.application;
+              const employee = app?.employee;
+              const isFromBuyer = r.offered_by === "buyer";
+              const isAccepted = r.status === "accepted";
+              return (
+                <div
+                  key={r.id}
+                  className={`rounded-lg border p-3 text-sm ${
+                    isAccepted ? "border-emerald-200 bg-emerald-50/50" :
+                    r.status === "declined" ? "border-rose-200 bg-rose-50/40" :
+                    "border-muted bg-muted/20"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold">
+                      Round {r.round_number} — {isAccepted
+                        ? <span className="text-base font-bold text-emerald-700">{formatPaise(r.amount_paise)}</span>
+                        : formatPaise(r.amount_paise)}
+                      {r.time_minutes != null && <span className="ml-1 font-normal text-muted-foreground"> · {r.time_minutes} min</span>}
+                    </p>
+                    <div className="flex items-center gap-1">
+                      <Badge variant={isFromBuyer ? "outline" : "secondary"} className="text-[9px]">
+                        {isFromBuyer ? "buyer offer" : "employee offer"}
+                      </Badge>
+                      <Badge variant={isAccepted ? "success" : r.status === "declined" ? "destructive" : "outline"} className="text-[9px]">
+                        {r.status}
+                      </Badge>
+                      {isAccepted && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />}
+                    </div>
+                  </div>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    {employee?.full_name ?? "?"} · {timeAgo(r.created_at)}
+                    {isAccepted && <span className="ml-1 font-semibold text-emerald-600">· Accepted by {isFromBuyer ? "Employee" : "Buyer"}</span>}
+                  </p>
+                  {r.message && (
+                    <p className="mt-1 text-[11px] italic text-muted-foreground">&ldquo;{r.message}&rdquo;</p>
+                  )}
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

@@ -27,7 +27,7 @@ type Review = {
     id: string;
     status: string;
     task_post_id: string | null;
-    completed_at: string | null;
+    approved_at: string | null;
     task: { id: string; title: string; category_id: string | null } | null;
   } | null;
 };
@@ -35,11 +35,29 @@ type Review = {
 type PendingContract = {
   id: string;
   status: string;
-  completed_at: string | null;
+  approved_at: string | null;
   task_post_id: string | null;
   task: { id: string; title: string } | null;
   buyer: { id: string; full_name: string | null; avatar_url: string | null } | null;
   employee: { id: string; full_name: string | null; avatar_url: string | null } | null;
+};
+
+type ReceivedReview = {
+  id: string;
+  contract_id: string;
+  reviewer_id: string;
+  rating: number;
+  comment: string | null;
+  editable_until: string;
+  created_at: string;
+  reviewer: { id: string; full_name: string | null; avatar_url: string | null } | null;
+  contract: {
+    id: string;
+    status: string;
+    task_post_id: string | null;
+    approved_at: string | null;
+    task: { id: string; title: string; category_id: string | null } | null;
+  } | null;
 };
 
 type Filter = "all" | "5" | "4" | "3" | "2" | "1";
@@ -79,16 +97,19 @@ function StarPicker({ value, onChange, readOnly = false }: { value: number; onCh
 }
 
 export function ReviewsGiven({
-  userId, initialGiven, initialPending,
+  userId, initialGiven, initialReceived, initialPending,
 }: {
   userId: string;
   initialGiven: Review[];
+  initialReceived: ReceivedReview[];
   initialPending: PendingContract[];
 }) {
   const sbRef = React.useRef<ReturnType<typeof createClient> | null>(null);
   const [given, setGiven] = React.useState<Review[]>(initialGiven);
+  const [received, setReceived] = React.useState<ReceivedReview[]>(initialReceived);
   const [pending, setPending] = React.useState<PendingContract[]>(initialPending);
   const [filter, setFilter] = React.useState<Filter>("all");
+  const [receivedFilter, setReceivedFilter] = React.useState<Filter>("all");
   const [editing, setEditing] = React.useState<Review | null>(null);
   const [replying, setReplying] = React.useState<PendingContract | null>(null);
   const [refreshing, setRefreshing] = React.useState(false);
@@ -98,14 +119,27 @@ export function ReviewsGiven({
     [given, filter]
   );
 
+  const filteredReceived = React.useMemo(
+    () => receivedFilter === "all" ? received : received.filter((r) => r.rating === Number(receivedFilter)),
+    [received, receivedFilter]
+  );
+
   // Stats
-  const stats = React.useMemo(() => {
+  const givenStats = React.useMemo(() => {
     const total = given.length;
     const avg = total > 0 ? given.reduce((s, g) => s + g.rating, 0) / total : 0;
     const counts: Record<number, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
     for (const g of given) counts[g.rating] = (counts[g.rating] ?? 0) + 1;
     return { total, avg, counts };
   }, [given]);
+
+  const receivedStats = React.useMemo(() => {
+    const total = received.length;
+    const avg = total > 0 ? received.reduce((s, r) => s + r.rating, 0) / total : 0;
+    const counts: Record<number, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+    for (const r of received) counts[r.rating] = (counts[r.rating] ?? 0) + 1;
+    return { total, avg, counts };
+  }, [received]);
 
   // Realtime
   React.useEffect(() => {
@@ -114,6 +148,7 @@ export function ReviewsGiven({
     const ch = sb
       .channel(`reviews-${userId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "reviews", filter: `reviewer_id=eq.${userId}` }, () => refresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "reviews", filter: `reviewee_id=eq.${userId}` }, () => refresh())
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "contracts", filter: `buyer_id=eq.${userId}` }, () => refresh())
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "contracts", filter: `employee_id=eq.${userId}` }, () => refresh())
       .subscribe();
@@ -125,11 +160,13 @@ export function ReviewsGiven({
     setRefreshing(true);
     if (!sbRef.current) sbRef.current = createClient();
     const sb = sbRef.current;
-    const [{ data: g }, { data: p }] = await Promise.all([
-      sb.from("reviews").select("id, contract_id, reviewee_id, rating, comment, editable_until, created_at, reviewee:users!reviews_reviewee_id_fkey(id, full_name, avatar_url), contract:contracts!inner(id, status, task_post_id, completed_at, task:task_posts(id, title, category_id))").eq("reviewer_id", userId).order("created_at", { ascending: false }),
-      sb.from("contracts").select("id, status, completed_at, task_post_id, task:task_posts(id, title), buyer:users!contracts_buyer_id_fkey(id, full_name, avatar_url), employee:users!contracts_employee_id_fkey(id, full_name, avatar_url)").eq("status", "completed").or(`buyer_id.eq.${userId},employee_id.eq.${userId}`).order("completed_at", { ascending: false }).limit(50),
-    ]);
+      const [{ data: g }, { data: rec }, { data: p }] = await Promise.all([
+        sb.from("reviews").select("id, contract_id, reviewee_id, rating, comment, editable_until, created_at, reviewee:users!reviews_reviewee_id_fkey(id, full_name, avatar_url), contract:contracts!reviews_contract_id_fkey(id, status, task_post_id, approved_at, task:task_posts(id, title, category_id))").eq("reviewer_id", userId).order("created_at", { ascending: false }),
+        sb.from("reviews").select("id, contract_id, reviewer_id, rating, comment, editable_until, created_at, reviewer:users!reviews_reviewer_id_fkey(id, full_name, avatar_url), contract:contracts!reviews_contract_id_fkey(id, status, task_post_id, approved_at, task:task_posts(id, title, category_id))").eq("reviewee_id", userId).order("created_at", { ascending: false }),
+        sb.from("contracts").select("id, status, approved_at, task_post_id, task:task_posts(id, title), buyer:users!contracts_buyer_id_fkey(id, full_name, avatar_url), employee:users!contracts_employee_id_fkey(id, full_name, avatar_url)").eq("status", "completed").or(`buyer_id.eq.${userId},employee_id.eq.${userId}`).order("approved_at", { ascending: false }).limit(50),
+      ]);
     setGiven((g ?? []) as Review[]);
+    setReceived((rec ?? []) as ReceivedReview[]);
     const givenIds = new Set(((g ?? []) as any[]).map((x) => x.contract_id));
     setPending(((p ?? []) as PendingContract[]).filter((c) => !givenIds.has(c.id)));
     setRefreshing(false);
@@ -148,19 +185,19 @@ export function ReviewsGiven({
       </div>
 
       {/* Stats */}
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-4">
         <Card>
           <CardContent className="p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total given</p>
-            <p className="mt-1 font-display text-2xl font-bold tabular-nums">{stats.total}</p>
-            <p className="text-[10px] text-muted-foreground">Lifetime reviews</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Given</p>
+            <p className="mt-1 font-display text-2xl font-bold tabular-nums">{givenStats.total}</p>
+            <p className="text-[10px] text-muted-foreground">Reviews written</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Average rating</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Avg given</p>
             <div className="mt-1 flex items-center gap-1.5">
-              <p className="font-display text-2xl font-bold tabular-nums">{stats.avg.toFixed(2)}</p>
+              <p className="font-display text-2xl font-bold tabular-nums">{givenStats.avg.toFixed(2)}</p>
               <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
             </div>
             <p className="text-[10px] text-muted-foreground">Out of 5.00</p>
@@ -168,9 +205,19 @@ export function ReviewsGiven({
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Awaiting your review</p>
-            <p className="mt-1 font-display text-2xl font-bold tabular-nums">{pending.length}</p>
-            <p className="text-[10px] text-muted-foreground">Completed contracts</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Received</p>
+            <p className="mt-1 font-display text-2xl font-bold tabular-nums">{receivedStats.total}</p>
+            <p className="text-[10px] text-muted-foreground">Reviews about you</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Avg received</p>
+            <div className="mt-1 flex items-center gap-1.5">
+              <p className="font-display text-2xl font-bold tabular-nums">{receivedStats.avg.toFixed(2)}</p>
+              <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+            </div>
+            <p className="text-[10px] text-muted-foreground">Out of 5.00</p>
           </CardContent>
         </Card>
       </div>
@@ -201,7 +248,7 @@ export function ReviewsGiven({
                       {c.task?.title ?? "Untitled contract"}
                     </p>
                     <p className="text-[10px] text-muted-foreground">
-                      with {counterparty?.full_name ?? "counterparty"} · completed {c.completed_at ? timeAgo(c.completed_at) : "—"}
+                      with {counterparty?.full_name ?? "counterparty"} · completed {c.approved_at ? timeAgo(c.approved_at) : "—"}
                     </p>
                   </div>
                   <Button size="sm" onClick={() => setReplying(c)}>
@@ -286,10 +333,10 @@ export function ReviewsGiven({
                           )}
                           <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
                             <span>{timeAgo(r.created_at)}</span>
-                            {r.contract?.completed_at && (
+                            {r.contract?.approved_at && (
                               <>
                                 <span>·</span>
-                                <span>contract completed {timeAgo(r.contract.completed_at)}</span>
+                                <span>contract completed {timeAgo(r.contract.approved_at)}</span>
                               </>
                             )}
                             {editable ? (
@@ -323,6 +370,87 @@ export function ReviewsGiven({
                   </div>
                 );
               })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Reviews received */}
+      <Card>
+        <CardHeader className="space-y-3 pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="text-base">Reviews about you ({received.length})</CardTitle>
+          </div>
+          <div className="inline-flex rounded-md border bg-muted/30 p-0.5 text-[11px]">
+            {(["all", "5", "4", "3", "2", "1"] as Filter[]).map((f) => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => setReceivedFilter(f)}
+                className={cn(
+                  "rounded px-2.5 py-1 transition-colors flex items-center gap-1",
+                  receivedFilter === f ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {f === "all" ? "All" : (
+                  <>
+                    {f}
+                    <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-400" />
+                  </>
+                )}
+              </button>
+            ))}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {filteredReceived.length === 0 ? (
+            <div className="rounded-md border border-dashed bg-muted/20 py-12 text-center">
+              <Star className="mx-auto h-6 w-6 text-muted-foreground/50" />
+              <p className="mt-2 text-sm font-medium">No reviews yet</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                Reviews from your contract partners will appear here.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {filteredReceived.map((r) => (
+                <div key={r.id} className="rounded-md border bg-background p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <Avatar className="h-9 w-9">
+                        <AvatarImage src={r.reviewer?.avatar_url ?? undefined} className="object-cover" />
+                        <AvatarFallback className="text-[10px]">
+                          {(r.reviewer?.full_name ?? "?").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <p className="text-sm font-semibold">{r.reviewer?.full_name ?? "—"}</p>
+                          <StarPicker value={r.rating} readOnly />
+                        </div>
+                        <p className="truncate text-[11px] text-muted-foreground">
+                          {r.contract?.task?.title ?? "Untitled contract"}
+                        </p>
+                        {r.comment && (
+                          <p className="mt-1.5 text-xs leading-relaxed">{r.comment}</p>
+                        )}
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+                          <span>{timeAgo(r.created_at)}</span>
+                          <span>·</span>
+                          <span>by {r.reviewer?.full_name ?? "someone"}</span>
+                        </div>
+                      </div>
+                    </div>
+                    {r.contract?.id && (
+                      <Button asChild size="sm" variant="ghost">
+                        <Link href={`/dashboard/contracts/${r.contract_id}`}>
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </Link>
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </CardContent>

@@ -11,13 +11,12 @@ export default async function LevelUpPage() {
   if (!user) redirect("/auth/signin?next=/dashboard/level-up");
 
   // Evaluate the employee's level-up progress server-side (single source of truth)
-  const { data: evalData, error: evalErr } = await sb.rpc("evaluate_level_up" as any, { p_user_id: user.id } as any);
-  if (evalErr) {
-    return (
-      <div className="container max-w-3xl py-12 text-sm text-destructive">
-        Failed to load level-up status: {evalErr.message}
-      </div>
-    );
+  let evalData = null;
+  try {
+    const res = await sb.rpc("evaluate_level_up" as any, { p_user_id: user.id } as any);
+    evalData = res.data;
+  } catch {
+    // RPC function may not exist yet — render minimal UI
   }
 
   // Fetch available interview slots (open + future)

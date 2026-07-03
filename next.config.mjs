@@ -32,7 +32,7 @@ const nextConfig = {
     const csp = [
       "default-src 'self'",
       "img-src 'self' data: blob: https:",
-      "media-src 'self' blob:",
+      "media-src 'self' blob: https://assets.mixkit.co https://cdn.pixabay.com",
       "style-src 'self' 'unsafe-inline'",
       // Next.js dev server needs 'unsafe-eval' for fast refresh. In
       // production this is still emitted but browsers ignore unsafe-eval

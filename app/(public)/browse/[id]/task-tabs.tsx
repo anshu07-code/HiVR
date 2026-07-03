@@ -90,7 +90,7 @@ export function TaskTabs({
       {/* Sticky tab bar */}
       <div className="sticky top-[57px] z-20 -mx-4 mb-6 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="container">
-          <div className="flex gap-1">
+          <div className="flex gap-0.5 sm:gap-1">
             <TabButton active={tab === "overview"} onClick={() => setTab("overview")} Icon={FileText} label="Overview" />
             <TabButton active={tab === "applicants"} onClick={() => setTab("applicants")} Icon={Users} label="Applicants" count={appsCount} />
             <TabButton active={tab === "qa"} onClick={() => setTab("qa")} Icon={MessageCircle} label="Q & A" count={qCount} />
@@ -122,7 +122,7 @@ function TabButton({ active, onClick, Icon, label, count }: { active: boolean; o
       type="button"
       onClick={onClick}
       className={cn(
-        "relative flex shrink-0 items-center gap-2 px-4 py-3 text-sm font-medium transition-colors",
+        "relative flex shrink-0 items-center gap-1.5 px-3 py-3 sm:gap-2 sm:px-4 text-sm font-medium transition-colors",
         active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
       )}
     >
@@ -170,10 +170,34 @@ function OverviewTab({ task }: { task: TaskLite }) {
           <CardContent className="p-6">
             <h2 className="mb-3 font-display text-lg font-semibold">At a glance</h2>
             <div className="grid gap-3 sm:grid-cols-2">
-              <InfoRow Icon={Briefcase} label="Category" value={task.category?.name ?? "—"} />
-              <InfoRow Icon={Star}     label="Tier"     value={task.category?.tier === "role_engagement" ? "B · Role engagement" : "A · Micro-task"} />
-              <InfoRow Icon={TrendingUp} label="Pricing" value={task.pricing_model.replace("_", " ")} />
-              <InfoRow Icon={Sparkles}  label="Status"  value={task.status.replace("_", " ")} />
+              <div className="rounded-xl border bg-gradient-to-br from-primary/5 to-primary/10 p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Category</p>
+                <p className="mt-1 flex items-center gap-2 font-display text-base font-semibold capitalize">
+                  <Briefcase className="h-4 w-4 text-primary" />
+                  {task.category?.name ?? "—"}
+                </p>
+              </div>
+              <div className="rounded-xl border bg-gradient-to-br from-amber-500/5 to-amber-500/10 p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Tier</p>
+                <p className="mt-1 flex items-center gap-2 font-display text-base font-semibold capitalize">
+                  <Star className="h-4 w-4 text-amber-500" />
+                  {task.category?.tier === "role_engagement" ? "B · Role engagement" : "A · Micro-task"}
+                </p>
+              </div>
+              <div className="rounded-xl border bg-gradient-to-br from-emerald-500/5 to-emerald-500/10 p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Pricing</p>
+                <p className="mt-1 flex items-center gap-2 font-display text-base font-semibold capitalize">
+                  <TrendingUp className="h-4 w-4 text-emerald-500" />
+                  {task.pricing_model.replace("_", " ")}
+                </p>
+              </div>
+              <div className="rounded-xl border bg-gradient-to-br from-sky-500/5 to-sky-500/10 p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Status</p>
+                <p className="mt-1 flex items-center gap-2 font-display text-base font-semibold capitalize">
+                  <Sparkles className="h-4 w-4 text-sky-500" />
+                  {task.status.replace("_", " ")}
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>

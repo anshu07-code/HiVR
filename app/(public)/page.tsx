@@ -3,7 +3,8 @@ import { ArrowRight, ShieldCheck, Wallet, Sparkles, ChevronRight, Check, Clock, 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { CategoryGrid } from "@/components/marketing/category-grid";
+import dynamic from "next/dynamic";
+const CylinderGallery = dynamic(() => import("@/components/marketing/coming-soon-cylinder").then(m => m.CylinderGallery), { ssr: false });
 import { FeaturedEmployees } from "@/components/marketing/featured-employees";
 import { FeaturedTasks } from "@/components/marketing/featured-tasks";
 import { HiVRShowcaseVideo } from "@/components/marketing/showcase-video";
@@ -19,7 +20,7 @@ export default async function HomePage() {
   const sb = createClient();
   const { data: categories } = await sb
     .from("skill_categories")
-    .select("id, slug, name, icon, description, tier, status, sort_order")
+    .select("id, slug, name, icon, description, tier, status, sort_order, parent_category_id")
     .order("sort_order");
 
   let user = null;
@@ -47,7 +48,7 @@ export default async function HomePage() {
           <div className="container grid items-center gap-12 py-16 md:grid-cols-2 md:py-24">
             <div>
               <Badge variant="tierA" className="mb-5">Now live — 3 Active categories</Badge>
-              <h1 className="font-display text-4xl font-semibold leading-[1.05] tracking-tight text-balance md:text-5xl lg:text-6xl">
+              <h1 data-tour="landing-hero" className="font-display text-4xl font-semibold leading-[1.05] tracking-tight text-balance md:text-5xl lg:text-6xl">
                 Small jobs.<br />
                 <span className="gradient-text">Verified people.</span>
               </h1>
@@ -55,10 +56,10 @@ export default async function HomePage() {
                 HiVR breaks work into hireable micro-tasks — fix one bug, clean one spreadsheet, solve one doubt, build one endpoint. Hire by the hour, day, task, or month. Identity-verified, escrow-protected, no off-platform leakage.
               </p>
               <div className="mt-7 flex flex-wrap items-center gap-3">
-                <Button asChild size="lg" variant="gradient">
+                <Button asChild size="lg" variant="gradient" className="shadow-xl shadow-primary/25">
                   <Link href="/auth/signup?role=buyer">Hire someone <ArrowRight className="h-4 w-4" /></Link>
                 </Button>
-                <Button asChild size="lg" variant="outline">
+                <Button asChild size="lg" variant="outline" className="backdrop-blur-sm">
                   <Link href="/auth/signup?role=employee">Become an Employee</Link>
                 </Button>
               </div>
@@ -135,19 +136,29 @@ export default async function HomePage() {
           poster="/videos/hivr-showcase.jpg"
         />
 
-        {/* CATEGORIES */}
-        <section className="border-t bg-muted/20 py-16">
+        {/* CATEGORIES — 3D rotating cylinder */}
+        <section className="border-y border-zinc-800/10 bg-gradient-to-b from-background via-background to-muted/20 py-1 pb-16">
           <div className="container">
-            <div className="mb-8 flex items-end justify-between gap-4">
-              <div>
-                <h2 className="font-display text-3xl font-semibold tracking-tight md:text-4xl">What you can hire for</h2>
-                <p className="mt-2 max-w-xl text-muted-foreground">
-                  We launch new categories every month based on real waitlist demand. Join a waitlist today; get notified when it goes live.
-                </p>
-              </div>
-              <Button asChild variant="ghost"><Link href="/categories">See all categories <ChevronRight className="h-4 w-4" /></Link></Button>
-            </div>
-            <CategoryGrid categories={categories ?? []} />
+            <CylinderGallery
+              categories={categories?.filter(c => c.status === "active" && !c.parent_category_id) ?? []}
+              badge="Browse by category"
+              title="What you can hire for"
+              description="We launch new categories every month based on real waitlist demand. Hover any card to explore."
+              statusLabel="Active"
+            />
+          </div>
+        </section>
+
+        {/* COMING SOON — 3D rotating cylinder */}
+        <section className="border-y border-zinc-800/10 bg-gradient-to-b from-muted/20 via-background to-background py-1">
+          <div className="container">
+            <CylinderGallery
+              categories={categories?.filter(c => c.status === "coming_soon" && !c.parent_category_id) ?? []}
+              badge="Coming soon"
+              title="Launching next"
+              description="These categories are in development. Hover to preview."
+              statusLabel="Coming"
+            />
           </div>
         </section>
 
@@ -157,23 +168,72 @@ export default async function HomePage() {
         {/* FEATURED EMPLOYEES */}
         <FeaturedEmployees />
 
-        {/* HOW IT WORKS */}
+        {/* HOW IT WORKS — dual perspective */}
         <section className="container py-16">
-          <h2 className="mb-8 font-display text-3xl font-semibold tracking-tight md:text-4xl">How it works</h2>
-          <div className="grid gap-6 md:grid-cols-3">
-            {[
-              { n: 1, t: "Post your task", d: "Pick a category, describe the work, set budget. AI helps tighten your description." },
-              { n: 2, t: "Hire a verified person", d: "Browse skill-tested employees with transparent reviews and response times. Hire now or message first." },
-              { n: 3, t: "Pay only on approval", d: "Funds sit in Razorpay escrow. Approve the deliverable and we release — minus a fair platform fee." },
-            ].map(s => (
-              <Card key={s.n}>
-                <CardContent className="p-6">
-                  <div className="grid h-9 w-9 place-items-center rounded-full bg-primary/10 font-display text-base font-semibold text-primary">{s.n}</div>
-                  <h3 className="mt-3 font-display text-lg font-semibold">{s.t}</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">{s.d}</p>
-                </CardContent>
-              </Card>
-            ))}
+          <h2 className="mb-4 text-center font-display text-3xl font-semibold tracking-tight md:text-4xl">How it works</h2>
+          <p className="mx-auto mb-10 max-w-xl text-center text-muted-foreground">
+            Whether you&apos;re hiring or looking for work, HiVR connects you with verified people.
+          </p>
+          <div className="grid gap-8 md:grid-cols-2">
+            {/* Buyer column */}
+            <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+              <CardContent className="p-6 space-y-6">
+                <div className="flex items-center gap-3">
+                  <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary/10 text-primary text-sm font-bold">1</div>
+                  <div>
+                    <h3 className="font-display text-lg font-semibold">Post your task</h3>
+                    <p className="text-sm text-muted-foreground">Pick a category, describe the work, set your budget. AI helps you tighten the description.</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary/10 text-primary text-sm font-bold">2</div>
+                  <div>
+                    <h3 className="font-display text-lg font-semibold">Hire a verified person</h3>
+                    <p className="text-sm text-muted-foreground">Browse skill-tested employees with transparent reviews and response times. Hire now or message first.</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary/10 text-primary text-sm font-bold">3</div>
+                  <div>
+                    <h3 className="font-display text-lg font-semibold">Pay only on approval</h3>
+                    <p className="text-sm text-muted-foreground">Funds sit in Razorpay escrow. Approve the deliverable and we release — minus a fair platform fee.</p>
+                  </div>
+                </div>
+                <Button asChild variant="gradient" size="sm" className="w-full">
+                  <Link href="/auth/signup?role=buyer">Hire someone <ArrowRight className="ml-1 h-4 w-4" /></Link>
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Employee column */}
+            <Card className="border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent">
+              <CardContent className="p-6 space-y-6">
+                <div className="flex items-center gap-3">
+                  <div className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-500/10 text-emerald-600 text-sm font-bold">1</div>
+                  <div>
+                    <h3 className="font-display text-lg font-semibold">Pass a skill test</h3>
+                    <p className="text-sm text-muted-foreground">Take a 20-minute skill test to get verified in your category. Your wage band is set based on your performance.</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-500/10 text-emerald-600 text-sm font-bold">2</div>
+                  <div>
+                    <h3 className="font-display text-lg font-semibold">Get discovered</h3>
+                    <p className="text-sm text-muted-foreground">Your profile appears in search results. Buyers message you directly or send hire offers at your standing rate.</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-500/10 text-emerald-600 text-sm font-bold">3</div>
+                  <div>
+                    <h3 className="font-display text-lg font-semibold">Earn with escrow protection</h3>
+                    <p className="text-sm text-muted-foreground">Work is funded upfront in escrow. Deliver milestones, get approved, and receive payment — securely and on time.</p>
+                  </div>
+                </div>
+                <Button asChild variant="outline" size="sm" className="w-full border-emerald-500/30 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950">
+                  <Link href="/auth/signup?role=employee">Start earning <ArrowRight className="ml-1 h-4 w-4" /></Link>
+                </Button>
+              </CardContent>
+            </Card>
           </div>
         </section>
 
@@ -210,10 +270,10 @@ export default async function HomePage() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-3 md:justify-end">
-                <Button asChild size="lg" variant="gradient">
+                <Button asChild size="lg" variant="gradient" className="shadow-xl shadow-primary/25">
                   <Link href="/auth/signup?role=buyer">Hire someone <ArrowRight className="h-4 w-4" /></Link>
                 </Button>
-                <Button asChild size="lg" variant="outline">
+                <Button asChild size="lg" variant="outline" className="backdrop-blur-sm">
                   <Link href="/auth/signup?role=employee">Start earning</Link>
                 </Button>
               </div>

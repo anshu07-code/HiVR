@@ -6,6 +6,7 @@ import {
   MessageSquare, Search, Loader2, ChevronRight, ArrowUpRight,
   Mic, FileText, Image as ImageIcon, ShieldAlert, Inbox, RefreshCw,
   Pin, Archive, ChevronLeft, Send, X, Filter, Briefcase, FolderKanban, LifeBuoy, Lock,
+  User,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,17 @@ import { Badge } from "@/components/ui/badge";
 import { cn, timeAgo, timeUntil } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { sendDirectMessage } from "@/app/actions/direct-messages";
+
+export type DirectMsg = {
+  id: string;
+  sender_id: string;
+  receiver_id: string;
+  body: string;
+  created_at: string;
+  sender: { id: string; full_name: string | null; avatar_url: string | null } | null;
+  receiver: { id: string; full_name: string | null; avatar_url: string | null } | null;
+};
 
 type ContractMsg = {
   id: string;
@@ -74,7 +86,7 @@ type SupportMsg = {
   ticket: { id: string; subject: string; status: string } | null;
 };
 
-type ThreadKind = "contract" | "workspace" | "support";
+type ThreadKind = "contract" | "workspace" | "support" | "direct";
 type Thread = {
   key: string;
   kind: ThreadKind;
@@ -103,6 +115,7 @@ function deriveThreads(
   contractMsgs: ContractMsg[],
   workspaceMsgs: WorkspaceMsg[],
   supportMsgs: SupportMsg[],
+  directMsgs: DirectMsg[],
 ): Thread[] {
   const threadMap = new Map<string, Thread>();
 
@@ -242,31 +255,68 @@ function deriveThreads(
     }
   }
 
+  // Direct message threads (no task, just conversation)
+  for (const m of directMsgs) {
+    const otherParty = m.sender_id === userId ? m.receiver : m.sender;
+    const otherId = otherParty?.id ?? (m.sender_id === userId ? m.receiver_id : m.sender_id);
+    const key = `direct-${otherId}`;
+    const isFromMe = m.sender_id === userId;
+    const existing = threadMap.get(key);
+    const isNewer = !existing || new Date(m.created_at) > new Date(existing.lastMessage.at);
+    if (isNewer) {
+      threadMap.set(key, {
+        key,
+        kind: "direct",
+        refId: otherId,
+        title: "Direct message",
+        subtitle: "chat",
+        counterpart: { id: otherId, name: otherParty?.full_name ?? "Someone", avatar: otherParty?.avatar_url ?? null },
+        contractId: null,
+        taskId: null,
+        status: "active",
+        isClosed: false,
+        lastMessage: {
+          body: m.body,
+          kind: "text",
+          fromId: m.sender_id,
+          fromName: m.sender?.full_name ?? "Someone",
+          at: m.created_at,
+          isFromMe,
+          isFlagged: false,
+        },
+        unread: 0,
+      });
+    }
+  }
+
   return Array.from(threadMap.values())
     .sort((a, b) => new Date(b.lastMessage.at).getTime() - new Date(a.lastMessage.at).getTime());
 }
 
 export function MessagesInbox({
-  userId, initialContractMsgs, initialWorkspaceMsgs, initialSupportMsgs,
+  userId, initialContractMsgs, initialWorkspaceMsgs, initialSupportMsgs, initialDirectMsgs,
 }: {
   userId: string;
   initialContractMsgs: ContractMsg[];
   initialWorkspaceMsgs: WorkspaceMsg[];
   initialSupportMsgs: SupportMsg[];
+  initialDirectMsgs: DirectMsg[];
 }) {
   const sbRef = React.useRef<ReturnType<typeof createClient> | null>(null);
   const [contractMsgs, setContractMsgs] = React.useState<ContractMsg[]>(initialContractMsgs);
   const [workspaceMsgs, setWorkspaceMsgs] = React.useState<WorkspaceMsg[]>(initialWorkspaceMsgs);
   const [supportMsgs, setSupportMsgs] = React.useState<SupportMsg[]>(initialSupportMsgs);
+  const [directMsgs, setDirectMsgs] = React.useState<DirectMsg[]>(initialDirectMsgs);
   const [search, setSearch] = React.useState("");
-  const [kindFilter, setKindFilter] = React.useState<"all" | "contract" | "workspace" | "support">("all");
+  const [kindFilter, setKindFilter] = React.useState<"all" | "contract" | "workspace" | "support" | "direct">("all");
   const [activeFilter, setActiveFilter] = React.useState<"all" | "active" | "closed">("active");
   const [activeKey, setActiveKey] = React.useState<string | null>(null);
   const [refreshing, setRefreshing] = React.useState(false);
+  const activeThreadRef = React.useRef<Thread | null>(null);
 
   const threads = React.useMemo(
-    () => deriveThreads(userId, contractMsgs, workspaceMsgs, supportMsgs),
-    [userId, contractMsgs, workspaceMsgs, supportMsgs]
+    () => deriveThreads(userId, contractMsgs, workspaceMsgs, supportMsgs, directMsgs),
+    [userId, contractMsgs, workspaceMsgs, supportMsgs, directMsgs]
   );
 
   // Filter threads
@@ -274,7 +324,6 @@ export function MessagesInbox({
     const q = search.trim().toLowerCase();
     return threads.filter((t) => {
       if (kindFilter !== "all" && t.kind !== kindFilter) return false;
-      // Default to "active" — hide closed unless the user explicitly switches
       if (activeFilter === "active" && t.isClosed) return false;
       if (activeFilter === "closed" && !t.isClosed) return false;
       if (q) {
@@ -290,12 +339,33 @@ export function MessagesInbox({
 
   const closedCount = React.useMemo(() => threads.filter((t) => t.isClosed).length, [threads]);
 
+  const kindCounts = React.useMemo(() => {
+    const counts: Record<string, { total: number; unread: number }> = {};
+    for (const k of ["contract", "workspace", "support", "direct"]) {
+      const kindThreads = threads.filter((t) => t.kind === k && !t.isClosed);
+      counts[k] = {
+        total: kindThreads.length,
+        unread: kindThreads.filter((t) => !t.lastMessage.isFromMe).length,
+      };
+    }
+    return counts;
+  }, [threads]);
+
+  const totalUnread = React.useMemo(
+    () => Object.values(kindCounts).reduce((acc, c) => acc + c.unread, 0),
+    [kindCounts]
+  );
+
   // Active thread detail (load full message history)
   const activeThread = activeKey ? threads.find((t) => t.key === activeKey) ?? null : null;
-  const [threadHistory, setThreadHistory] = React.useState<ContractMsg[] | WorkspaceMsg[] | SupportMsg[]>([]);
+  const [threadHistory, setThreadHistory] = React.useState<any[]>([]);
   const [historyLoading, setHistoryLoading] = React.useState(false);
   const [reply, setReply] = React.useState("");
   const [sending, setSending] = React.useState(false);
+  const [replyError, setReplyError] = React.useState<string | null>(null);
+
+  // Keep ref in sync
+  React.useEffect(() => { activeThreadRef.current = activeThread; }, [activeThread]);
 
   // Realtime: new messages
   React.useEffect(() => {
@@ -306,6 +376,7 @@ export function MessagesInbox({
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, () => refresh())
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "workspace_messages" }, () => refresh())
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "support_messages" }, () => refresh())
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "direct_messages" }, () => refresh())
       .subscribe();
     return () => { sb.removeChannel(ch); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -315,94 +386,114 @@ export function MessagesInbox({
     setRefreshing(true);
     if (!sbRef.current) sbRef.current = createClient();
     const sb = sbRef.current;
-    const [c, w, s] = await Promise.all([
+    const [c, w, s, d] = await Promise.all([
       sb.from("messages").select("id, contract_id, sender_id, content, kind, file_name, flagged_for_contact_info, blocked, created_at, sender:users!messages_sender_id_fkey(id, full_name, avatar_url), contract:contracts!inner(id, status, buyer_id, employee_id, task_post_id, task:task_posts(id, title), buyer:users!contracts_buyer_id_fkey(id, full_name, avatar_url), employee:users!contracts_employee_id_fkey(id, full_name, avatar_url))").order("created_at", { ascending: false }).limit(200),
       sb.from("workspace_messages").select("id, workspace_id, sender_id, body, is_flagged, is_ghosted, created_at, sender:users!workspace_messages_sender_id_fkey(id, full_name, avatar_url), workspace:workspaces!inner(id, contract_id, buyer_id, employee_id, status, contract:contracts(id, task_post_id, task:task_posts(id, title), buyer:users!contracts_buyer_id_fkey(id, full_name, avatar_url), employee:users!contracts_employee_id_fkey(id, full_name, avatar_url)))").order("created_at", { ascending: false }).limit(200),
       sb.from("support_messages").select("id, ticket_id, sender_id, sender_role, content, created_at, ticket:support_tickets(id, subject, status)").or(`sender_id.eq.${userId}`).order("created_at", { ascending: false }).limit(50),
+      sb.from("direct_messages").select("id, sender_id, receiver_id, body, created_at, sender:users!direct_messages_sender_id_fkey(id, full_name, avatar_url), receiver:users!direct_messages_receiver_id_fkey(id, full_name, avatar_url)").order("created_at", { ascending: false }).limit(200),
     ]);
     setContractMsgs((c.data ?? []) as ContractMsg[]);
     setWorkspaceMsgs((w.data ?? []) as WorkspaceMsg[]);
     setSupportMsgs((s.data ?? []) as SupportMsg[]);
+    setDirectMsgs((d.data ?? []) as DirectMsg[]);
     setRefreshing(false);
+
+    // Also reload thread history if a thread is active
+    const currentThread = activeThreadRef.current;
+    if (currentThread) {
+      loadThreadHistory(currentThread);
+    }
+  }
+
+  async function loadThreadHistory(thread: Thread) {
+    setHistoryLoading(true);
+    if (!sbRef.current) sbRef.current = createClient();
+    const sb = sbRef.current;
+    if (thread.kind === "contract") {
+      const { data } = await sb.from("messages")
+        .select("id, contract_id, sender_id, content, kind, file_name, flagged_for_contact_info, blocked, created_at, sender:users!messages_sender_id_fkey(id, full_name, avatar_url)")
+        .eq("contract_id", thread.refId)
+        .order("created_at", { ascending: true })
+        .limit(200);
+      setThreadHistory((data ?? []) as ContractMsg[]);
+    } else if (thread.kind === "workspace") {
+      const { data } = await sb.from("workspace_messages")
+        .select("id, workspace_id, sender_id, body, is_flagged, is_ghosted, created_at, sender:users!workspace_messages_sender_id_fkey(id, full_name, avatar_url)")
+        .eq("workspace_id", thread.refId)
+        .order("created_at", { ascending: true })
+        .limit(200);
+      setThreadHistory((data ?? []) as WorkspaceMsg[]);
+    } else if (thread.kind === "direct") {
+      const { data } = await sb.from("direct_messages")
+        .select("id, sender_id, receiver_id, body, created_at, sender:users!direct_messages_sender_id_fkey(id, full_name, avatar_url), receiver:users!direct_messages_receiver_id_fkey(id, full_name, avatar_url)")
+        .or(`and(sender_id.eq.${userId},receiver_id.eq.${thread.counterpart!.id}),and(sender_id.eq.${thread.counterpart!.id},receiver_id.eq.${userId})`)
+        .order("created_at", { ascending: true })
+        .limit(200);
+      setThreadHistory((data ?? []) as DirectMsg[]);
+    } else {
+      const { data } = await sb.from("support_messages")
+        .select("id, ticket_id, sender_id, sender_role, content, created_at")
+        .eq("ticket_id", thread.refId)
+        .order("created_at", { ascending: true })
+        .limit(200);
+      setThreadHistory((data ?? []) as SupportMsg[]);
+    }
+    setHistoryLoading(false);
   }
 
   // Load full history when a thread is selected
   React.useEffect(() => {
+    setReplyError(null);
     if (!activeThread) { setThreadHistory([]); return; }
-    setHistoryLoading(true);
-    (async () => {
-      if (!sbRef.current) sbRef.current = createClient();
-      const sb = sbRef.current;
-      if (activeThread.kind === "contract") {
-        const { data } = await sb.from("messages")
-          .select("id, contract_id, sender_id, content, kind, file_name, flagged_for_contact_info, blocked, created_at, sender:users!messages_sender_id_fkey(id, full_name, avatar_url)")
-          .eq("contract_id", activeThread.refId)
-          .order("created_at", { ascending: true })
-          .limit(200);
-        setThreadHistory((data ?? []) as ContractMsg[]);
-      } else if (activeThread.kind === "workspace") {
-        const { data } = await sb.from("workspace_messages")
-          .select("id, workspace_id, sender_id, body, is_flagged, is_ghosted, created_at, sender:users!workspace_messages_sender_id_fkey(id, full_name, avatar_url)")
-          .eq("workspace_id", activeThread.refId)
-          .order("created_at", { ascending: true })
-          .limit(200);
-        setThreadHistory((data ?? []) as WorkspaceMsg[]);
-      } else {
-        const { data } = await sb.from("support_messages")
-          .select("id, ticket_id, sender_id, sender_role, content, created_at")
-          .eq("ticket_id", activeThread.refId)
-          .order("created_at", { ascending: true })
-          .limit(200);
-        setThreadHistory((data ?? []) as SupportMsg[]);
-      }
-      setHistoryLoading(false);
-    })();
-  }, [activeThread]);
+    loadThreadHistory(activeThread);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeThread, userId]);
 
   async function sendReply() {
     if (!activeThread || !reply.trim()) return;
     setSending(true);
+    setReplyError(null);
     try {
       if (activeThread.kind === "contract") {
         const r = await fetch("/api/messages/send", {
           method: "POST", headers: { "content-type": "application/json" },
           body: JSON.stringify({ contract_id: activeThread.refId, content: reply.trim() }),
         });
-        if (r.ok) {
-          setReply("");
-          refresh();
-        }
+        if (r.ok) { setReply(""); refresh(); }
+        else { setReplyError("Failed to send"); }
       } else if (activeThread.kind === "workspace") {
         const r = await fetch("/api/workspace/send-message", {
           method: "POST", headers: { "content-type": "application/json" },
           body: JSON.stringify({ workspaceId: activeThread.refId, body: reply.trim() }),
         });
-        if (r.ok) {
-          setReply("");
-          refresh();
-        }
+        if (r.ok) { setReply(""); refresh(); }
+        else { setReplyError("Failed to send"); }
+      } else if (activeThread.kind === "direct") {
+        const res = await sendDirectMessage(activeThread.counterpart!.id, reply.trim());
+        if (res.ok) { setReply(""); refresh(); }
+        else { setReplyError(res.error ?? "Failed to send"); }
       }
-      // Support: not implemented for self-send (admin-only)
     } finally {
       setSending(false);
     }
   }
 
+  const kindButtons = ["all", "contract", "workspace", "support", "direct"] as const;
+
   return (
-    <div className="container max-w-6xl space-y-6 py-8">
-      <div>
-        <Button asChild variant="ghost" size="sm" className="mb-2">
-          <Link href="/dashboard"><ArrowUpRight className="h-3.5 w-3.5" />Dashboard</Link>
-        </Button>
-        <h1 className="font-display text-3xl font-semibold tracking-tight">Messages</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Every conversation across contracts, workspaces, and support — unified in one inbox.
-        </p>
+    <div className="container max-w-7xl space-y-4 py-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <Button asChild variant="ghost" size="sm" className="mb-1">
+            <Link href="/dashboard"><ArrowUpRight className="h-3.5 w-3.5" />Dashboard</Link>
+          </Button>
+          <h1 className="font-display text-2xl font-semibold tracking-tight">Messages</h1>
+        </div>
       </div>
 
       <div className={cn(
         "grid gap-3",
-        activeThread ? "md:grid-cols-[360px_1fr]" : "md:grid-cols-1"
+        activeThread ? "md:grid-cols-[380px_minmax(0,1fr)]" : "md:grid-cols-1"
       )}>
         {/* Thread list */}
         <Card className={cn(activeThread && "hidden md:block")}>
@@ -435,19 +526,35 @@ export function MessagesInbox({
               ))}
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
-              {(["all", "contract", "workspace", "support"] as const).map((k) => (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => setKindFilter(k)}
-                  className={cn(
-                    "rounded-md border px-2 py-0.5 text-[10px] font-medium capitalize",
-                    kindFilter === k ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"
-                  )}
-                >
-                  {k}
-                </button>
-              ))}
+              {kindButtons.map((k) => {
+                const c = k === "all"
+                  ? { total: threads.filter(t => !t.isClosed).length, unread: totalUnread }
+                  : kindCounts[k] ?? { total: 0, unread: 0 };
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setKindFilter(k)}
+                    className={cn(
+                      "rounded-md border px-2 py-0.5 text-[10px] font-medium capitalize",
+                      kindFilter === k ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"
+                    )}
+                  >
+                    {k}
+                    {c.total > 0 && (
+                      <span className="ml-1">
+                        {c.unread > 0 ? (
+                          <span className="inline-flex items-center justify-center rounded-full bg-primary px-1 text-[8px] font-bold text-primary-foreground">
+                            {c.unread}
+                          </span>
+                        ) : (
+                          <span className="text-[9px] text-muted-foreground/60">({c.total})</span>
+                        )}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
             <div className="relative">
               <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
@@ -459,7 +566,7 @@ export function MessagesInbox({
               />
             </div>
           </CardHeader>
-          <CardContent className="max-h-[600px] overflow-y-auto p-1.5">
+          <CardContent className="scrollbar-hide max-h-[65vh] overflow-y-auto p-1.5">
             {filteredThreads.length === 0 ? (
               <p className="py-12 text-center text-[11px] text-muted-foreground">
                 No conversations yet.
@@ -467,7 +574,7 @@ export function MessagesInbox({
             ) : (
               <div className="space-y-0.5">
                 {filteredThreads.map((t) => {
-                  const KindIcon = t.kind === "contract" ? Briefcase : t.kind === "workspace" ? FolderKanban : LifeBuoy;
+                  const KindIcon = t.kind === "contract" ? Briefcase : t.kind === "workspace" ? FolderKanban : t.kind === "direct" ? User : LifeBuoy;
                   const active = activeKey === t.key;
                   return (
                     <button
@@ -520,7 +627,7 @@ export function MessagesInbox({
 
         {/* Thread detail */}
         {activeThread && (
-          <Card className="flex max-h-[80vh] flex-col">
+          <Card className="flex max-h-[75vh] flex-col">
             <CardHeader className="flex flex-row items-start justify-between gap-2 border-b pb-3">
               <div className="min-w-0 flex-1">
                 <Button
@@ -533,17 +640,34 @@ export function MessagesInbox({
                 </Button>
                 <CardTitle className="flex items-center gap-2 text-base">
                   {activeThread.counterpart && (
-                    <Avatar className="h-6 w-6">
-                      <AvatarImage src={activeThread.counterpart.avatar ?? undefined} className="object-cover" />
-                      <AvatarFallback className="text-[10px]">
-                        {activeThread.counterpart.name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
+                    <>
+                      {activeThread.kind === "direct" ? (
+                        <Link href={`/people/${activeThread.counterpart.id}`} className="flex items-center gap-2 hover:underline">
+                          <Avatar className="h-6 w-6">
+                            <AvatarImage src={activeThread.counterpart.avatar ?? undefined} className="object-cover" />
+                            <AvatarFallback className="text-[10px]">
+                              {activeThread.counterpart.name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          {activeThread.counterpart.name}
+                        </Link>
+                      ) : (
+                        <>
+                          <Avatar className="h-6 w-6">
+                            <AvatarImage src={activeThread.counterpart.avatar ?? undefined} className="object-cover" />
+                            <AvatarFallback className="text-[10px]">
+                              {activeThread.counterpart.name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          {activeThread.counterpart.name}
+                        </>
+                      )}
+                    </>
                   )}
-                  {activeThread.counterpart?.name ?? "Support"}
+                  {!activeThread.counterpart && "Support"}
                 </CardTitle>
                 <CardDescription className="line-clamp-1">
-                  {activeThread.title} · <span className="capitalize">{activeThread.status}</span>
+                  {activeThread.kind === "direct" ? "Direct message" : `${activeThread.title} · ${activeThread.status}`}
                 </CardDescription>
               </div>
               <div className="flex items-center gap-1.5">
@@ -554,12 +678,19 @@ export function MessagesInbox({
                     </Link>
                   </Button>
                 )}
+                {activeThread.kind === "direct" && activeThread.counterpart && (
+                  <Button asChild size="sm" variant="outline">
+                    <Link href={`/people/${activeThread.counterpart.id}`}>
+                      View profile<ChevronRight className="h-3 w-3" />
+                    </Link>
+                  </Button>
+                )}
                 <Button variant="ghost" size="icon" onClick={() => setActiveKey(null)}>
                   <X className="h-4 w-4" />
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="flex-1 space-y-2 overflow-y-auto p-3">
+            <CardContent className="scrollbar-hide flex-1 space-y-2 overflow-y-auto p-3">
               {historyLoading ? (
                 <div className="grid place-items-center py-8 text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -569,28 +700,45 @@ export function MessagesInbox({
               ) : (
                 threadHistory.map((m: any) => {
                   const isFromMe = m.sender_id === userId;
+                  const isDirect = activeThread.kind === "direct";
                   const isWorkspace = activeThread.kind === "workspace";
                   const isSupport = activeThread.kind === "support";
-                  const body = isWorkspace ? m.body : isSupport ? m.content : m.content;
-                  const isFlagged = isWorkspace ? (m.is_flagged || m.is_ghosted) : m.flagged_for_contact_info || m.blocked;
-                  const KindIcon = getKindIcon(isWorkspace ? "text" : m.kind);
+                  const body = isDirect ? m.body : isWorkspace ? m.body : isSupport ? m.content : m.content;
+                  const isFlagged = isDirect ? false : isWorkspace ? (m.is_flagged || m.is_ghosted) : m.flagged_for_contact_info || m.blocked;
+                  const senderName = isDirect
+                    ? (m.sender?.full_name ?? (isFromMe ? "You" : "Someone"))
+                    : (m.sender?.full_name ?? (isFromMe ? "You" : isSupport ? "Support" : "Someone"));
+                  const senderAvatar = isDirect ? (m.sender?.avatar_url ?? undefined) : undefined;
                   return (
                     <div key={m.id ?? `${m.ticket_id}-${m.created_at}`} className={cn("flex gap-2", isFromMe && "flex-row-reverse")}>
-                      <Avatar className="h-6 w-6 shrink-0">
-                        <AvatarImage src={undefined} className="object-cover" />
-                        <AvatarFallback className="text-[9px]">
-                          {isFromMe ? "Y" : (m.sender?.full_name?.[0] ?? (isSupport ? "S" : "?"))}
-                        </AvatarFallback>
-                      </Avatar>
+                      {isDirect ? (
+                        activeThread.counterpart?.id && m.sender_id !== userId ? (
+                          <Link href={`/people/${m.sender_id}`}>
+                            <Avatar className="h-6 w-6 shrink-0">
+                              <AvatarImage src={senderAvatar} className="object-cover" />
+                              <AvatarFallback className="text-[9px]">{senderName[0]}</AvatarFallback>
+                            </Avatar>
+                          </Link>
+                        ) : (
+                          <Avatar className="h-6 w-6 shrink-0">
+                            <AvatarFallback className="text-[9px]">{senderName[0]}</AvatarFallback>
+                          </Avatar>
+                        )
+                      ) : (
+                        <Avatar className="h-6 w-6 shrink-0">
+                          <AvatarImage src={undefined} className="object-cover" />
+                          <AvatarFallback className="text-[9px]">{senderName[0]}</AvatarFallback>
+                        </Avatar>
+                      )}
                       <div className={cn("min-w-0 max-w-[75%] flex-1", isFromMe && "flex flex-col items-end")}>
                         <div className={cn(
                           "inline-block rounded-lg px-2.5 py-1.5 text-xs",
                           isFromMe ? "bg-primary text-primary-foreground" : "bg-muted",
                           isFlagged && "ring-1 ring-rose-500/40"
                         )}>
-                          {!isWorkspace && m.kind !== "text" && (
+                          {!isWorkspace && !isDirect && m.kind !== "text" && (
                             <div className="mb-0.5 flex items-center gap-1 text-[10px] opacity-80">
-                              <KindIcon className="h-3 w-3" />
+                              {(() => { const Icon = getKindIcon(m.kind); return <Icon className="h-3 w-3" />; })()}
                               {m.kind === "voice" ? "Voice" : m.kind === "file" ? m.file_name : m.kind === "image" ? "Image" : m.kind}
                             </div>
                           )}
@@ -629,8 +777,11 @@ export function MessagesInbox({
                     Send
                   </Button>
                 </div>
+                {replyError && (
+                  <p className="mt-1 text-[10px] text-destructive">{replyError}</p>
+                )}
                 <p className="mt-1 text-[9px] text-muted-foreground">
-                  Enter to send · Shift+Enter for newline · Sending goes through the existing ghost-block filter
+                  Enter to send · Shift+Enter for newline
                 </p>
               </div>
             )}

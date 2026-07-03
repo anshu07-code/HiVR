@@ -8,6 +8,13 @@ import { createClient } from "@/lib/supabase/client";
 export function ActiveContractsRealtime({ userId, initialCount }: { userId: string; initialCount: number }) {
   const [count, setCount] = React.useState(initialCount);
 
+  // Keep client state in sync with server-rendered initial data so
+  // router.refresh() / re-renders pick up fresh server values instead
+  // of being stuck on the first-render snapshot.
+  React.useEffect(() => {
+    setCount(initialCount);
+  }, [initialCount]);
+
   React.useEffect(() => {
     const sb = createClient();
 

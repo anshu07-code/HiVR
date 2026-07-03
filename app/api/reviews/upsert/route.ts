@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -89,6 +90,16 @@ export async function POST(req: NextRequest) {
     console.error("[reviews/upsert] failed:", error);
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
+
+  // Force the dashboard (and any page showing employee ratings) to
+  // re-fetch. The trigger updates employee_profiles.avg_rating +
+  // total_reviews, but the dashboard's cached server render is stale
+  // until the next navigation or router.refresh().
+  revalidatePath("/dashboard", "layout");
+  revalidatePath("/dashboard/contracts", "page");
+  revalidatePath(`/dashboard/contracts/${contractId}`, "page");
+  revalidatePath("/find-people", "page");
+  revalidatePath(`/people/${revieweeId}`, "page");
 
   return NextResponse.json({ ok: true, review: data });
 }

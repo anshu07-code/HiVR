@@ -3,8 +3,9 @@
 import * as React from "react";
 import Link from "next/link";
 import {
-  CheckCircle2, XCircle, AlertCircle, Loader2, Send, ChevronRight, RefreshCw,
-  ShieldCheck, Star, MessageSquare, FileText, Clock, IndianRupee, Check,
+  CheckCircle2, XCircle, AlertCircle, Loader2, Send, ChevronRight, ChevronDown,
+  RefreshCw, ShieldCheck, Star, MessageSquare, FileText, Clock, IndianRupee, Check,
+  Folder, User, Users,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -65,6 +66,16 @@ export function VaultReviewPanel({
   const [feedback, setFeedback] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [previewItem, setPreviewItem] = React.useState<PreviewItem | null>(null);
+  const [reviewExpanded, setReviewExpanded] = React.useState<Set<string>>(new Set());
+
+  const toggleReviewExpand = (id: string) => {
+    setReviewExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
   const [downloadingId, setDownloadingId] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
@@ -195,6 +206,155 @@ export function VaultReviewPanel({
     }
   }
 
+  function renderReviewBranch(
+    parentId: string | null,
+    filterFn: (i: VaultReviewItem) => boolean,
+  ): React.ReactNode {
+    const folders = items.filter(
+      (i) => i.is_folder && (i.parent_id ?? null) === parentId && filterFn(i),
+    );
+    const files = items.filter(
+      (i) => !i.is_folder && (i.parent_id ?? null) === parentId && filterFn(i),
+    );
+    const combined = [...folders, ...files];
+    return combined.map((item) => {
+      if (item.is_folder) {
+        const isOpen = reviewExpanded.has(item.id);
+        return (
+          <div key={item.id}>
+            <button
+              type="button"
+              onClick={() => toggleReviewExpand(item.id)}
+              className="flex w-full items-center gap-1 rounded px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted/50"
+            >
+              {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              <Folder className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+              <span className="truncate">{item.name}</span>
+              <span className="shrink-0 text-[9px] text-muted-foreground/60">(auto-approved)</span>
+            </button>
+            {isOpen && (
+              <div className="ml-3 mt-1 space-y-2">
+                {renderReviewBranch(item.id, filterFn)}
+              </div>
+            )}
+          </div>
+        );
+      }
+      const it = item;
+      const status = it.review_status;
+      return (
+        <div
+          key={it.id}
+          className={cn(
+            "rounded-md border bg-background p-3 transition-colors",
+            status === "approved" && "border-sky-500/40 bg-sky-500/5",
+            status === "rejected" && "border-rose-500/30 bg-rose-500/5",
+            status === "pending" && !isLocked && "border-amber-500/30",
+          )}
+        >
+          <div className="flex flex-wrap items-start gap-3">
+            <FileText className={cn(
+              "mt-0.5 h-5 w-5 shrink-0",
+              status === "approved" ? "text-sky-600" :
+              status === "rejected" ? "text-rose-600" :
+              "text-muted-foreground"
+            )} />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <p className="truncate text-sm font-medium">{it.original_name ?? it.name}</p>
+                <StatusBadge status={status} />
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                {(it.file_size ? `${(it.file_size / 1024).toFixed(0)} KB · ` : "")}
+                {it.uploader_name ?? "Employee"} · uploaded {timeAgo(it.created_at)}
+                {it.reviewed_at && <> · reviewed {timeAgo(it.reviewed_at)}</>}
+              </p>
+              {it.review_comment && (
+                <div className={cn(
+                  "mt-1.5 flex items-start gap-1.5 rounded-md border p-1.5 text-[11px]",
+                  status === "rejected" ? "border-rose-500/20 bg-rose-500/5 text-rose-800" :
+                  "border-amber-500/20 bg-amber-500/5 text-amber-800"
+                )}>
+                  <MessageSquare className="mt-0.5 h-3 w-3 shrink-0" />
+                  <span>{it.review_comment}</span>
+                </div>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button size="sm" variant="ghost" onClick={() => safeDownload(it)} disabled={downloadingId === it.id}>
+                {downloadingId === it.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Download"}
+              </Button>
+              {it.storage_object_id && (
+                <Button size="sm" variant="ghost" onClick={() => setPreviewItem({
+                  id: it.id,
+                  name: it.original_name ?? it.name,
+                  mime_type: it.mime_type,
+                  file_type: it.file_type,
+                  file_size: it.file_size,
+                  storage_object_id: it.storage_object_id,
+                  view_count: 0,
+                })}>
+                  Preview
+                </Button>
+              )}
+            </div>
+          </div>
+          {/* Buyer review controls */}
+          {isBuyer && !isLocked && (workspaceStatus === "delivered" || workspaceStatus === "in_review") && (
+            <div className="mt-2 border-t pt-2">
+              {editingId === it.id ? (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-rose-700">
+                    Reject with feedback
+                  </p>
+                  <Textarea
+                    value={rejectComment}
+                    onChange={(e) => setRejectComment(e.target.value)}
+                    placeholder="Explain what needs to change. The employee sees this immediately."
+                    rows={3}
+                    maxLength={2000}
+                    className="text-xs"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    {rejectComment.length}/2000
+                  </p>
+                  <div className="flex justify-end gap-2">
+                    <Button size="sm" variant="ghost" onClick={() => { setEditingId(null); setRejectComment(""); }} disabled={busy}>
+                      Cancel
+                    </Button>
+                    <Button size="sm" variant="destructive" onClick={() => reviewFile(it.id, "rejected", rejectComment.trim())} disabled={busy || !rejectComment.trim()}>
+                      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
+                      Reject
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {status !== "approved" && (
+                    <Button size="sm" variant="default" onClick={() => reviewFile(it.id, "approved")} disabled={busy} className="h-7 bg-sky-600 hover:bg-sky-700">
+                      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                      Approve
+                    </Button>
+                  )}
+                  {(status === "pending" || status === "approved") && (
+                    <Button size="sm" variant="outline" onClick={() => { setEditingId(it.id); setRejectComment(""); }} disabled={busy} className="h-7 text-rose-700 hover:bg-rose-500/10">
+                      <XCircle className="h-3.5 w-3.5" />Request changes
+                    </Button>
+                  )}
+                  {status === "approved" && (
+                    <span className="text-[10px] font-semibold text-sky-700">
+                      ✓ Approved{it.reviewed_at ? ` on ${new Date(it.reviewed_at).toLocaleDateString()}` : ""}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    });
+  }
+
   const isLocked = workspaceStatus === "completed" || workspaceStatus === "cancelled" || workspaceStatus === "frozen";
   const fileItems = items.filter((i) => !i.is_folder);
   const folderItems = items.filter((i) => i.is_folder);
@@ -298,7 +458,7 @@ export function VaultReviewPanel({
         <div className="grid place-items-center rounded-md border bg-muted/20 py-12 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
         </div>
-      ) : fileItems.length === 0 && folderItems.length === 0 ? (
+      ) : items.length === 0 ? (
         <div className="rounded-md border border-dashed bg-muted/20 py-12 text-center">
           <FileText className="mx-auto h-6 w-6 text-muted-foreground/50" />
           <p className="mt-2 text-sm font-medium">No files uploaded</p>
@@ -307,140 +467,27 @@ export function VaultReviewPanel({
           </p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {folderItems.length > 0 && (
-            <div className="rounded-md border bg-muted/20 p-2">
-              <p className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Folders (auto-approved)
+        <div className="space-y-4">
+          {items.some((i) => i.uploaded_by === currentUserId) && (
+            <div className="rounded-md border bg-card p-2">
+              <p className="flex items-center gap-1 border-b pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <User className="h-3 w-3" />Your files
               </p>
-              <div className="mt-1 flex flex-wrap gap-1.5">
-                {folderItems.map((f) => (
-                  <Badge key={f.id} variant="outline" className="text-[10px]">
-                    📁 {f.name}
-                  </Badge>
-                ))}
+              <div className="mt-1 space-y-2">
+                {renderReviewBranch(null, (i) => i.uploaded_by === currentUserId)}
               </div>
             </div>
           )}
-          {fileItems.map((it) => {
-            const status = it.review_status;
-            return (
-              <div
-                key={it.id}
-                className={cn(
-                  "rounded-md border bg-background p-3 transition-colors",
-                  status === "approved" && "border-sky-500/40 bg-sky-500/5",
-                  status === "rejected" && "border-rose-500/30 bg-rose-500/5",
-                  status === "pending" && !isLocked && "border-amber-500/30",
-                )}
-              >
-                <div className="flex flex-wrap items-start gap-3">
-                  <FileText className={cn(
-                    "mt-0.5 h-5 w-5 shrink-0",
-                    status === "approved" ? "text-sky-600" :
-                    status === "rejected" ? "text-rose-600" :
-                    "text-muted-foreground"
-                  )} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <p className="truncate text-sm font-medium">{it.original_name ?? it.name}</p>
-                      <StatusBadge status={status} />
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">
-                      {(it.file_size ? `${(it.file_size / 1024).toFixed(0)} KB · ` : "")}
-                      {it.uploader_name ?? "Employee"} · uploaded {timeAgo(it.created_at)}
-                      {it.reviewed_at && <> · reviewed {timeAgo(it.reviewed_at)}</>}
-                    </p>
-                    {it.review_comment && (
-                      <div className={cn(
-                        "mt-1.5 flex items-start gap-1.5 rounded-md border p-1.5 text-[11px]",
-                        status === "rejected" ? "border-rose-500/20 bg-rose-500/5 text-rose-800" :
-                        "border-amber-500/20 bg-amber-500/5 text-amber-800"
-                      )}>
-                        <MessageSquare className="mt-0.5 h-3 w-3 shrink-0" />
-                        <span>{it.review_comment}</span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <Button size="sm" variant="ghost" onClick={() => safeDownload(it)} disabled={downloadingId === it.id}>
-                      {downloadingId === it.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Download"}
-                    </Button>
-                    {it.storage_object_id && (
-                      <Button size="sm" variant="ghost" onClick={() => setPreviewItem({
-                        id: it.id,
-                        name: it.original_name ?? it.name,
-                        mime_type: it.mime_type,
-                        file_type: it.file_type,
-                        file_size: it.file_size,
-                        storage_object_id: it.storage_object_id,
-                        view_count: 0,
-                      })}>
-                        Preview
-                      </Button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Buyer review controls */}
-                {isBuyer && !isLocked && (workspaceStatus === "delivered" || workspaceStatus === "in_review") && (
-                  <div className="mt-2 border-t pt-2">
-                    {editingId === it.id ? (
-                      <div className="space-y-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-rose-700">
-                          Reject with feedback
-                        </p>
-                        <Textarea
-                          value={rejectComment}
-                          onChange={(e) => setRejectComment(e.target.value)}
-                          placeholder="Explain what needs to change. The employee sees this immediately."
-                          rows={3}
-                          maxLength={2000}
-                          className="text-xs"
-                        />
-                        <p className="text-[10px] text-muted-foreground">
-                          {rejectComment.length}/2000
-                        </p>
-                        <div className="flex justify-end gap-2">
-                          <Button size="sm" variant="ghost" onClick={() => { setEditingId(null); setRejectComment(""); }} disabled={busy}>
-                            Cancel
-                          </Button>
-                          <Button size="sm" variant="destructive" onClick={() => reviewFile(it.id, "rejected", rejectComment.trim())} disabled={busy || !rejectComment.trim()}>
-                            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
-                            Reject
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {status !== "approved" && (
-                          <Button size="sm" variant="default" onClick={() => reviewFile(it.id, "approved")} disabled={busy} className="h-7 bg-sky-600 hover:bg-sky-700">
-                            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                            Approve
-                          </Button>
-                        )}
-                        {/* Request changes is only shown while the file
-                            is still pending OR after the buyer has
-                            approved it (in case they change their
-                            mind). Once rejected, only "re-approve" is
-                            available. */}
-                        {(status === "pending" || status === "approved") && (
-                          <Button size="sm" variant="outline" onClick={() => { setEditingId(it.id); setRejectComment(""); }} disabled={busy} className="h-7 text-rose-700 hover:bg-rose-500/10">
-                            <XCircle className="h-3.5 w-3.5" />Request changes
-                          </Button>
-                        )}
-                        {status === "approved" && (
-                          <span className="text-[10px] font-semibold text-sky-700">
-                            ✓ Approved{it.reviewed_at ? ` on ${new Date(it.reviewed_at).toLocaleDateString()}` : ""}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
+          {items.some((i) => i.uploaded_by !== currentUserId) && (
+            <div className="rounded-md border bg-card p-2">
+              <p className="flex items-center gap-1 border-b pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <Users className="h-3 w-3" />{isBuyer ? "Employee files" : "Buyer files"}
+              </p>
+              <div className="mt-1 space-y-2">
+                {renderReviewBranch(null, (i) => i.uploaded_by !== currentUserId)}
               </div>
-            );
-          })}
+            </div>
+          )}
         </div>
       )}
 

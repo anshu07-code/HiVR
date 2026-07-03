@@ -128,6 +128,12 @@ export async function createTaskAction(formData: FormData): Promise<void> {
   if (error) {
     redirect(`/dashboard/post?error=${encodeURIComponent(error.message)}`);
   }
+  // Grant buyer role if not already held — unlocking the mode switcher.
+  const { data: me } = await sb.from("users").select("roles").eq("id", user.id).maybeSingle();
+  const currentRoles: string[] = (me as any)?.roles ?? [];
+  if (!currentRoles.includes("buyer")) {
+    await sb.from("users").update({ roles: [...currentRoles, "buyer"] }).eq("id", user.id);
+  }
   revalidatePath("/browse");
   revalidatePath("/dashboard");
   redirect(`/browse?just_posted=1&id=${data?.id ?? ""}`);

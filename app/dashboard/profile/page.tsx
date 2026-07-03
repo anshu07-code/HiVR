@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, ExternalLink, Users } from "lucide-react";
 import { ProfileBuilder } from "./profile-builder";
 import { BuyerProfileBuilder } from "./buyer-profile-builder";
+import { ModeSwitcher } from "@/app/dashboard/mode-switcher";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Build your profile — HiVR" };
@@ -87,14 +88,15 @@ export default async function ProfilePage() {
 
   return isBuyerMode ? (
     <div className="container max-w-4xl space-y-6 py-8">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="font-display text-3xl font-semibold tracking-tight">Buyer profile</h1>
+          <h1 className="font-display text-3xl font-semibold tracking-tight" data-tour="profile-header">Buyer profile</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Your public identity as a buyer. Add a photo and company details so employees know who they&apos;re working with.
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <ModeSwitcher roles={roles} currentMode={currentMode} />
           <Button asChild variant="ghost" size="sm">
             <Link href="/dashboard">
               <ArrowLeft className="h-3.5 w-3.5" />
@@ -113,14 +115,15 @@ export default async function ProfilePage() {
     </div>
   ) : (
     <div className="container max-w-4xl space-y-6 py-8">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="font-display text-3xl font-semibold tracking-tight">Build your profile</h1>
+          <h1 className="font-display text-3xl font-semibold tracking-tight" data-tour="profile-header">Build your profile</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Profiles are reviewed by buyers while shortlisting and hiring. Take your time — save anytime, come back later.
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <ModeSwitcher roles={roles} currentMode={currentMode} />
           <Button asChild variant="outline" size="sm">
             <Link href={`/people/${user.id}`}>
               <ExternalLink className="h-3.5 w-3.5" />
@@ -146,6 +149,7 @@ export default async function ProfilePage() {
           headline: (ep as any)?.headline ?? "",
           bio: (ep as any)?.bio ?? "",
           location: (ep as any)?.location ?? "",
+          languages: (ep as any)?.languages ?? [],
           experienceType: (ep as any)?.experience_type ?? "fresher",
           hourlyRatePaise: (ep as any)?.hourly_rate_paise ?? null,
           availabilityHours: (ep as any)?.availability_hours ?? null,

@@ -2,7 +2,7 @@ import { seedSampleTasks, clearSampleTasks } from "./sample-data-actions";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Trash2, Database, Users, FileCheck2, Briefcase, AlertCircle, Wallet, ListChecks, TrendingUp, CreditCard, HandCoins, MessageSquare, CalendarCheck, Send, FileText } from "lucide-react";
+import { Sparkles, Trash2, Database, Users, FileCheck2, Briefcase, AlertCircle, Wallet, ListChecks, TrendingUp, CreditCard, HandCoins, MessageSquare, CalendarCheck, Send, FileText, IndianRupee } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { formatINR } from "@/lib/utils";
@@ -13,7 +13,9 @@ export default async function AdminOverview() {
   await requireAdmin();
   const sb = createClient();
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60_000).toISOString();
-  const [users, verifs, posts, contracts, openDisputes, categories, bankLast30d, bankRev, digilockerLast30d, employeePenalties, buyerPenalties, offers, applications, interviews, messages, completedContracts30d, revenueByCategory, withdrawalsLast30d, escrowReleasedLast30d, escrowReleasedLifetime] = await Promise.all([
+  const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60_000).toISOString();
+  const HIVR_USER_ID = '00000000-0000-0000-0000-0000000000fe';
+  const [users, verifs, posts, contracts, openDisputes, categories, bankLast30d, bankRev, digilockerLast30d, employeePenalties, buyerPenalties, offers, applications, interviews, messages, completedContracts30d, completedContractsPrev30d, revenueByCategory, withdrawalsLast30d, escrowReleasedLast30d, escrowReleasedLifetime, hivrWallet, platformLedger, withdrawalsPrev30d, bankPrev30d, escrowPrev30d, latestLedger] = await Promise.all([
     sb.from("users").select("id", { count: "exact", head: true }),
     sb.from("verifications").select("id", { count: "exact", head: true }).eq("status", "pending"),
     sb.from("task_posts").select("id", { count: "exact", head: true }).eq("status", "open"),
@@ -31,6 +33,8 @@ export default async function AdminOverview() {
     sb.from("messages").select("id", { count: "exact", head: true }),
     // Real per-day revenue source #1: completed workspaces in last 30d
     sb.from("workspaces").select("id, contract_id, completed_at").eq("status", "completed").not("completed_at", "is", null).gte("completed_at", thirtyDaysAgo),
+    // For prev-30d trend comparison
+    sb.from("workspaces").select("id, contract_id, completed_at").eq("status", "completed").not("completed_at", "is", null).gte("completed_at", sixtyDaysAgo).lt("completed_at", thirtyDaysAgo),
     // Real per-category revenue: ONLY completed workspaces (lifetime)
     sb.from("workspaces").select("id, contract_id, completed_at").eq("status", "completed").not("completed_at", "is", null),
     // Real per-day withdraw fee source: penalty_paise from wallet_transactions metadata
@@ -39,6 +43,18 @@ export default async function AdminOverview() {
     sb.from("wallet_transactions").select("amount_paise, kind, created_at").eq("kind", "escrow_release").gte("created_at", thirtyDaysAgo),
     // Lifetime escrow release total
     sb.from("wallet_transactions").select("amount_paise, kind").eq("kind", "escrow_release"),
+    // HiVR Revenue wallet (single source of truth for lifetime revenue)
+    sb.from("user_wallets").select("balance_paise, pending_paise, lifetime_received_paise").eq("user_id", HIVR_USER_ID).maybeSingle(),
+    // Platform revenue ledger (audit log + live ticker)
+    sb.from("platform_revenue_ledger").select("id, source, amount_paise, contract_id, employee_id, description, created_at").eq("wallet_id", HIVR_USER_ID).order("created_at", { ascending: false }).limit(100),
+    // Prev-30d withdraws
+    sb.from("wallet_transactions").select("amount_paise, created_at, metadata").eq("direction", "debit").in("kind", ["withdraw_initiated", "withdraw_completed"]).gte("created_at", sixtyDaysAgo).lt("created_at", thirtyDaysAgo),
+    // Prev-30d bank verifs
+    sb.from("verifications").select("verified_at, metadata", { count: "exact", head: true }).eq("doc_type", "bank").eq("status", "verified").gte("verified_at", sixtyDaysAgo).lt("verified_at", thirtyDaysAgo),
+    // Prev-30d escrow releases
+    sb.from("wallet_transactions").select("amount_paise, created_at").eq("kind", "escrow_release").gte("created_at", sixtyDaysAgo).lt("created_at", thirtyDaysAgo),
+    // Latest ledger row (for the live ticker)
+    sb.from("platform_revenue_ledger").select("created_at, source, amount_paise, contract_id, description").eq("wallet_id", HIVR_USER_ID).order("created_at", { ascending: false }).limit(12),
   ]);
 
   const gmv = (contracts.data ?? []).reduce((s, c) => s + Number(c.agreed_price ?? 0), 0);
@@ -200,6 +216,44 @@ export default async function AdminOverview() {
       };
     });
 
+  // ===========================================================================
+  // HiVR Revenue — single source of truth for platform earnings.
+  // Migration 0132 creates this system user. The wallet is credited
+  // atomically in mark_workspace_done (0133) for every contract
+  // completion. Use the wallet balance + lifetime_received_paise as
+  // ground truth; the per-employee counters are for display only.
+  // ===========================================================================
+  const hivrBalance = Number((hivrWallet as any)?.data?.balance_paise ?? 0);
+  const hivrPending = Number((hivrWallet as any)?.data?.pending_paise ?? 0);
+  const hivrLifetime = Number((hivrWallet as any)?.data?.lifetime_received_paise ?? 0);
+  // Use the HiVR wallet as the authoritative lifetime platform-fee total.
+  // This fixes the drift issue where per-employee total_platform_fees
+  // could be wrong due to failed payouts / reversals.
+  const lifetimePlatformFeePaise = hivrLifetime;
+  const avgFeePerContractPaise = lifetimeContractCount > 0
+    ? Math.round(lifetimePlatformFeePaise / lifetimeContractCount)
+    : 0;
+
+  // Prev-30d revenue (for trend arrow)
+  const prev30dWsArr = (completedContractsPrev30d.data ?? []) as any[];
+  const prev30dWithdrawPaise = (withdrawalsPrev30d.data ?? []).reduce(
+    (s: number, r: any) => s + Number((r as any).metadata?.penalty_paise ?? 0), 0
+  );
+  const prev30dBankPaise = Number(bankPrev30d.count ?? 0) * 100; // ₹1 per bank verif
+  const prev30dPlatformFeePaise = prev30dWsArr.reduce((s: number, w: any) => {
+    const c = contractMap.get(w.contract_id);
+    if (!c) return s;
+    return s + Math.round(Number(c.agreed_price ?? 0) * Number(c.platform_fee_pct ?? 0));
+  }, 0);
+  const prev30dRevenuePaise = prev30dPlatformFeePaise + prev30dWithdrawPaise + prev30dBankPaise;
+
+  // Live ticker — last 12 ledger events
+  const liveTicker = (latestLedger.data ?? []).map((r: any) => ({
+    at: r.created_at,
+    amount: Number(r.amount_paise ?? 0),
+    kind: r.source as string,
+  }));
+
   return (
     <div className="container max-w-6xl space-y-6 py-8">
       <header>
@@ -216,10 +270,9 @@ export default async function AdminOverview() {
       </div>
 
       {/* Row 2 — Revenue & contracts */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Kpi Icon={Wallet} label="GMV (lifetime)" value={formatINR(Math.round(gmv / 100))} hint={`${activeContracts} active contracts`} />
-        <Kpi Icon={TrendingUp} label="Revenue · last 30d" value={formatINR(Math.round(totalRevenue30d / 100))} hint={`Platform fees ${formatINR(Math.round(platformFee30d / 100))} · Withdraw ${formatINR(Math.round(withdrawFee30d / 100))}`} accent="success" />
-        <Kpi Icon={ListChecks} label="Categories" value={String((categories as any).count ?? 0)} hint={`${(categories.data ?? []).filter((c: any) => c.status === "active").length} live`} />
+        <Kpi Icon={IndianRupee} label="HiVR Revenue · lifetime" value={formatINR(Math.round(hivrLifetime / 100))} hint={`Balance ${formatINR(Math.round(hivrBalance / 100))}${hivrPending > 0 ? ` · Pending ${formatINR(Math.round(hivrPending / 100))}` : ""}`} accent="success" />
         <Kpi Icon={CreditCard} label="Bank verif revenue" value={formatINR(Math.round(lifetimeBankRevPaise / 100))} hint={`${bankLast30d.count ?? 0} verifications in last 30d`} accent="success" />
       </div>
 
@@ -337,6 +390,7 @@ export default async function AdminOverview() {
           revenuePaise: d.revenuePaise,
         }))}
         totalRevenue30dPaise={totalRevenue30d}
+        prev30dRevenuePaise={prev30dRevenuePaise}
         byCategory={revenueByCategoryArr}
         totals={{
           total30dPaise: totalRevenue30d,
@@ -346,8 +400,11 @@ export default async function AdminOverview() {
           escrowFee30dPaise: escrowFee30d,
           lifetimeEscrowPaise,
           lifetimeCompletedContractCount: lifetimeContractCount,
+          lifetimePlatformFeePaise,
+          avgFeePerContractPaise,
         }}
         completedContractsList={completedContractsList}
+        liveTicker={liveTicker}
       />
 
       {/* ONE-CLICK SAMPLE DATA */}

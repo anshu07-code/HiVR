@@ -3,6 +3,8 @@ import { Space_Grotesk, Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme/provider";
 import { AssistantLauncher } from "@/components/assistant/launcher";
+import { TourRoot } from "@/components/onboarding/tour-root";
+import { LiveNotificationPopup } from "@/components/notifications/live-popup";
 import { cn } from "@/lib/utils";
 
 const sans = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
@@ -39,14 +41,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="HiVR" />
-        <link rel="apple-touch-icon" href="/icon-192.svg" />
+        <link rel="apple-touch-icon" href="/icon-192.png" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="application-name" content="HiVR" />
       </head>
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">
         <ThemeProvider>
-          {children}
+          <div className="mobile-page-enter">
+            {children}
+          </div>
           <AssistantLauncher />
+          <TourRoot />
+          <LiveNotificationPopup />
         </ThemeProvider>
         <script
           dangerouslySetInnerHTML={{

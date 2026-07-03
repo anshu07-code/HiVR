@@ -9,6 +9,23 @@ export default async function ReviewsPage() {
   const { data: { user } } = await sb.auth.getUser();
   if (!user) redirect("/auth/signin?next=/dashboard/reviews");
 
+  // Count-only queries (no joins) to verify data exists
+  const { count: givenCount } = await sb
+    .from("reviews")
+    .select("id", { count: "exact", head: true })
+    .eq("reviewer_id", user.id);
+
+  const { count: receivedCount } = await sb
+    .from("reviews")
+    .select("id", { count: "exact", head: true })
+    .eq("reviewee_id", user.id);
+
+  const { count: completedCount } = await sb
+    .from("contracts")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "completed")
+    .or(`buyer_id.eq.${user.id},employee_id.eq.${user.id}`);
+
   // Reviews I've GIVEN
   const { data: given, error: gErr } = await sb
     .from("reviews")
@@ -16,8 +33,8 @@ export default async function ReviewsPage() {
       id, contract_id, reviewee_id, rating, comment,
       editable_until, created_at,
       reviewee:users!reviews_reviewee_id_fkey(id, full_name, avatar_url),
-      contract:contracts!inner(
-        id, status, task_post_id, completed_at,
+      contract:contracts!reviews_contract_id_fkey(
+        id, status, task_post_id, approved_at,
         task:task_posts(id, title, category_id)
       )
     `)
@@ -25,12 +42,29 @@ export default async function ReviewsPage() {
     .order("created_at", { ascending: false });
 
   if (gErr) {
-    // eslint-disable-next-line no-console
     console.error("[reviews] given fetch failed:", gErr);
   }
 
+  // Reviews I've RECEIVED
+  const { data: received, error: rErr } = await sb
+    .from("reviews")
+    .select(`
+      id, contract_id, reviewer_id, rating, comment,
+      editable_until, created_at,
+      reviewer:users!reviews_reviewer_id_fkey(id, full_name, avatar_url),
+      contract:contracts!reviews_contract_id_fkey(
+        id, status, task_post_id, approved_at,
+        task:task_posts(id, title, category_id)
+      )
+    `)
+    .eq("reviewee_id", user.id)
+    .order("created_at", { ascending: false });
+
+  if (rErr) {
+    console.error("[reviews] received fetch failed:", rErr);
+  }
+
   // Completed contracts awaiting my review
-  // (RLS already scopes to contracts where the user is a party)
   const { data: pending, error: pErr } = await sb
     .from("contracts")
     .select(`
@@ -45,7 +79,6 @@ export default async function ReviewsPage() {
     .limit(50);
 
   if (pErr) {
-    // eslint-disable-next-line no-console
     console.error("[reviews] pending fetch failed:", pErr);
   }
 
@@ -53,10 +86,21 @@ export default async function ReviewsPage() {
   const givenContractIds = new Set((given ?? []).map((g: any) => g.contract_id));
   const pendingList = (pending ?? []).filter((p: any) => !givenContractIds.has(p.id));
 
+  console.log("[reviews debug]", {
+    userId: user.id,
+    givenCount,
+    receivedCount,
+    completedCount,
+    givenReturned: (given ?? []).length,
+    receivedReturned: (received ?? []).length,
+    pendingReturned: pendingList.length,
+  });
+
   return (
     <ReviewsGiven
       userId={user.id}
       initialGiven={(given ?? []) as any[]}
+      initialReceived={(received ?? []) as any[]}
       initialPending={pendingList as any[]}
     />
   );

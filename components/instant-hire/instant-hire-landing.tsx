@@ -265,7 +265,7 @@ export function InstantHireLanding({
             <Badge variant="tierA" className="mb-4">
               <Zap className="mr-1 h-3 w-3" /> New — Instant Hire
             </Badge>
-            <h1 className="font-display text-4xl font-semibold leading-[1.05] tracking-tight text-balance md:text-5xl lg:text-6xl">
+            <h1 data-tour="instant-hire" className="font-display text-4xl font-semibold leading-[1.05] tracking-tight text-balance md:text-5xl lg:text-6xl">
               Hire in seconds.<br />
               <span className="bg-gradient-to-r from-primary via-amber-500 to-rose-500 bg-clip-text text-transparent">
                 Pay only when done.

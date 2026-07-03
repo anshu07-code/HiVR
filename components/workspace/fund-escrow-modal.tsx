@@ -81,7 +81,7 @@ export function FundEscrowModal({
   onClose: () => void;
   onDone: () => void;
 }) {
-  const [source, setSource] = React.useState<"razorpay" | "wallet">("razorpay");
+  const [source, setSource] = React.useState<"razorpay" | "razorpay_direct" | "wallet">("razorpay");
   const [phase, setPhase] = React.useState<"idle" | "creating" | "checkout" | "verifying" | "error">("idle");
   const [error, setError] = React.useState<string | null>(null);
   const [walletBalance, setWalletBalance] = React.useState<number | null>(null);
@@ -160,10 +160,13 @@ export function FundEscrowModal({
     setPhase("creating");
     try {
       // 1. Create the Razorpay order
-      const createRes = await fetch("/api/workspace/fund/create-order", {
+      const endpoint = source === "razorpay_direct"
+        ? "/api/workspace/fund/direct-razorpay-escrow"
+        : "/api/workspace/fund/create-order";
+      const createRes = await fetch(endpoint, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ workspaceId }),
+        body: JSON.stringify({ workspaceId, step: "create" }),
       });
       const createData = await createRes.json();
       if (!createRes.ok || !createData.ok) {
@@ -186,7 +189,7 @@ export function FundEscrowModal({
         amount: createData.amount,
         currency: createData.currency,
         name: "HiVR",
-        description: "Workspace escrow funding",
+        description: source === "razorpay_direct" ? "Direct escrow funding (Razorpay)" : "Workspace escrow funding",
         image: "/logo.svg",
         order_id: createData.orderId,
         // Explicitly enable all payment methods. Razorpay's standard
@@ -227,11 +230,15 @@ export function FundEscrowModal({
         }) => {
           setPhase("verifying");
           try {
-            const verifyRes = await fetch("/api/workspace/fund/verify", {
+            const verifyEndpoint = source === "razorpay_direct"
+              ? "/api/workspace/fund/direct-razorpay-escrow"
+              : "/api/workspace/fund/verify";
+            const verifyRes = await fetch(verifyEndpoint, {
               method: "POST",
               headers: { "content-type": "application/json" },
               body: JSON.stringify({
                 workspaceId,
+                step: "verify",
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
@@ -283,20 +290,29 @@ export function FundEscrowModal({
           </p>
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-1.5 rounded-md border bg-muted/20 p-1">
+        <div className="mt-3 grid grid-cols-3 gap-1.5 rounded-md border bg-muted/20 p-1">
+          <button
+            onClick={() => setSource("razorpay_direct")}
+            className={`rounded px-1.5 py-1.5 text-[10px] font-semibold transition-colors ${source === "razorpay_direct" ? "bg-background shadow" : "text-muted-foreground hover:text-foreground"}`}
+            title="Direct Razorpay escrow — money is held by Razorpay until the work is approved, then released to the employee's wallet"
+          >
+            <ShieldCheck className="mr-0.5 inline h-3 w-3" />Razorpay Direct
+          </button>
           <button
             onClick={() => setSource("razorpay")}
-            className={`rounded px-2 py-1.5 text-[11px] font-semibold transition-colors ${source === "razorpay" ? "bg-background shadow" : "text-muted-foreground hover:text-foreground"}`}
+            className={`rounded px-1.5 py-1.5 text-[10px] font-semibold transition-colors ${source === "razorpay" ? "bg-background shadow" : "text-muted-foreground hover:text-foreground"}`}
+            title="Razorpay top-up + auto-fund — adds money to your HiVR wallet, then immediately funds the escrow"
           >
-            <ShieldCheck className="mr-1 inline h-3 w-3" />Razorpay
+            <Plus className="mr-0.5 inline h-3 w-3" />Razorpay → Wallet
           </button>
           <button
             onClick={() => setSource("wallet")}
-            className={`rounded px-2 py-1.5 text-[11px] font-semibold transition-colors ${source === "wallet" ? "bg-background shadow" : "text-muted-foreground hover:text-foreground"}`}
+            className={`rounded px-1.5 py-1.5 text-[10px] font-semibold transition-colors ${source === "wallet" ? "bg-background shadow" : "text-muted-foreground hover:text-foreground"}`}
+            title="Pay from your existing HiVR wallet balance"
           >
-            <Wallet className="mr-1 inline h-3 w-3" />HiVR Wallet
+            <Wallet className="mr-0.5 inline h-3 w-3" />Wallet
             {walletBalance !== null && (
-              <span className="ml-1 text-[9px] font-mono font-normal text-muted-foreground">
+              <span className="ml-0.5 text-[9px] font-mono font-normal text-muted-foreground">
                 ({formatPaise(walletBalance)})
               </span>
             )}
@@ -324,7 +340,10 @@ export function FundEscrowModal({
             <KeyRound className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <div className="space-y-1">
               <p>
-                Opens the <strong>Razorpay checkout</strong> with UPI, Card, Netbanking, and Wallet.
+                <strong>Razorpay top-up + auto-fund.</strong> Loads the money into your HiVR wallet first, then immediately funds the escrow from it. Use this if you want to keep the wallet balance for future use.
+              </p>
+              <p className="text-[10px] opacity-80">
+                ⚡ Instant credit once Razorpay payment succeeds.
               </p>
               <details className="rounded bg-sky-500/10 p-1.5 text-[10px]">
                 <summary className="cursor-pointer font-semibold">Test mode payment details</summary>
@@ -333,6 +352,26 @@ export function FundEscrowModal({
                   <li><strong>UPI</strong>: enter <code className="rounded bg-muted px-1">success@upi</code> (or <code className="rounded bg-muted px-1">failure@upi</code> to test failure)</li>
                   <li><strong>Netbanking</strong>: pick any test bank → click "Success"</li>
                   <li><strong>Wallet</strong>: pick Paytm/Wallet → click "Success"</li>
+                </ul>
+              </details>
+            </div>
+          </div>
+        )}
+        {phase === "idle" && source === "razorpay_direct" && (
+          <div className="mt-3 flex items-start gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2.5 text-[11px] text-emerald-700">
+            <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <div className="space-y-1">
+              <p>
+                <strong>Direct Razorpay escrow.</strong> Money goes straight to Razorpay's escrow — never touches your HiVR wallet. Best for new users without a wallet balance.
+              </p>
+              <p className="text-[10px] opacity-90">
+                ⏱ On completion, the payout is marked <em>pending</em> in the employee's wallet until Razorpay releases the funds to HiVR's pool (usually minutes). Withdrawable once the payout webhook fires.
+              </p>
+              <details className="rounded bg-emerald-500/10 p-1.5 text-[10px]">
+                <summary className="cursor-pointer font-semibold">Test mode payment details</summary>
+                <ul className="mt-1 list-disc pl-4 space-y-0.5">
+                  <li><strong>Card</strong>: <code className="rounded bg-muted px-1">4111 1111 1111 1111</code>, any future expiry, any CVV</li>
+                  <li><strong>UPI</strong>: enter <code className="rounded bg-muted px-1">success@upi</code> (or <code className="rounded bg-muted px-1">failure@upi</code> to test failure)</li>
                 </ul>
               </details>
             </div>

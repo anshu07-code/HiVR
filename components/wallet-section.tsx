@@ -1,13 +1,15 @@
 "use client";
 
 import * as React from "react";
-import { Wallet, Plus, ArrowDownToLine, Loader2, X, AlertTriangle, CheckCircle2, Sparkles, Send, RefreshCw } from "lucide-react";
+import { Wallet, Plus, ArrowDownToLine, Loader2, X, AlertTriangle, CheckCircle2, Sparkles, Send, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatPaise, timeAgo } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+
+type WalletTimeRange = "today" | "10d" | "month" | "all";
 
 declare global {
   interface Window { Razorpay?: any; }
@@ -69,6 +71,21 @@ export function WalletSection({ userFullName, userEmail, userPhone }: { userFull
   const [adding, setAdding] = React.useState(false);
   const [addError, setAddError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState<string | null>(null);
+  const [txCollapsed, setTxCollapsed] = React.useState(true);
+  const [txTimeRange, setTxTimeRange] = React.useState<WalletTimeRange>("month");
+
+  const filteredTxs = React.useMemo(() => {
+    const now = Date.now();
+    const msInDay = 86400000;
+    const startOfToday = new Date(new Date().toISOString().slice(0, 10)).getTime();
+    const cutoff = txTimeRange === "today" ? startOfToday
+      : txTimeRange === "10d" ? now - 10 * msInDay
+      : txTimeRange === "month" ? now - 30 * msInDay
+      : 0;
+    return txs.filter((t) => new Date(t.created_at).getTime() >= cutoff);
+  }, [txs, txTimeRange]);
+  const displayTxs = txCollapsed ? filteredTxs.slice(0, 5) : filteredTxs;
+  const txsHasMore = filteredTxs.length > 5;
 
   const load = React.useCallback(async () => {
     if (!sbRef.current) sbRef.current = createClient();
@@ -267,14 +284,19 @@ export function WalletSection({ userFullName, userEmail, userPhone }: { userFull
         )}
 
         <div>
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Recent transactions</p>
-          {txs.length === 0 ? (
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Recent transactions</p>
+            <WalletTimeFilter value={txTimeRange} onChange={setTxTimeRange} />
+          </div>
+          {filteredTxs.length === 0 ? (
             <p className="rounded-md border border-dashed bg-muted/20 py-8 text-center text-xs text-muted-foreground">
-              No transactions yet. Add money to your wallet to get started.
+              {txs.length === 0
+                ? "No transactions yet. Add money to your wallet to get started."
+                : "No transactions in this period."}
             </p>
           ) : (
             <div className="space-y-1">
-              {txs.map((t) => {
+              {displayTxs.map((t) => {
                 const meta = KIND_META[t.kind] ?? KIND_META.adjustment;
                 const Icon = meta.icon;
                 return (
@@ -297,8 +319,42 @@ export function WalletSection({ userFullName, userEmail, userPhone }: { userFull
               })}
             </div>
           )}
+          {txsHasMore && (
+            <Button variant="ghost" size="sm" className="mt-2 w-full text-xs" onClick={() => setTxCollapsed(!txCollapsed)}>
+              {txCollapsed ? (
+                <><ChevronDown className="mr-1 h-3.5 w-3.5" /> Show all ({filteredTxs.length})</>
+              ) : (
+                <><ChevronUp className="mr-1 h-3.5 w-3.5" /> Show less</>
+              )}
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function WalletTimeFilter({ value, onChange }: { value: WalletTimeRange; onChange: (v: WalletTimeRange) => void }) {
+  const opts: { label: string; value: WalletTimeRange }[] = [
+    { label: "Today", value: "today" },
+    { label: "10d", value: "10d" },
+    { label: "Month", value: "month" },
+    { label: "All", value: "all" },
+  ];
+  return (
+    <div className="flex items-center gap-0.5 rounded-md border p-0.5">
+      {opts.map((o) => (
+        <button
+          key={o.value}
+          onClick={() => onChange(o.value)}
+          className={cn(
+            "rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors",
+            value === o.value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
   );
 }

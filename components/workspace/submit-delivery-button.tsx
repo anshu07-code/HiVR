@@ -66,7 +66,19 @@ export function SubmitDeliveryButton({
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok || !data.ok) {
-        setError(data?.error ?? "Failed to submit");
+        const raw = data?.error ?? "Failed to submit";
+        // Translate the SQL error into a friendlier hint and refresh
+        // the workspace state so the UI catches up.
+        if (/cannot be re-submitted|cannot be submitted|already (been )?delivered/i.test(raw)) {
+          setError("You've already submitted delivery. Wait for the buyer to review — if they request changes, you can re-submit then.");
+          onDone();
+        } else if (/checklist item/i.test(raw)) {
+          setError(raw);
+        } else if (/not uploaded any files/i.test(raw)) {
+          setError(raw);
+        } else {
+          setError(raw);
+        }
         return;
       }
       setOpen(false);

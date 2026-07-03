@@ -2,13 +2,15 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { MessageSquare, ShieldAlert, Users, Briefcase, Eye, AlertTriangle } from "lucide-react";
+import { MessageSquare, ShieldAlert, Users, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatPaise, timeAgo } from "@/lib/utils";
+import { timeAgo } from "@/lib/utils";
 import { LiveFlaggedChats } from "./live-flagged-chats";
 import { LiveMonitoringPanel } from "@/components/admin/live-monitoring-panel";
 import { VaultMonitorPanel } from "@/components/admin/vault-monitor-panel";
+import { SettlementMonitorPanel } from "@/components/admin/settlement-monitor-panel";
+import { RealtimePreHiringChats } from "@/components/admin/realtime-prehiring";
 
 export const dynamic = "force-dynamic";
 
@@ -29,18 +31,6 @@ export default async function ContactAdminHome() {
       </div>
     );
   }
-
-  // Get all contracts + their latest message + parties
-  const { data: contracts } = await sb
-    .from("contracts")
-    .select(`
-      id, status, agreed_price, started_at, last_message_at,
-      buyer:users!contracts_buyer_id_fkey(id, full_name, email, is_suspended, contact_warning_count),
-      employee:users!contracts_employee_id_fkey(id, full_name, email, is_suspended, contact_warning_count),
-      category:skill_categories(name, tier)
-    `)
-    .order("last_message_at", { ascending: false, nullsFirst: false })
-    .limit(200);
 
   // Get flagged messages
   const { data: flagged } = await sb
@@ -82,17 +72,12 @@ export default async function ContactAdminHome() {
       </div>
 
       <LiveFlaggedChats />
-      <LiveMonitoringPanel />
+      <LiveMonitoringPanel monitorPath="/admin/monitor" />
       <VaultMonitorPanel />
+      <SettlementMonitorPanel />
 
       {/* Quick actions */}
-      <div className="grid gap-3 sm:grid-cols-4">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Active contracts</p>
-            <p className="mt-1 text-2xl font-bold">{contracts?.length ?? 0}</p>
-          </CardContent>
-        </Card>
+      <div className="grid gap-3 sm:grid-cols-2">
         <Card>
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground">Flagged messages</p>
@@ -103,12 +88,6 @@ export default async function ContactAdminHome() {
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground">Suspended users</p>
             <p className="mt-1 text-2xl font-bold text-amber-600">{warned?.filter(w => w.is_suspended).length ?? 0}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Users with warnings</p>
-            <p className="mt-1 text-2xl font-bold text-amber-600">{warned?.filter(w => !w.is_suspended && (w.contact_warning_count ?? 0) > 0).length ?? 0}</p>
           </CardContent>
         </Card>
       </div>
@@ -143,37 +122,7 @@ export default async function ContactAdminHome() {
         </Card>
       )}
 
-      {/* Pre-hiring chat monitoring */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-amber-600">
-            <MessageSquare className="h-4 w-4" />Pre-hiring chats ({preHiringCount ?? 0})
-          </CardTitle>
-          <CardDescription>Buyer↔applicant direct messages before hiring. All monitored for compliance.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-1.5">
-          {!recentPreHiring || recentPreHiring.length === 0 ? (
-            <p className="py-4 text-center text-sm text-muted-foreground">No pre-hiring chat activity.</p>
-          ) : recentPreHiring.map((m: any) => (
-            <Link
-              key={m.id}
-              href={`/admin/monitor/${m.task_id}`}
-              className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50"
-            >
-              <div className="grid h-9 w-9 place-items-center rounded-full bg-amber-500/10 text-amber-600">
-                <MessageSquare className="h-4 w-4" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold">
-                  {m.sender?.full_name ?? "?"} → {m.receiver?.full_name ?? "?"}
-                </p>
-                <p className="truncate text-xs text-muted-foreground">{m.body}</p>
-              </div>
-              <span className="whitespace-nowrap text-[10px] text-muted-foreground">{timeAgo(m.created_at)}</span>
-            </Link>
-          ))}
-        </CardContent>
-      </Card>
+      <RealtimePreHiringChats initialData={recentPreHiring as any} />
 
       {/* Q&A monitoring */}
       <Card>
@@ -203,49 +152,6 @@ export default async function ContactAdminHome() {
                 <p className="truncate text-xs text-muted-foreground">{q.body}</p>
               </div>
               <span className="whitespace-nowrap text-[10px] text-muted-foreground">{timeAgo(q.created_at)}</span>
-            </Link>
-          ))}
-        </CardContent>
-      </Card>
-
-      {/* Contracts */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Active conversations</CardTitle>
-          <CardDescription>Click any contract to view the full chat thread.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-1.5">
-          {!contracts || contracts.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">No active contracts.</p>
-          ) : contracts.map((c: any) => (
-            <Link
-              key={c.id}
-              href={`/admin/monitor/${c.id}`}
-              className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50"
-            >
-              <div className="grid h-9 w-9 place-items-center rounded-full bg-primary/10 text-primary">
-                <MessageSquare className="h-4 w-4" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="truncate text-sm font-semibold">{c.buyer?.full_name ?? "Buyer"}</span>
-                  <span className="text-xs text-muted-foreground">↔</span>
-                  <span className="truncate text-sm font-semibold">{c.employee?.full_name ?? "Employee"}</span>
-                  <Badge variant="outline" className="text-[10px]">{c.category?.name}</Badge>
-                  {c.status !== "active" && <Badge variant="secondary" className="text-[10px]">{c.status}</Badge>}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Started {timeAgo(c.started_at)} · {formatPaise(c.agreed_price)}
-                </p>
-              </div>
-              {(c.buyer?.contact_warning_count > 0 || c.employee?.contact_warning_count > 0) && (
-                <Badge variant="destructive" className="text-[10px]">
-                  ⚠ {(c.buyer?.contact_warning_count ?? 0) + (c.employee?.contact_warning_count ?? 0)} warnings
-                </Badge>
-              )}
-              <Button size="sm" variant="outline">
-                <Eye className="h-3 w-3" />View
-              </Button>
             </Link>
           ))}
         </CardContent>

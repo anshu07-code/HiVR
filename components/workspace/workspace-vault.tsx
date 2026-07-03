@@ -652,162 +652,199 @@ export function WorkspaceVault({
     }
   };
 
-  // ---- Folder tree ----
-  const renderFolderTree = (parentId: string | null, depth: number) => {
-    const list = parentId === null ? rootFolders : folders.filter((f) => f.parent_id === parentId);
-    return list.map((f) => {
-      const isOpen = expanded.has(f.id);
-      const isCurrent = currentFolder === f.id;
-      const counts = countInFolder(f.id);
-      const isDropTarget = dropTargetFolderId === f.id;
-      return (
-        <div key={f.id}>
-          <div
-            className={cn(
-              "group flex items-center gap-1 rounded px-1 py-1 text-sm transition-colors",
-              isCurrent ? "bg-muted font-medium" : "hover:bg-muted/60",
-              isDropTarget && "ring-2 ring-primary bg-primary/10",
+  // ---- Folder tree (renders files within folders, accepts owner filter) ----
+  const renderFolderTree = (
+    parentId: string | null,
+    depth: number,
+    filterFn: (item: VaultItem) => boolean,
+    editable: boolean,
+  ) => {
+    const folderList = folders.filter(
+      (f) => (f.parent_id ?? null) === parentId && filterFn(f),
+    );
+    const fileList = items.filter(
+      (i) => !i.is_folder && (i.parent_id ?? null) === parentId && filterFn(i),
+    );
+    const combined = [...folderList, ...fileList];
+    return combined.map((item) => {
+      if (item.is_folder) {
+        const f = item;
+        const isOpen = expanded.has(f.id);
+        const isCurrent = currentFolder === f.id;
+        const counts = countInFolder(f.id);
+        const isDropTarget = dropTargetFolderId === f.id;
+        return (
+          <div key={f.id}>
+            <div
+              className={cn(
+                "group flex items-center gap-1 rounded px-1 py-1 text-sm transition-colors",
+                isCurrent ? "bg-muted font-medium" : "hover:bg-muted/60",
+                isDropTarget && "ring-2 ring-primary bg-primary/10",
+              )}
+              style={{ paddingLeft: depth * 14 + 4 }}
+              onDragOver={(e) => {
+                if (!editable || isLocked) return;
+                e.preventDefault();
+                e.stopPropagation();
+                setDropTargetFolderId(f.id);
+              }}
+              onDragLeave={(e) => {
+                if (e.currentTarget === e.target) setDropTargetFolderId(null);
+              }}
+              onDrop={(e) => {
+                if (!editable || isLocked) return;
+                e.preventDefault();
+                e.stopPropagation();
+                setDropTargetFolderId(null);
+                handleDropIntoFolder(e, f.id);
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => toggleExpand(f.id)}
+                className="grid h-4 w-4 shrink-0 place-items-center text-muted-foreground"
+              >
+                {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentFolder(f.id)}
+                className="flex flex-1 items-center gap-1.5 truncate text-left"
+              >
+                <Folder className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                {renaming === f.id ? (
+                  <Input
+                    autoFocus
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onBlur={() => commitRename(f.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") commitRename(f.id);
+                      if (e.key === "Escape") setRenaming(null);
+                    }}
+                    className="h-6 text-xs"
+                  />
+                ) : (
+                  <>
+                    <span className="truncate text-xs">{f.name}</span>
+                    {(counts.files > 0 || counts.folders > 0) && (
+                      <span className="shrink-0 rounded bg-muted/60 px-1 text-[9px] text-muted-foreground">
+                        {counts.files > 0 && `${counts.files} file${counts.files === 1 ? "" : "s"}`}
+                        {counts.files > 0 && counts.folders > 0 && " · "}
+                        {counts.folders > 0 && `${counts.folders} folder${counts.folders === 1 ? "" : "s"}`}
+                      </span>
+                    )}
+                  </>
+                )}
+              </button>
+              {editable && !isLocked && (
+                <div className="hidden items-center gap-0.5 group-hover:flex">
+                  <button
+                    type="button"
+                    onClick={() => setNewSubfolderParentId(f.id)}
+                    className="grid h-5 w-5 place-items-center rounded text-muted-foreground hover:bg-background"
+                    title="New subfolder here"
+                  >
+                    <FolderPlus className="h-3 w-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewFileParentId(f.id);
+                      setNewFileName("");
+                      setTimeout(() => {
+                        const el = document.getElementById(`vault-new-file-${f.id}`) as HTMLInputElement | null;
+                        el?.focus();
+                      }, 50);
+                    }}
+                    className="grid h-5 w-5 place-items-center rounded text-muted-foreground hover:bg-background"
+                    title="New file here"
+                  >
+                    <FilePlus className="h-3 w-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => startRename(f)}
+                    className="grid h-5 w-5 place-items-center rounded text-muted-foreground hover:bg-background"
+                    title="Rename"
+                  >
+                    <Edit2 className="h-3 w-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openDelete(f)}
+                    className="grid h-5 w-5 place-items-center rounded text-muted-foreground hover:bg-background hover:text-destructive"
+                    title="Delete"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
+            </div>
+            {newSubfolderParentId === f.id && editable && !isLocked && (
+              <div className="mt-0.5 mb-0.5 flex items-center gap-1" style={{ paddingLeft: (depth + 1) * 14 + 4 }}>
+                <FolderPlus className="h-3 w-3 text-muted-foreground" />
+                <Input
+                  autoFocus
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") createSubfolder();
+                    if (e.key === "Escape") { setNewSubfolderParentId(null); setNewFolderName(""); }
+                  }}
+                  placeholder="Subfolder name"
+                  className="h-6 text-xs"
+                />
+                <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={createSubfolder} disabled={busy}><Plus className="h-3 w-3" /></Button>
+                <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => { setNewSubfolderParentId(null); setNewFolderName(""); }}><X className="h-3 w-3" /></Button>
+              </div>
             )}
-            style={{ paddingLeft: depth * 14 + 4 }}
-            onDragOver={(e) => {
-              if (isLocked) return;
-              e.preventDefault();
-              e.stopPropagation();
-              setDropTargetFolderId(f.id);
-            }}
-            onDragLeave={(e) => {
-              if (e.currentTarget === e.target) setDropTargetFolderId(null);
-            }}
-            onDrop={(e) => {
-              if (isLocked) return;
-              e.preventDefault();
-              e.stopPropagation();
-              setDropTargetFolderId(null);
-              handleDropIntoFolder(e, f.id);
-            }}
+            {newFileParentId === f.id && editable && !isLocked && (
+              <div className="mt-0.5 mb-0.5 flex items-center gap-1" style={{ paddingLeft: (depth + 1) * 14 + 4 }}>
+                <FilePlus className="h-3 w-3 text-muted-foreground" />
+                <Input
+                  id={`vault-new-file-${f.id}`}
+                  autoFocus
+                  value={newFileName}
+                  onChange={(e) => setNewFileName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") createNewFile(f.id);
+                    if (e.key === "Escape") { setNewFileParentId(null); setNewFileName(""); }
+                  }}
+                  placeholder="filename.md"
+                  className="h-6 text-xs"
+                />
+                <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => createNewFile(f.id)} disabled={busy}><Plus className="h-3 w-3" /></Button>
+                <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => { setNewFileParentId(null); setNewFileName(""); }}><X className="h-3 w-3" /></Button>
+              </div>
+            )}
+            {isOpen && (
+              <>
+                {renderFolderTree(f.id, depth + 1, filterFn, editable)}
+              </>
+            )}
+          </div>
+        );
+      } else {
+        const file = item;
+        const FileIcon = FILE_ICON[file.file_type ?? "other"] ?? FileText;
+        const color = FILE_COLOR[file.file_type ?? "other"] ?? "text-muted-foreground";
+        return (
+          <div
+            key={file.id}
+            style={{ paddingLeft: depth * 14 + 4 + 16 }}
           >
             <button
               type="button"
-              onClick={() => toggleExpand(f.id)}
-              className="grid h-4 w-4 shrink-0 place-items-center text-muted-foreground"
+              onClick={() => openPreview(file)}
+              className="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left text-xs hover:bg-muted/50"
             >
-              {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              <FileIcon className={cn("h-3 w-3 shrink-0", color)} />
+              <span className="truncate text-muted-foreground">{file.original_name ?? file.name}</span>
             </button>
-            <button
-              type="button"
-              onClick={() => setCurrentFolder(f.id)}
-              className="flex flex-1 items-center gap-1.5 truncate text-left"
-            >
-              <Folder className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-              {renaming === f.id ? (
-                <Input
-                  autoFocus
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  onBlur={() => commitRename(f.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") commitRename(f.id);
-                    if (e.key === "Escape") setRenaming(null);
-                  }}
-                  className="h-6 text-xs"
-                />
-              ) : (
-                <>
-                  <span className="truncate text-xs">{f.name}</span>
-                  {(counts.files > 0 || counts.folders > 0) && (
-                    <span className="shrink-0 rounded bg-muted/60 px-1 text-[9px] text-muted-foreground">
-                      {counts.files > 0 && `${counts.files} file${counts.files === 1 ? "" : "s"}`}
-                      {counts.files > 0 && counts.folders > 0 && " · "}
-                      {counts.folders > 0 && `${counts.folders} folder${counts.folders === 1 ? "" : "s"}`}
-                    </span>
-                  )}
-                </>
-              )}
-            </button>
-            {!isLocked && (
-              <div className="hidden items-center gap-0.5 group-hover:flex">
-                <button
-                  type="button"
-                  onClick={() => setNewSubfolderParentId(f.id)}
-                  className="grid h-5 w-5 place-items-center rounded text-muted-foreground hover:bg-background"
-                  title="New subfolder here"
-                >
-                  <FolderPlus className="h-3 w-3" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setNewFileParentId(f.id);
-                    setNewFileName("");
-                    setTimeout(() => {
-                      const el = document.getElementById(`vault-new-file-${f.id}`) as HTMLInputElement | null;
-                      el?.focus();
-                    }, 50);
-                  }}
-                  className="grid h-5 w-5 place-items-center rounded text-muted-foreground hover:bg-background"
-                  title="New file here"
-                >
-                  <FilePlus className="h-3 w-3" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => startRename(f)}
-                  className="grid h-5 w-5 place-items-center rounded text-muted-foreground hover:bg-background"
-                  title="Rename"
-                >
-                  <Edit2 className="h-3 w-3" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openDelete(f)}
-                  className="grid h-5 w-5 place-items-center rounded text-muted-foreground hover:bg-background hover:text-destructive"
-                  title="Delete"
-                >
-                  <Trash2 className="h-3 w-3" />
-                </button>
-              </div>
-            )}
           </div>
-          {newSubfolderParentId === f.id && !isLocked && (
-            <div className="mt-0.5 mb-0.5 flex items-center gap-1" style={{ paddingLeft: (depth + 1) * 14 + 4 }}>
-              <FolderPlus className="h-3 w-3 text-muted-foreground" />
-              <Input
-                autoFocus
-                value={newFolderName}
-                onChange={(e) => setNewFolderName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") createSubfolder();
-                  if (e.key === "Escape") { setNewSubfolderParentId(null); setNewFolderName(""); }
-                }}
-                placeholder="Subfolder name"
-                className="h-6 text-xs"
-              />
-              <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={createSubfolder} disabled={busy}><Plus className="h-3 w-3" /></Button>
-              <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => { setNewSubfolderParentId(null); setNewFolderName(""); }}><X className="h-3 w-3" /></Button>
-            </div>
-          )}
-          {newFileParentId === f.id && !isLocked && (
-            <div className="mt-0.5 mb-0.5 flex items-center gap-1" style={{ paddingLeft: (depth + 1) * 14 + 4 }}>
-              <FilePlus className="h-3 w-3 text-muted-foreground" />
-              <Input
-                id={`vault-new-file-${f.id}`}
-                autoFocus
-                value={newFileName}
-                onChange={(e) => setNewFileName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") createNewFile(f.id);
-                  if (e.key === "Escape") { setNewFileParentId(null); setNewFileName(""); }
-                }}
-                placeholder="filename.md"
-                className="h-6 text-xs"
-              />
-              <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => createNewFile(f.id)} disabled={busy}><Plus className="h-3 w-3" /></Button>
-              <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => { setNewFileParentId(null); setNewFileName(""); }}><X className="h-3 w-3" /></Button>
-            </div>
-          )}
-          {isOpen && renderFolderTree(f.id, depth + 1)}
-        </div>
-      );
+        );
+      }
     });
   };
 
@@ -937,11 +974,16 @@ export function WorkspaceVault({
     </div>
   );
 
-  // Build the explorer sidebar
+  // Build the explorer sidebar (filtered by ownerFilter)
   const explorer = viewMode === "folder" ? (
     <div className="flex max-h-[520px] flex-col rounded-md border bg-card p-2">
       <div className="flex items-center justify-between border-b pb-1.5">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Explorer</p>
+        <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <Folder className="h-3 w-3" />Explorer
+          {ownerFilter !== "all" && (
+            <span className="rounded bg-muted px-1 text-[9px] text-muted-foreground">{ownerFilter}</span>
+          )}
+        </p>
         <div className="flex items-center gap-0.5">
           {folders.length > 0 && (
             <>
@@ -963,7 +1005,7 @@ export function WorkspaceVault({
               </button>
             </>
           )}
-          {!isLocked && (
+          {!isLocked && ownerFilter !== "theirs" && (
             <>
               <button
                 type="button"
@@ -1000,16 +1042,6 @@ export function WorkspaceVault({
           )}
         </div>
       </div>
-      <button
-        type="button"
-        onClick={() => setCurrentFolder(null)}
-        className={cn(
-          "mt-1 flex w-full items-center gap-1.5 rounded px-2 py-1 text-xs hover:bg-muted",
-          currentFolder === null && "bg-muted",
-        )}
-      >
-        <Folder className="h-3.5 w-3.5 text-amber-500" /> Root
-      </button>
       {showNewFolder && (
         <div className="mt-1 flex items-center gap-1 pl-1.5">
           <FolderPlus className="h-3 w-3 text-muted-foreground" />
@@ -1048,7 +1080,13 @@ export function WorkspaceVault({
           <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => { setShowNewFile(false); setNewFileName(""); setNewFileParentId(null); }}><X className="h-3 w-3" /></Button>
         </div>
       )}
-      <div className="mt-1 flex-1 overflow-y-auto">{renderFolderTree(null, 0)}</div>
+      <div className="mt-1 flex-1 overflow-y-auto">
+        {renderFolderTree(null, 0, (i) => {
+          if (ownerFilter === "mine") return i.uploaded_by === currentUserId;
+          if (ownerFilter === "theirs") return i.uploaded_by !== currentUserId;
+          return true;
+        }, !isLocked && ownerFilter !== "theirs")}
+      </div>
     </div>
   ) : null;
 
@@ -1139,6 +1177,11 @@ export function WorkspaceVault({
       {error && (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">{error}</div>
       )}
+
+      <div className="flex items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-2.5 py-1.5 text-[10px] text-emerald-700">
+        <ShieldCheck className="h-3 w-3 shrink-0" />
+        <span>Workspace vault is being monitored. All uploads, downloads, and file operations are recorded.</span>
+      </div>
 
       {/* Fire vault OR working area */}
       {isLocked && !escrowFunded ? (

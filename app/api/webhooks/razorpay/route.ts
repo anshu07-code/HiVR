@@ -324,7 +324,7 @@ async function handleTransferProcessed(admin: Admin, transfer: any) {
   if (!sourcePaymentId) return;
   const { data: row } = await admin
     .from("payments")
-    .select("id, status, contract_id, employee_id")
+    .select("id, status, contract_id, employee_id, employee_payout_paise, amount, platform_fee_amount")
     .eq("razorpay_payment_id", sourcePaymentId)
     .maybeSingle();
   if (!row) return;
@@ -335,10 +335,100 @@ async function handleTransferProcessed(admin: Admin, transfer: any) {
   }).eq("id", row.id);
   await transitionPayment(admin, row.id, row.status, "released", transfer.id, "razorpay_transfer_processed");
 
+  // Migration 0133: when the contract was completed, both the employee's
+  // wallet and the HiVR Revenue wallet got `pending_paise` credits
+  // (because the money was still in Razorpay's escrow). Now that
+  // Razorpay has settled the transfer to HiVR's pooled account,
+  // move both pending_paise → balance_paise.
+  //
+  // We re-derive the amounts from the payment row (amount and
+  // platform_fee_amount) and the contract row (employee_payout_paise)
+  // — same as the live mark_workspace_done function did.
+  const employeePayout = Number((row as any).employee_payout_paise ?? 0);
+  const platformFee = Number((row as any).platform_fee_amount ?? 0);
+  const hivrUserId = '00000000-0000-0000-0000-0000000000fe';
+
+  if (employeePayout > 0) {
+    // Employee: pending_paise → balance_paise
+    const { data: empRow } = await admin
+      .from("user_wallets")
+      .select("pending_paise, balance_paise, lifetime_received_paise")
+      .eq("user_id", (row as any).employee_id)
+      .maybeSingle();
+    const empPending = Number(empRow?.pending_paise ?? 0);
+    const empBalance = Number(empRow?.balance_paise ?? 0);
+    const empLifetime = Number(empRow?.lifetime_received_paise ?? 0);
+    // Only move what we actually have pending (defensive — in case
+    // mark_workspace_done didn't run for this contract).
+    const movePayout = Math.min(employeePayout, empPending);
+    if (movePayout > 0) {
+      await admin.from("user_wallets").update({
+        pending_paise: empPending - movePayout,
+        balance_paise: empBalance + movePayout,
+        lifetime_received_paise: empLifetime + movePayout,
+        updated_at: new Date().toISOString(),
+      }).eq("user_id", (row as any).employee_id);
+
+      // Record the wallet transaction that moves pending → withdrawable
+      await admin.from("wallet_transactions").insert({
+        user_id: (row as any).employee_id,
+        amount_paise: movePayout,
+        direction: "credit",
+        kind: "escrow_release",
+        description: `Razorpay escrow released for contract ${row.contract_id}`,
+        ref_type: "contract",
+        ref_id: row.contract_id,
+        balance_after_paise: empBalance + movePayout,
+        metadata: {
+          trigger: "razorpay_transfer_processed",
+          transfer_id: transfer.id,
+          was_pending: true,
+        },
+      });
+    }
+  }
+
+  if (platformFee > 0) {
+    // HiVR Revenue: pending_paise → balance_paise
+    const { data: hivrRow } = await admin
+      .from("user_wallets")
+      .select("pending_paise, balance_paise, lifetime_received_paise")
+      .eq("user_id", hivrUserId)
+      .maybeSingle();
+    const hivrPending = Number(hivrRow?.pending_paise ?? 0);
+    const hivrBalance = Number(hivrRow?.balance_paise ?? 0);
+    const hivrLifetime = Number(hivrRow?.lifetime_received_paise ?? 0);
+    const moveFee = Math.min(platformFee, hivrPending);
+    if (moveFee > 0) {
+      await admin.from("user_wallets").update({
+        pending_paise: hivrPending - moveFee,
+        balance_paise: hivrBalance + moveFee,
+        lifetime_received_paise: hivrLifetime + moveFee,
+        updated_at: new Date().toISOString(),
+      }).eq("user_id", hivrUserId);
+
+      // Record the platform revenue ledger move
+      await admin.from("platform_revenue_ledger").insert({
+        wallet_id: hivrUserId,
+        source: "contract_completion",
+        amount_paise: moveFee,
+        contract_id: row.contract_id,
+        workspace_id: null,
+        employee_id: (row as any).employee_id,
+        description: `Pending → withdrawable (Razorpay released) for contract ${row.contract_id}`,
+        metadata: {
+          trigger: "razorpay_transfer_processed",
+          transfer_id: transfer.id,
+          was_pending: true,
+        },
+      });
+    }
+  }
+
   await notify(admin, row.employee_id, {
     type: "payment",
     title: "Funds released to your account",
-    body: `Your earnings from contract ${row.contract_id} have been transferred.`,
+    body: `${formatPaise(employeePayout)} from contract ${row.contract_id?.slice(0, 8) ?? ""} is now withdrawable.`,
     link: `/dashboard/contracts/${row.contract_id}`,
   });
 }

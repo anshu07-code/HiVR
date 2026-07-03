@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, CheckCircle2, AlertCircle, Pencil } from "lucide-react";
+import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -32,10 +32,5 @@ export function SaveIndicator({ status }: { status: "idle" | "saving" | "saved" 
       </span>
     );
   }
-  return (
-    <span className={cn("inline-flex items-center gap-1.5 rounded-full border border-muted bg-muted/30 px-2.5 py-1 text-[10px] font-medium text-muted-foreground")}>
-      <Pencil className="h-3 w-3" />
-      Idle
-    </span>
-  );
+  return null;
 }

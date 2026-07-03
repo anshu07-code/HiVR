@@ -104,7 +104,78 @@ export function NotificationsCenter({ userId, initial }: { userId: string; initi
 
   async function open(n: Notif) {
     if (!n.read_at) await markRead(n.id);
-    if (n.link) router.push(n.link);
+
+    const target = n.link;
+    if (!target) return;
+
+    try {
+      const url = new URL(target, window.location.origin);
+      const settleAppId = url.searchParams.get("settleAppId");
+
+      // — Settlement: resolve to current state —
+      if (settleAppId) {
+        const sb = createClient();
+        const { data: rounds } = await sb
+          .from("settlement_rounds")
+          .select("id, round_number, offered_by, amount_paise, time_minutes, message, status, parent_round_id, created_at")
+          .eq("application_id", settleAppId)
+          .order("round_number", { ascending: false })
+          .limit(3);
+
+        const allRounds = (rounds ?? []) as any[];
+        const lastRound = allRounds[0];
+
+        if (lastRound?.status === "accepted") {
+          const { data: app } = await sb
+            .from("task_applications")
+            .select("task_id")
+            .eq("id", settleAppId)
+            .maybeSingle();
+          if (app) {
+            const { data: contract } = await sb
+              .from("contracts")
+              .select("id")
+              .eq("task_post_id", (app as any).task_id)
+              .eq("employee_id", userId)
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (contract) {
+              router.push(`/dashboard/contracts/${(contract as any).id}`);
+              return;
+            }
+          }
+        }
+
+        if (lastRound?.status === "declined") {
+          router.push(`/dashboard/applications?settleAppId=${settleAppId}&declined=1`);
+          return;
+        }
+      }
+
+      // — hire_offer / hiring_stage: check for existing contracts —
+      if (n.type === "hire_offer" || n.type === "hiring_stage") {
+        const sb = createClient();
+        const { data: contracts } = await sb
+          .from("contracts")
+          .select("id, created_at")
+          .eq("employee_id", userId)
+          .in("status", ["active", "pending_acceptance", "completed", "delivered", "disputed"])
+          .order("created_at", { ascending: false })
+          .limit(1);
+        if (contracts && contracts.length > 0) {
+          const latest = (contracts as any[])[0];
+          if (new Date(latest.created_at) > new Date(n.created_at)) {
+            router.push(`/dashboard/contracts/${latest.id}`);
+            return;
+          }
+        }
+      }
+    } catch {
+      // fall through to default navigation
+    }
+
+    router.push(target);
   }
 
   const filtered = React.useMemo(() => {

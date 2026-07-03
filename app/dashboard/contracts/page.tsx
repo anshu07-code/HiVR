@@ -86,7 +86,7 @@ export default async function MyContracts() {
       <div>
         <div className="flex items-center gap-2">
           <FolderKanban className="h-6 w-6 text-primary" />
-          <h1 className="font-display text-3xl font-semibold tracking-tight">Contracts</h1>
+<h1 className="font-display text-3xl font-semibold tracking-tight" data-tour="contracts-header">Contracts</h1>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
           {list.length} contract{list.length === 1 ? "" : "s"} you participate in.

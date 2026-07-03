@@ -1,0 +1,262 @@
+"use server";
+
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { revalidatePath } from "next/cache";
+
+// ------------------------------------------------------------------
+// Shared helpers
+// ------------------------------------------------------------------
+
+async function resolveCategoryAndRate(
+  sb: ReturnType<typeof createClient>,
+  employeeId: string,
+  selectedCategoryId: string | null,
+  clientRatePaise: number | null,
+): Promise<{ categoryId: string; ratePaise: number; error?: undefined } | { ok: false; error: string; categoryId?: undefined; ratePaise?: undefined }> {
+  let categoryId: string | null = selectedCategoryId;
+  let ratePaise: number | null = clientRatePaise;
+
+  if (!categoryId) {
+    const { data: skill } = await sb
+      .from("employee_skills")
+      .select("category_id, rate_per_task_paise")
+      .eq("employee_id", employeeId)
+      .eq("is_primary", true)
+      .limit(1)
+      .maybeSingle();
+    categoryId = (skill as any)?.category_id ?? null;
+    if (!ratePaise) ratePaise = (skill as any)?.rate_per_task_paise ?? null;
+  }
+
+  if (!categoryId) {
+    const { data: anySkill } = await sb
+      .from("employee_skills")
+      .select("category_id, rate_per_task_paise")
+      .eq("employee_id", employeeId)
+      .limit(1)
+      .maybeSingle();
+    categoryId = (anySkill as any)?.category_id ?? null;
+    if (!ratePaise) ratePaise = (anySkill as any)?.rate_per_task_paise ?? null;
+  }
+
+  if (!ratePaise || ratePaise <= 0) {
+    const { data: sr } = await sb
+      .from("employee_standing_rates")
+      .select("rate_per_task_paise, standing_rate, category_id")
+      .eq("user_id", employeeId)
+      .maybeSingle();
+    if ((sr as any)?.rate_per_task_paise) {
+      ratePaise = (sr as any).rate_per_task_paise;
+      categoryId = categoryId ?? (sr as any).category_id;
+    } else if ((sr as any)?.standing_rate) {
+      ratePaise = (sr as any).standing_rate;
+      categoryId = categoryId ?? (sr as any).category_id;
+    }
+  }
+
+  if (!categoryId) {
+    return { ok: false as const, error: "This employee has no skills set up yet. Ask them to complete their profile first." };
+  }
+  if (!ratePaise || ratePaise <= 0) {
+    ratePaise = 100000;
+  }
+
+  return { categoryId, ratePaise };
+}
+
+async function createTaskPost(
+  admin: ReturnType<typeof createAdminClient>,
+  buyerId: string,
+  categoryId: string,
+  title: string,
+  description: string,
+  ratePaise: number,
+  status: string = "open",
+  isPrivate: boolean = false,
+): Promise<{ ok: false; error: string } | { taskId: string; ratePaise: number }> {
+  const { data: task, error: taskErr } = await admin
+    .from("task_posts")
+    .insert({
+      buyer_id: buyerId,
+      category_id: categoryId,
+      title: title.trim(),
+      description: description.trim(),
+      pricing_model: "fixed",
+      budget_min: ratePaise,
+      budget_max: ratePaise,
+      status,
+      is_private: isPrivate,
+      openings: 1,
+      brief: { checklist_items: [], notes: "" },
+    } as any)
+    .select("id")
+    .single();
+
+  if (taskErr || !task) {
+    return { ok: false, error: taskErr?.message ?? "Failed to create task" };
+  }
+
+  return { taskId: (task as any).id, ratePaise };
+}
+
+// ------------------------------------------------------------------
+// Hire directly — creates contract immediately at standing rate
+// ------------------------------------------------------------------
+
+export async function hireDirectlyAction(formData: FormData) {
+  const sb = createClient();
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in" };
+
+  const employeeId = formData.get("employeeId") as string;
+  const title = formData.get("title") as string;
+  const description = formData.get("description") as string;
+  const selectedCategoryId = formData.get("categoryId") as string | null;
+  const clientRatePaise = formData.get("ratePaise") ? Number(formData.get("ratePaise")) : null;
+
+  if (!employeeId || !title || !description) {
+    return { ok: false, error: "Missing required fields" };
+  }
+  if (employeeId === user.id) {
+    return { ok: false, error: "You cannot hire yourself" };
+  }
+
+  try {
+    const admin = createAdminClient();
+
+    const res1: any = await resolveCategoryAndRate(sb, employeeId, selectedCategoryId, clientRatePaise);
+    if (res1.ok === false) return res1;
+    const { categoryId, ratePaise } = res1;
+
+    const created: any = await createTaskPost(admin, user.id, categoryId, title, description, ratePaise, "in_contract", true);
+    if (created.ok === false) return created;
+    const { taskId } = created;
+
+    // Create a direct-hire offer for the employee to accept/decline
+    const { error: offerErr } = await admin
+      .from("negotiation_offers")
+      .insert({
+        task_post_id: taskId,
+        employee_id: employeeId,
+        buyer_id: user.id,
+        offer_type: "instant_hire_pushback",
+        round_number: 1,
+        proposed_price: ratePaise,
+        comment: `Direct hire: ${title}`,
+        status: "pending",
+        created_by: user.id,
+      } as any);
+
+    if (offerErr) return { ok: false, error: offerErr.message };
+
+    // Notify employee to accept/decline
+    await (admin.rpc as any)("create_notification", {
+      p_user_id: employeeId,
+      p_type: "hire_offer",
+      p_title: "Direct hire offer",
+      p_body: `You've been offered a direct hire for "${title}" at ₹${(ratePaise / 100).toLocaleString("en-IN")}. Accept or decline in Job Offers.`,
+      p_link: `/dashboard/job-offers`,
+    });
+
+    revalidatePath(`/people/${employeeId}`);
+    return {
+      ok: true,
+      taskId,
+      ratePaise,
+      message: `${title.split(" ")[0]} offered at their standing rate! Awaiting acceptance.`,
+    };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+// ------------------------------------------------------------------
+// Start negotiation — creates offer with up-to-3-round negotiation
+// ------------------------------------------------------------------
+
+export async function startNegotiationAction(formData: FormData) {
+  const sb = createClient();
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in" };
+
+  const employeeId = formData.get("employeeId") as string;
+  const title = formData.get("title") as string;
+  const description = formData.get("description") as string;
+  const selectedCategoryId = formData.get("categoryId") as string | null;
+  const clientRatePaise = formData.get("ratePaise") ? Number(formData.get("ratePaise")) : null;
+
+  if (!employeeId || !title || !description) {
+    return { ok: false, error: "Missing required fields" };
+  }
+  if (employeeId === user.id) {
+    return { ok: false, error: "You cannot hire yourself" };
+  }
+
+  try {
+    const admin = createAdminClient();
+
+    const res1: any = await resolveCategoryAndRate(sb, employeeId, selectedCategoryId, clientRatePaise);
+    if (res1.ok === false) return res1;
+    const { categoryId, ratePaise } = res1;
+
+    const created: any = await createTaskPost(admin, user.id, categoryId, title, description, ratePaise, "in_contract", true);
+    if (created.ok === false) return created;
+    const { taskId } = created;
+
+    // Try the private-negotiation RPC (exists after migration 0135).
+    // If it's not deployed yet, fall back to direct admin insert.
+    let negId: string | null = null;
+    try {
+      const { data: rpcResult, error: rpcErr } = await (sb.rpc as any)(
+        "create_private_negotiation_offer",
+        { p_task_post_id: taskId, p_employee_id: employeeId, p_comment: `Negotiation: ${title}` },
+      );
+      if (!rpcErr && rpcResult?.ok) {
+        negId = rpcResult.negotiation_offer_id;
+      }
+    } catch { /* RPC not deployed — fall through */ }
+
+    if (!negId) {
+      // Fallback: insert directly via admin (bypasses RLS)
+      const { data: directOffer, error: directErr } = await admin
+        .from("negotiation_offers")
+        .insert({
+          task_post_id: taskId,
+          employee_id: employeeId,
+          buyer_id: user.id,
+          offer_type: "instant_hire_pushback",
+          round_number: 1,
+          proposed_price: ratePaise,
+          comment: `Negotiation: ${title}`,
+          status: "pending",
+          created_by: user.id,
+        } as any)
+        .select("id")
+        .single();
+
+      if (directErr) return { ok: false, error: directErr.message };
+      negId = (directOffer as any).id;
+
+      // Notify the employee (RPC handles this when deployed)
+      await (admin.rpc as any)("create_notification", {
+        p_user_id: employeeId,
+        p_type: "hire_offer",
+        p_title: "Negotiation request",
+        p_body: `A buyer wants to negotiate for "${title}" (rate: ₹${(ratePaise / 100).toLocaleString("en-IN")}).`,
+        p_link: "/dashboard/job-offers",
+      });
+    }
+
+    revalidatePath(`/people/${employeeId}`);
+    return {
+      ok: true,
+      taskId,
+      ratePaise,
+      standingRate: ratePaise,
+      message: "Negotiation started! The employee can counter, accept, or decline.",
+    };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}

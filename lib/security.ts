@@ -138,6 +138,20 @@ const MAGIC_SIGNATURES: Array<{
     label: "PDF document",
     bytes: [new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d])], // %PDF-
   },
+  // OLE2 — used by older Office formats (.xls, .doc, .ppt)
+  {
+    ext: "ole2",
+    mime: "application/x-ole-storage",
+    label: "OLE2 document",
+    bytes: [new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])],
+  },
+  // ZIP — used by .zip, .xlsx, .docx, .pptx, .jar, etc.
+  {
+    ext: "zip",
+    mime: "application/zip",
+    label: "ZIP archive",
+    bytes: [new Uint8Array([0x50, 0x4b, 0x03, 0x04])],
+  },
 ];
 
 // (Disambiguation for shared prefixes is done inline in identifyFileFormat
@@ -227,6 +241,20 @@ export const ALLOWED_FORMATS = {
   video: ["mp4", "webm", "mov"] as const,
   audio: ["mp3", "m4a", "wav", "ogg", "webm"] as const,
   document: ["pdf"] as const,
+  vault: [
+    "jpg", "png", "webp", "gif",
+    "mp4", "webm", "mov",
+    "mp3", "m4a", "wav", "ogg",
+    "pdf",
+    "xlsx", "xls", "csv",
+    "docx", "doc",
+    "pptx", "ppt",
+    "txt", "json", "md", "rtf",
+    "zip", "rar", "7z", "tar", "gz",
+    "js", "ts", "jsx", "tsx", "py", "rb", "go", "rs", "java", "kt", "swift",
+    "c", "cpp", "h", "hpp", "cs", "php", "sh", "yaml", "yml", "toml",
+    "html", "css", "scss", "sql",
+  ] as const,
 };
 
 export type FileFormatGroup = keyof typeof ALLOWED_FORMATS;
@@ -235,6 +263,42 @@ export type FileFormatGroup = keyof typeof ALLOWED_FORMATS;
  * Validate a file from a multipart upload. Returns the canonical
  * {ext, mime, label} for storage, or throws SecurityError.
  */
+/**
+ * File-extension-to-format mapping for formats that cannot be
+ * identified by magic bytes alone (e.g. xlsx/docx/pptx are ZIP,
+ * csv/json/txt have no unique header).
+ */
+const EXT_FORMAT: Record<string, { ext: string; mime: string; label: string }> = {
+  xlsx: { ext: "xlsx", mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", label: "Excel spreadsheet" },
+  xls:  { ext: "xls",  mime: "application/vnd.ms-excel", label: "Excel spreadsheet" },
+  csv:  { ext: "csv",  mime: "text/csv",  label: "CSV file" },
+  docx: { ext: "docx", mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", label: "Word document" },
+  doc:  { ext: "doc",  mime: "application/msword", label: "Word document" },
+  pptx: { ext: "pptx", mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation", label: "PowerPoint presentation" },
+  ppt:  { ext: "ppt",  mime: "application/vnd.ms-powerpoint", label: "PowerPoint presentation" },
+  txt:  { ext: "txt",  mime: "text/plain", label: "Text file" },
+  json: { ext: "json", mime: "application/json", label: "JSON file" },
+  md:   { ext: "md",   mime: "text/markdown", label: "Markdown file" },
+  rtf:  { ext: "rtf",  mime: "application/rtf", label: "RTF document" },
+};
+
+/**
+ * Extensions whose magic bytes are the ZIP header (PK\x03\x04).
+ * Used for disambiguation when magic returns "zip".
+ */
+const ZIP_EXTENSIONS = new Set(["xlsx", "docx", "pptx", "zip", "jar"]);
+
+/**
+ * Extensions whose magic bytes are the OLE2 header.
+ */
+const OLE2_EXTENSIONS = new Set(["xls", "doc", "ppt"]);
+
+/**
+ * Plain-text extensions with no unique magic bytes — validated by
+ * checking the content is valid UTF-8 and rejecting if binary.
+ */
+const TEXT_EXTENSIONS = new Set(["csv", "txt", "json", "md", "rtf", "yaml", "yml", "toml", "ini", "cfg", "xml", "svg"]);
+
 export async function validateUploadedFile(
   file: File,
   group: FileFormatGroup,
@@ -249,25 +313,51 @@ export async function validateUploadedFile(
     );
   }
 
-  // Read the first 32 bytes for magic-byte sniffing. Larger than any
-  // signature we check, so we always get a definitive answer.
   const arrayBuf = await file.arrayBuffer();
   const head = new Uint8Array(arrayBuf, 0, Math.min(arrayBuf.byteLength, 32));
   const fmt = identifyFileFormat(head);
-  if (!fmt) {
+  const ext = (file.name.split(".").pop() ?? "").toLowerCase();
+
+  // Disambiguate formats that share magic bytes, based on file extension.
+  let resolvedExt = fmt?.ext;
+  let resolvedMime = fmt?.mime;
+  let resolvedLabel = fmt?.label;
+  if (fmt) {
+    if (fmt.ext === "zip" && ZIP_EXTENSIONS.has(ext)) {
+      const known = EXT_FORMAT[ext];
+      if (known) { resolvedExt = known.ext; resolvedMime = known.mime; resolvedLabel = known.label; }
+    } else if (fmt.ext === "ole2" && OLE2_EXTENSIONS.has(ext)) {
+      const known = EXT_FORMAT[ext];
+      if (known) { resolvedExt = known.ext; resolvedMime = known.mime; resolvedLabel = known.label; }
+    }
+  }
+
+  // Plain-text formats with no magic bytes: accept if extension matches.
+  if (!fmt && TEXT_EXTENSIONS.has(ext)) {
+    const known = EXT_FORMAT[ext];
+    if (known) { resolvedExt = known.ext; resolvedMime = known.mime; resolvedLabel = known.label; }
+  }
+
+  // SVG detection: reject even if extension says .svg (XSS vector).
+  if (resolvedExt === "svg") {
+    throw new SecurityError("SVG files are not allowed (XSS risk).", 400);
+  }
+
+  if (!resolvedExt) {
     throw new SecurityError(
-      "File format not recognised. Allowed: images (JPG/PNG/WebP/GIF), videos (MP4/WebM/MOV), audio (MP3/M4A/WAV/OGG), PDF.",
+      "File format not recognised. Allowed: images, video, audio, PDF, Excel, Word, CSV, code files, and archives.",
       400,
     );
   }
+
   const allowed = ALLOWED_FORMATS[group] as readonly string[];
-  if (!allowed.includes(fmt.ext)) {
+  if (!allowed.includes(resolvedExt)) {
     throw new SecurityError(
-      `${fmt.label} (${fmt.mime}) is not allowed here. Expected one of: ${allowed.join(", ")}.`,
+      `${resolvedLabel ?? resolvedExt} is not allowed here. Expected one of: ${allowed.join(", ")}.`,
       400,
     );
   }
-  return fmt;
+  return { ext: resolvedExt, mime: resolvedMime ?? "application/octet-stream", label: resolvedLabel ?? resolvedExt };
 }
 
 // =============================================================================

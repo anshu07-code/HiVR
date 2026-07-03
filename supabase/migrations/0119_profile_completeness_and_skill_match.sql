@@ -37,7 +37,6 @@ begin
   if v_ep.headline is not null then v_score := v_score + 5; end if;
   if v_ep.bio is not null and length(v_ep.bio) > 20 then v_score := v_score + 15; end if;
   if v_ep.location is not null then v_score := v_score + 5; end if;
-  if v_ep.hourly_rate_paise is not null then v_score := v_score + 5; end if;
   if v_skills >= 1 then v_score := v_score + 15; end if;
   if v_skills >= 3 then v_score := v_score + 5; end if;
   if v_edu >= 1 then v_score := v_score + 10; end if;

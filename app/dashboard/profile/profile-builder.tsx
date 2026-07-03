@@ -12,8 +12,8 @@ import { CategoryIcon } from "@/components/marketing/category-icon";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Sparkles, Camera, Plus, X, Save, Loader2, GraduationCap, Briefcase,
-  FolderGit2, Award, Globe, Upload, FileText, Trash2, Star, ExternalLink,
-  CheckCircle2, AlertCircle, Mail, Video as VideoIcon, Zap,
+  FolderGit2, Award, Globe, Upload, FileText, Trash2, Star,
+  CheckCircle2, AlertCircle, Video as VideoIcon, Zap,
 } from "lucide-react";
 import {
   updateProfileBasicsAction, updateAvatarUrlAction, updateEmployeeSkillsAction,
@@ -36,7 +36,7 @@ type Cat = { id: string; name: string; slug: string; icon: string; tier: string;
 
 type Initial = {
   fullName: string; email: string; avatarUrl: string | null; phone: string | null;
-  headline: string; bio: string; location: string; experienceType: string;
+  headline: string; bio: string; location: string; languages: string[]; experienceType: string;
   hourlyRatePaise: number | null; availabilityHours: number | null; timezone: string;
   skills: { category_id: string; name?: string; slug?: string; icon?: string; tier?: string; is_primary?: boolean; years_experience?: number; rate_per_hour_paise?: number | null; rate_per_task_paise?: number | null; rate_per_day_paise?: number | null; rate_per_week_paise?: number | null }[];
   education: any[]; experience: any[]; projects: any[]; certifications: any[]; resume: any;
@@ -167,6 +167,7 @@ function ProfileBuilderInner({
     headline: initial.headline,
     bio: initial.bio,
     location: initial.location,
+    languages: initial.languages,
     experience_type: initial.experienceType,
     hourly_rate_paise: initial.hourlyRatePaise,
     availability_hours: initial.availabilityHours,
@@ -196,6 +197,7 @@ function ProfileBuilderInner({
       headline: basics.headline,
       bio: basics.bio,
       location: basics.location,
+      languages: basics.languages,
       experience_type: basics.experience_type,
       hourly_rate_paise: basics.hourly_rate_paise ?? undefined,
       availability_hours: basics.availability_hours ?? undefined,
@@ -446,11 +448,17 @@ function ProfileBuilderInner({
     if (basics.full_name) s += 5;
     if (avatarUrl) s += 5;
     if (basics.headline) s += 5;
-    if (basics.bio && basics.bio.length > 20) s += 15;
+    if (basics.bio && basics.bio.length > 20) s += 10;
     if (basics.location) s += 5;
-    if (basics.hourly_rate_paise) s += 5;
+    if (basics.availability_hours) s += 5;
     if (selectedSkills.length >= 1) s += 15;
     if (selectedSkills.length >= 3) s += 5;
+    if ((initial.education ?? []).length > 0) s += 10;
+    if ((initial.experience ?? []).length > 0) s += 10;
+    if ((initial.projects ?? []).length > 0) s += 10;
+    if ((initial.certifications ?? []).length > 0) s += 5;
+    if ((initial.resume)) s += 5;
+    if ((initial.socialLinks ?? []).length > 0) s += 5;
     setCompleteness(Math.min(100, s));
   }
 
@@ -574,8 +582,8 @@ function ProfileBuilderInner({
                   <option value="experienced">Have work experience</option>
                 </select>
               </Field>
-              <Field label="Hourly rate (₹)" hint="Your minimum. Buyers can offer higher.">
-                <Input type="number" min={50} value={basics.hourly_rate_paise ? Math.round(basics.hourly_rate_paise / 100) : ""} onChange={(e) => { setBasics({ ...basics, hourly_rate_paise: e.target.value ? Math.round(Number(e.target.value) * 100) : null }); markBasicsDirty(); }} onBlur={() => { if (dirtyBasics) saveBasics(); }} placeholder="500" />
+              <Field label="Languages" hint="Comma-separated (e.g. English, Hindi, Tamil)">
+                <Input value={basics.languages.join(", ")} onChange={(e) => { setBasics({ ...basics, languages: e.target.value.split(",").map(s => s.trim()).filter(Boolean) }); markBasicsDirty(); }} onBlur={() => { if (dirtyBasics) saveBasics(); }} placeholder="English, Hindi" />
               </Field>
               <Field label="Hours / week available">
                 <Input type="number" min={1} max={168} value={basics.availability_hours ?? ""} onChange={(e) => { setBasics({ ...basics, availability_hours: e.target.value ? Number(e.target.value) : null }); markBasicsDirty(); }} onBlur={() => { if (dirtyBasics) saveBasics(); }} placeholder="20" />
@@ -593,7 +601,7 @@ function ProfileBuilderInner({
       )}
 
       {tab === "skills" && (
-        <Card>
+        <Card data-tour="profile-skills">
           <CardHeader>
             <CardTitle>Skills</CardTitle>
             <CardDescription>Search and tag the skills you can offer. Buyers filter by skill when looking for help. Changes auto-save.</CardDescription>
@@ -875,7 +883,7 @@ function ProfileBuilderInner({
                       <div>
                         <p className="text-sm font-semibold">{p.title}{p.is_featured && <Star className="ml-1 inline h-3 w-3 text-amber-500" />}</p>
                         {p.role && <p className="text-xs text-muted-foreground">{p.role}</p>}
-                        {p.url && <a href={p.url} target="_blank" rel="noreferrer" className="mt-0.5 inline-flex items-center gap-0.5 text-xs text-primary hover:underline"><ExternalLink className="h-2.5 w-2.5" />{p.url}</a>}
+                        {p.url && <p className="mt-0.5 inline-flex items-center gap-0.5 text-xs text-muted-foreground"><Globe className="h-2.5 w-2.5" />{new URL(p.url).hostname}{p.url.includes("github.com") || p.url.includes("linkedin.com") || p.url.includes("gitlab.com") || p.url.includes("bitbucket.org") || p.url.includes("stackoverflow.com") ? "" : " · link shown on your public profile"}</p>}
                       </div>
                       <Button size="sm" variant="ghost" onClick={async () => { await deleteProjectAction(p.id); router.refresh(); }}>
                         <Trash2 className="h-3.5 w-3.5" />
@@ -925,7 +933,7 @@ function ProfileBuilderInner({
                     <div>
                       <p className="text-sm font-semibold">{c.name}</p>
                       <p className="text-xs text-muted-foreground">{c.issuer} · {c.issued_at ?? ""} {c.expires_at ? `– ${c.expires_at}` : ""}</p>
-                      {c.url && <a href={c.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-xs text-primary hover:underline"><ExternalLink className="h-2.5 w-2.5" />Verify</a>}
+                      {c.url && <p className="inline-flex items-center gap-0.5 text-xs text-muted-foreground"><Globe className="h-2.5 w-2.5" />{new URL(c.url).hostname}</p>}
                     </div>
                     <Button size="sm" variant="ghost" onClick={async () => { await deleteCertificationAction(c.id); router.refresh(); }}>
                       <Trash2 className="h-3.5 w-3.5" />

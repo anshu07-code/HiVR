@@ -230,7 +230,7 @@ export function WorkspaceShell({
   const myInitials = (me.full_name ?? "?").split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase() || "?";
 
   return (
-    <div className="container max-w-6xl space-y-4 py-6">
+    <div className="container max-w-6xl space-y-4 px-3 py-4 md:px-6 md:py-6">
       <div>
         <Button asChild variant="ghost" size="sm">
           <Link href="/dashboard/contracts">
@@ -240,43 +240,44 @@ export function WorkspaceShell({
       </div>
 
       {/* Sticky header */}
-      <div className="sticky top-0 z-30 -mx-3 flex flex-wrap items-center gap-2 border-b bg-background/95 px-3 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:gap-3">
-        <Badge variant="outline" className={cn("gap-1.5 text-[10px]", statusMeta.tone)}>
+      <div className="sticky top-0 z-30 -mx-3 flex flex-wrap items-center gap-1.5 border-b bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:gap-3 sm:py-2.5">
+        <Badge variant="outline" className={cn("gap-1 text-[9px] sm:gap-1.5 sm:text-[10px]", statusMeta.tone)}>
           <span className={cn("h-1.5 w-1.5 rounded-full", statusMeta.dot)} />
-          {statusMeta.label}
+          <span className="hidden sm:inline">{statusMeta.label}</span>
         </Badge>
-        <div className="flex items-center gap-2">
-          <Avatar className="h-6 w-6">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <Avatar className="h-5 w-5 sm:h-6 sm:w-6">
             <AvatarImage src={counterparty.avatar_url ?? undefined} className="object-cover" />
-            <AvatarFallback className="text-[10px]">{counterpartyInitials}</AvatarFallback>
+            <AvatarFallback className="text-[9px] sm:text-[10px]">{counterpartyInitials}</AvatarFallback>
           </Avatar>
-          <div className="text-sm">
-            <p className="font-medium leading-none">{counterparty.full_name ?? "Counterparty"}</p>
-            <p className="text-[10px] text-muted-foreground capitalize">{isBuyer ? "Employee" : "Buyer"}</p>
+          <div className="text-xs sm:text-sm">
+            <p className="font-medium leading-none truncate max-w-[80px] sm:max-w-none">{counterparty.full_name ?? "Counterparty"}</p>
+            <p className="text-[9px] sm:text-[10px] text-muted-foreground capitalize">{isBuyer ? "Employee" : "Buyer"}</p>
           </div>
         </div>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
           {workspace.status === "completed" ? (
-            <Badge variant="outline" className="gap-1.5 border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
+            <Badge variant="outline" className="gap-1 border-emerald-500/30 bg-emerald-500/10 text-emerald-700 text-[9px] sm:text-[10px]">
               <CheckCircle2 className="h-3 w-3" />
-              Payment successful
+              <span className="hidden sm:inline">Payment successful</span>
             </Badge>
           ) : workspace.escrow_funded ? (
-            <Badge variant="outline" className="gap-1.5 border-sky-500/30 bg-sky-500/10 text-sky-700">
+            <Badge variant="outline" className="gap-1 border-sky-500/30 bg-sky-500/10 text-sky-700 text-[9px] sm:text-[10px]">
               <ShieldAlert className="h-3 w-3" />
-              {formatPaise(workspace.escrow_amount_paise)} in escrow
+              {formatPaise(workspace.escrow_amount_paise)}
             </Badge>
           ) : isBuyer && workspace.status === "awaiting_funding" ? (
-            <Button size="sm" variant="gradient" onClick={() => setFundOpen(true)}>
-              <IndianRupee className="h-3.5 w-3.5" />Fund escrow
+            <Button size="sm" variant="gradient" className="h-7 text-xs sm:h-8 sm:text-sm">
+              <IndianRupee className="h-3 w-3 sm:h-3.5 sm:w-3.5" />Fund
             </Button>
           ) : !workspace.escrow_funded ? (
-            <Badge variant="outline" className="gap-1 text-[10px]">
-              <Clock className="h-3 w-3" />Awaiting funding
+            <Badge variant="outline" className="gap-1 text-[9px] sm:text-[10px]">
+              <Clock className="h-3 w-3" />Awaiting
             </Badge>
           ) : null}
-          <Button size="sm" variant={chatOpen ? "default" : "outline"} onClick={openChat} className="relative">
-            <MessageSquare className="h-3.5 w-3.5" />Open chat
+          <Button size="sm" variant={chatOpen ? "default" : "outline"} onClick={openChat} className="relative h-7 text-xs sm:h-8 sm:text-sm">
+            <MessageSquare className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+            <span className="hidden sm:inline ml-1">Chat</span>
             {unread > 0 && (
               <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
                 {unread}
@@ -457,48 +458,48 @@ export function WorkspaceShell({
         <TabsContent value="vault" className="mt-3 space-y-3">
           <Card>
             <CardHeader className="pb-3">
-              <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                 <div className="min-w-0 flex-1">
-                  <CardTitle className="flex items-center gap-2 text-base">
+                  <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
                     <Folder className="h-4 w-4" />Workspace vault
                   </CardTitle>
-                  <CardDescription>Shared files. Private to you and {counterparty.full_name ?? "the other party"}.</CardDescription>
+                  <CardDescription className="text-[11px] sm:text-sm">Shared files. Private to you and {counterparty.full_name ?? "the other party"}.</CardDescription>
                 </div>
                 {/* Right-side: owner filter (header-level) + Upload button (rightmost) */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="inline-flex rounded-md border bg-muted/30 p-0.5 text-[11px]" role="group" aria-label="Filter by uploader">
+                <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                  <div className="inline-flex w-full rounded-md border bg-muted/30 p-0.5 text-[10px] sm:w-auto sm:text-[11px]" role="group" aria-label="Filter by uploader">
                     <button
                       type="button"
                       onClick={() => setVaultOwnerFilter("all")}
                       className={cn(
-                        "rounded px-2 py-1 transition-colors",
+                        "rounded px-1.5 py-0.5 sm:px-2 sm:py-1 transition-colors",
                         vaultOwnerFilter === "all" ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"
                       )}
                       title="Show all files"
                     >
-                      <Users className="mr-1 inline h-3 w-3" />All
+                      <Users className="mr-0.5 inline h-2.5 w-2.5 sm:mr-1 sm:h-3 sm:w-3" />All
                     </button>
                     <button
                       type="button"
                       onClick={() => setVaultOwnerFilter("mine")}
                       className={cn(
-                        "rounded px-2 py-1 transition-colors",
+                        "rounded px-1.5 py-0.5 sm:px-2 sm:py-1 transition-colors",
                         vaultOwnerFilter === "mine" ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"
                       )}
                       title="Files I uploaded"
                     >
-                      <User className="mr-1 inline h-3 w-3" />Mine
+                      <User className="mr-0.5 inline h-2.5 w-2.5 sm:mr-1 sm:h-3 sm:w-3" />Mine
                     </button>
                     <button
                       type="button"
                       onClick={() => setVaultOwnerFilter("theirs")}
                       className={cn(
-                        "rounded px-2 py-1 transition-colors",
+                        "rounded px-1.5 py-0.5 sm:px-2 sm:py-1 transition-colors",
                         vaultOwnerFilter === "theirs" ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"
                       )}
                       title={`Files ${counterparty.full_name ?? "the other party"} uploaded`}
                     >
-                      <User className="mr-1 inline h-3 w-3" />{counterparty.full_name?.split(" ")[0] ?? "Counterparty"}
+                      <User className="mr-0.5 inline h-2.5 w-2.5 sm:mr-1 sm:h-3 sm:w-3" />{counterparty.full_name?.split(" ")[0] ?? "Counterparty"}
                     </button>
                   </div>
                   {!isLocked && (
@@ -506,12 +507,12 @@ export function WorkspaceShell({
                       <Button
                         size="sm"
                         variant="gradient"
-                        className="h-8"
+                        className="h-7 text-xs sm:h-8 sm:text-sm"
                         onClick={() => setVaultUploadMenuOpen((o) => !o)}
                         disabled={isLocked || !workspace.escrow_funded}
                         title={!workspace.escrow_funded ? "Fund escrow first" : "Upload files"}
                       >
-                        <Upload className="h-3.5 w-3.5" />Upload
+                        <Upload className="h-3 w-3 sm:h-3.5 sm:w-3.5" />Upload
                       </Button>
                       {vaultUploadMenuOpen && (
                         <div className="absolute right-0 top-full z-30 mt-1.5 w-64 rounded-lg border bg-card p-1 shadow-xl">
@@ -734,13 +735,13 @@ function ActionBar({
     if (role === "buyer") {
       return (
         <Card>
-          <CardContent className="flex flex-wrap items-center justify-between gap-2 p-4">
+          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">Fund the escrow so the employee can start work.</p>
-            <div className="flex gap-2">
-              <Button size="sm" variant="ghost" onClick={onWithdraw} disabled={busy} className="text-rose-600 hover:bg-rose-500/10">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button size="sm" variant="ghost" onClick={onWithdraw} disabled={busy} className="text-rose-600 hover:bg-rose-500/10 w-full sm:w-auto">
                 Withdraw (₹99 fee)
               </Button>
-              <Button size="sm" variant="gradient" onClick={onFund}>
+              <Button size="sm" variant="gradient" onClick={onFund} className="w-full sm:w-auto">
                 <ShieldAlert className="h-3.5 w-3.5" />Fund escrow
               </Button>
             </div>
@@ -766,7 +767,7 @@ function ActionBar({
     if (role === "employee") {
       return (
         <Card>
-          <CardContent className="flex flex-wrap items-center justify-between gap-2 p-4">
+          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-medium">Ready to submit delivery?</p>
               <p className="text-[11px] text-muted-foreground">
@@ -775,8 +776,8 @@ function ActionBar({
                   : `${pendingNotDone} checklist item${pendingNotDone === 1 ? "" : "s"} pending.`}
               </p>
             </div>
-            <div className="flex gap-2">
-              <Button size="sm" variant="ghost" onClick={onFileDispute}>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button size="sm" variant="ghost" onClick={onFileDispute} className="w-full sm:w-auto">
                 <ShieldAlert className="h-3.5 w-3.5" />Dispute
               </Button>
               <SubmitDeliveryButton
@@ -831,9 +832,18 @@ function ActionBar({
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Clock className="h-4 w-4" />Waiting for the buyer to review your delivery.
           </div>
-          <Button size="sm" variant="ghost" onClick={onFileDispute}>
-            <ShieldAlert className="h-3.5 w-3.5" />Dispute
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" variant="ghost" onClick={onFileDispute}>
+              <ShieldAlert className="h-3.5 w-3.5" />Dispute
+            </Button>
+            <SubmitDeliveryButton
+              workspaceId={workspaceId}
+              disabled={!allDone || busy}
+              hint={!allDone ? "All checklist items must be marked done first" : undefined}
+              isResubmit
+              onDone={onSubmitDelivery}
+            />
+          </div>
         </CardContent>
       </Card>
     );

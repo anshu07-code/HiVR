@@ -8,17 +8,20 @@ import {
   X, LayoutDashboard, Briefcase, Wallet, Award, ShieldCheck, MessageSquare, Star,
   Settings, ListChecks, FileText, Users, BarChart3, Calendar, Sparkles,
   Search, UserSearch, FolderTree, BookOpen, Tag, Building2, Activity, FolderKanban, Eye, Bell,
-  TrendingUp, LogOut, Menu,
+  TrendingUp, Handshake, LogOut, Menu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { TourTrigger } from "@/components/onboarding/tour-guide";
+import { UnreadMessagesBadge } from "./unread-messages-badge";
 
 type Item = { href: string; label: string; Icon: React.ComponentType<{ className?: string }> };
 
 const EMPLOYEE_NAV: Item[] = [
   { href: "/dashboard",            label: "Overview",          Icon: LayoutDashboard },
   { href: "/dashboard/applications", label: "My Applications",  Icon: FileText },
+  { href: "/dashboard/job-offers", label: "Job Offers",        Icon: Handshake },
   { href: "/dashboard/profile",    label: "Build Your Profile", Icon: UserSearch },
   { href: "/onboarding/verify",    label: "Get Verified",      Icon: ShieldCheck },
   { href: "/dashboard/workspaces", label: "Workspaces",        Icon: FolderKanban },
@@ -41,6 +44,7 @@ const BUYER_NAV: Item[] = [
   { href: "/dashboard",            label: "Overview",          Icon: LayoutDashboard },
   { href: "/find-people",          label: "Find People",       Icon: UserSearch },
   { href: "/dashboard/tasks",      label: "My Posted Tasks",   Icon: ListChecks },
+  { href: "/dashboard/job-offers", label: "Job Offers",        Icon: Handshake },
   { href: "/onboarding/verify",    label: "Get Verified",      Icon: ShieldCheck },
   { href: "/dashboard/workspaces", label: "Workspaces",        Icon: FolderKanban },
   { href: "/dashboard/contracts",  label: "Contracts",         Icon: Briefcase },
@@ -167,12 +171,14 @@ export function DashboardMobileSidebar({ mode, currentMode }: Props) {
                     )}
                     <Icon className="h-[18px] w-[18px] shrink-0" />
                     <span className="truncate">{label}</span>
+                    {href === "/dashboard/messages" && <UnreadMessagesBadge />}
                   </Link>
                 );
               })}
             </nav>
 
-            <div className="border-t p-3">
+            <div className="border-t p-3 space-y-2">
+              <TourTrigger />
               <Button
                 variant="ghost"
                 className="w-full justify-start text-destructive"

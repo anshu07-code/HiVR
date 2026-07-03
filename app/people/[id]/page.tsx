@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { formatPaise, timeAgo } from "@/lib/utils";
 import { VideoGrid } from "@/components/profile/video-grid";
+import { PreHireChat } from "@/components/people/pre-hire-chat";
+import { HirePanel } from "@/components/people/hire-panel";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -39,19 +41,30 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
     { data: certifications },
     { data: verifs },
     { data: resume },
+    { data: standingRates },
   ] = await Promise.all([
     sb.from("users").select("id, full_name, avatar_url, current_mode, created_at").eq("id", userId).maybeSingle(),
     sb.from("employee_profiles").select("*").eq("user_id", userId).maybeSingle(),
-    sb.from("employee_skills").select("id, category_id, is_primary, years_experience, verification_status, current_wage_band_min, current_wage_band_max, category:skill_categories(name, slug, icon, tier)").eq("employee_id", userId).order("is_primary", { ascending: false }),
+    sb.from("employee_skills").select("id, category_id, is_primary, years_experience, verification_status, current_wage_band_min, current_wage_band_max, rate_per_task_paise, category:skill_categories(name, slug, icon, tier)").eq("employee_id", userId).order("is_primary", { ascending: false }),
     sb.from("employee_education").select("*").eq("user_id", userId).order("end_year", { ascending: false, nullsFirst: false }).order("start_year", { ascending: false }),
     sb.from("employee_experience").select("*").eq("user_id", userId).order("is_current", { ascending: false }).order("start_date", { ascending: false }),
     sb.from("employee_projects").select("*").eq("user_id", userId).order("is_featured", { ascending: false }).order("sort_order", { ascending: false }),
     sb.from("employee_certifications").select("*").eq("user_id", userId).order("issued_at", { ascending: false, nullsFirst: false }),
     sb.from("verifications").select("doc_type, status, purpose, metadata, verified_at").eq("user_id", userId).eq("status", "verified"),
     sb.from("employee_resume").select("filename, uploaded_at").eq("user_id", userId).maybeSingle(),
+    sb.from("employee_standing_rates").select("rate_per_task_paise, rate_per_hour_paise, standing_rate").eq("user_id", userId).maybeSingle(),
   ]);
 
   if (!u) notFound();
+
+  // Who is viewing?
+  const { data: viewer } = await sb.auth.getUser();
+  const { data: viewerProfile } = viewer?.user
+    ? await sb.from("users").select("current_mode, roles").eq("id", viewer.user.id).maybeSingle()
+    : { data: null };
+  const viewerIsEmployee =
+    (viewerProfile as any)?.current_mode === "employee" ||
+    (viewerProfile as any)?.current_mode === "both";
 
   const verifiedDocs = (verifs ?? []).filter((v: any) => (v.purpose ?? "employee") === "employee");
   const isVerified = verifiedDocs.length > 0;
@@ -59,6 +72,12 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
   const initials = ((u as any)?.full_name ?? "??").split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase();
   const tier = (ep as any)?.overall_trust_tier;
   const isAvailable = (u as any)?.current_mode === "employee" || (u as any)?.current_mode === "both" || !(u as any)?.current_mode;
+
+  // Resolve best rate per task for hire panel
+  const primarySkill = (skills ?? []).find((s: any) => s.is_primary);
+  const skillRate = (primarySkill as any)?.rate_per_task_paise;
+  const standingRate = (standingRates as any)?.rate_per_task_paise ?? (standingRates as any)?.standing_rate;
+  const hireRatePaise = skillRate ?? standingRate ?? 100000;
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -112,11 +131,29 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
                     </a>
                   </Button>
                 )}
-                <Button asChild size="sm">
-                  <Link href={`/browse?hire=${userId}`}>
-                    Hire this person
-                  </Link>
-                </Button>
+                {!viewerIsEmployee && (
+                  <PreHireChat
+                    employeeId={userId}
+                    employeeName={(u as any)?.full_name ?? "HiVR member"}
+                    employeeAvatar={(u as any)?.avatar_url ?? null}
+                    responseTimeMinutes={(ep as any)?.response_time_avg_minutes ?? 60}
+                  />
+                )}
+                {!viewerIsEmployee && (
+                  <HirePanel
+                    employeeId={userId}
+                    employeeName={(u as any)?.full_name ?? "HiVR member"}
+                    employeeAvatar={(u as any)?.avatar_url ?? null}
+                    ratePerTaskPaise={hireRatePaise}
+                    employeeSkills={(skills ?? []).map((s: any) => ({
+                      id: s.id,
+                      categoryId: s.category_id,
+                      name: s.category?.name ?? "Skill",
+                      ratePerTask: s.rate_per_task_paise,
+                      isPrimary: s.is_primary,
+                    }))}
+                  />
+                )}
               </div>
             </div>
           </CardContent>
@@ -256,7 +293,7 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-wrap gap-1.5">
-                    {(skills ?? []).map((s: any) => (
+                    {(skills ?? []).slice(0, 2).map((s: any) => (
                       <span
                         key={s.id}
                         className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${s.verification_status === "verified" || s.verification_status === "experienced" || s.verification_status === "top_rated" ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-700" : "bg-muted/30"}`}
@@ -267,6 +304,11 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
                         {(s.verification_status === "verified" || s.verification_status === "experienced" || s.verification_status === "top_rated") && <ShieldCheck className="h-2.5 w-2.5" />}
                       </span>
                     ))}
+                    {(skills ?? []).length > 2 && (
+                      <span className="inline-flex items-center rounded-full border border-dashed px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                        +{(skills ?? []).length - 2} more
+                      </span>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -284,7 +326,7 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
                       <li key={i} className="flex items-center gap-2 text-xs">
                         <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
                         <span className="font-medium uppercase">{v.doc_type}</span>
-                        <span className="text-muted-foreground">•••• {(v.metadata as any)?.last4 ?? "—"}</span>
+                        <span className="text-emerald-600">✓ Verified</span>
                       </li>
                     ))}
                   </ul>

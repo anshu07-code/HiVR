@@ -15,6 +15,7 @@ import {
 import { formatPaise, timeAgo, timeUntil } from "@/lib/utils";
 import { CategoryIcon } from "@/components/marketing/category-icon";
 import { NegotiationModal, type NegotiationOffer } from "@/components/applicants/negotiation-modal";
+import { SettlementEngine } from "@/components/applicants/settlement-engine";
 
 type AppRow = {
   id: string;
@@ -24,7 +25,7 @@ type AppRow = {
   bid_paise: number | null;
   created_at: string;
   updated_at: string;
-  task: { id: string; title: string; status: string; budget_min: number; budget_max: number; pricing_model: string; deadline: string | null; published_at: string | null; created_at: string; category: { name: string; icon: string; tier: string } | null; buyer: { id: string; full_name: string } | null } | null;
+  task: { id: string; title: string; status: string; budget_min: number; budget_max: number; pricing_model: string; estimated_hours: number | null; deadline: string | null; published_at: string | null; created_at: string; category: { name: string; icon: string; tier: string } | null; buyer: { id: string; full_name: string } | null } | null;
   offer: { id: string; status: string; amount_paise: number | null; expires_at: string; created_at: string; message: string | null } | null;
   next_interview: { id: string; round_type: string; scheduled_at: string; duration_min: number; location: string | null; meeting_url: string | null; agenda: string | null; employee_response: string } | null;
 };
@@ -70,18 +71,83 @@ const STAGE_HINT: Record<string, string> = {
   not_selected: "The buyer went with someone else.",
 };
 
-export function MyApplicationsList({ initialApplications, contractMap = {} }: { initialApplications: AppRow[]; contractMap?: Record<string, { contract_id: string; workspace_id: string | null }> }) {
+export function MyApplicationsList({ initialApplications, contractMap = {}, settleAppId }: { initialApplications: AppRow[]; contractMap?: Record<string, { contract_id: string; workspace_id: string | null }>; settleAppId?: string }) {
   const router = useRouter();
   const [apps, setApps] = React.useState<AppRow[]>(initialApplications);
   const [busyId, setBusyId] = React.useState<string | null>(null);
   const [filter, setFilter] = React.useState<"all" | "active" | "hired" | "closed">("active");
   const [confirmD, setConfirmD] = React.useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
   const [alertD, setAlertD] = React.useState<{ title: string; message: string } | null>(null);
+  const [settleFor, setSettleFor] = React.useState<{ appId: string; taskId: string; taskTitle: string; budgetMin: number; budgetMax: number; pricingModel: string; estimatedHours: number | null; buyerId: string; buyerName: string } | null>(null);
   const [negOffers, setNegOffers] = React.useState<NegotiationOffer[]>([]);
   const [negMeta, setNegMeta] = React.useState<Record<string, { title: string; standingRate: number | null }>>({});
   const [activeNeg, setActiveNeg] = React.useState<NegotiationOffer | null>(null);
   const [boundPct, setBoundPct] = React.useState<number>(0.2);
   const [currentUserId, setCurrentUserId] = React.useState<string | null>(null);
+  const settledAutoRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (settleAppId && !settledAutoRef.current) {
+      settledAutoRef.current = true;
+      const app = initialApplications.find((a: any) => a.id === settleAppId);
+      if (!app?.task) return;
+
+      // If already hired, redirect to contract page immediately
+      if (app.hiring_stage === "hired") {
+        const cm = app.task.id ? contractMap[app.task.id] : null;
+        router.push(cm?.contract_id ? `/dashboard/contracts/${cm.contract_id}` : "/dashboard/contracts");
+        return;
+      }
+
+      // Check settlement status from the API first
+      (async () => {
+        try {
+          const r = await fetch(`/api/applications/settlement?application_id=${settleAppId}`);
+          const data = await r.json();
+          const rounds: any[] = data.rounds ?? [];
+          const lastRound = rounds[0];
+
+          if (lastRound?.status === "accepted") {
+            // Find contract from the map (already fetched server-side)
+            const cm = contractMap[app.task!.id];
+            window.location.href = cm?.contract_id ? `/dashboard/contracts/${cm.contract_id}` : "/dashboard/contracts";
+            return;
+          }
+
+          if (lastRound?.status === "declined" || lastRound?.status === "expired") {
+            router.push(`/dashboard/applications?settleAppId=${settleAppId}&declined=1`);
+            return;
+          }
+
+          // Settlement is still pending — open the settlement engine
+          setSettleFor({
+            appId: app.id,
+            taskId: (app.task as any).id,
+            taskTitle: (app.task as any).title ?? "Task",
+            budgetMin: (app.task as any).budget_min,
+            budgetMax: (app.task as any).budget_max,
+            pricingModel: (app.task as any).pricing_model ?? "fixed",
+            estimatedHours: (app.task as any).estimated_hours ?? null,
+            buyerId: (app.task as any).buyer?.id ?? "",
+            buyerName: (app.task as any).buyer?.full_name ?? "Buyer",
+          });
+        } catch {
+          // Fallback: open settlement engine anyway
+          setSettleFor({
+            appId: app.id,
+            taskId: (app.task as any).id,
+            taskTitle: (app.task as any).title ?? "Task",
+            budgetMin: (app.task as any).budget_min,
+            budgetMax: (app.task as any).budget_max,
+            pricingModel: (app.task as any).pricing_model ?? "fixed",
+            estimatedHours: (app.task as any).estimated_hours ?? null,
+            buyerId: (app.task as any).buyer?.id ?? "",
+            buyerName: (app.task as any).buyer?.full_name ?? "Buyer",
+          });
+        }
+      })();
+    }
+  }, [settleAppId, initialApplications, contractMap, router]);
 
   const refreshNeg = React.useCallback(async (uid: string) => {
     const sb = createClient();
@@ -464,6 +530,21 @@ export function MyApplicationsList({ initialApplications, contractMap = {} }: { 
                   })()}
                 </div>
                 <div className="flex shrink-0 flex-col gap-1.5 sm:w-36">
+                  {a.hiring_stage === "offer" && t && (
+                    <Button size="sm" variant="gradient" onClick={() => setSettleFor({
+                      appId: a.id,
+                      taskId: t.id,
+                      taskTitle: t.title ?? "Task",
+                      budgetMin: t.budget_min,
+                      budgetMax: t.budget_max,
+                      pricingModel: t.pricing_model ?? "fixed",
+                      estimatedHours: t.estimated_hours ?? null,
+                      buyerId: t.buyer?.id ?? "",
+                      buyerName: t.buyer?.full_name ?? "Buyer",
+                    })}>
+                      <Send className="h-3.5 w-3.5" />View offer
+                    </Button>
+                  )}
                   <Button asChild size="sm" variant="outline">
                     <Link href={`/browse/${a.task?.id}`}>View task</Link>
                   </Button>
@@ -524,6 +605,32 @@ export function MyApplicationsList({ initialApplications, contractMap = {} }: { 
         boundPct={boundPct}
         onResponded={() => { if (currentUserId) refreshNeg(currentUserId); router.refresh(); }}
         onClose={() => setActiveNeg(null)}
+      />
+    )}
+
+    {settleFor && currentUserId && (
+      <SettlementEngine
+        open={!!settleFor}
+        onClose={() => setSettleFor(null)}
+        applicationId={settleFor.appId}
+        taskTitle={settleFor.taskTitle}
+        budgetMin={settleFor.budgetMin}
+        budgetMax={settleFor.budgetMax}
+        pricingModel={settleFor.pricingModel}
+        estimatedHours={settleFor.estimatedHours}
+        currentUserId={currentUserId}
+        buyerId={settleFor.buyerId}
+        employeeId={currentUserId}
+        buyerName={settleFor.buyerName}
+        employeeName="You"
+        onDone={(result) => {
+          setSettleFor(null);
+          if (result.accepted && result.contractId) {
+            window.location.href = `/dashboard/contracts/${result.contractId}`;
+          } else if (result.declined) {
+            router.refresh();
+          }
+        }}
       />
     )}
     </>

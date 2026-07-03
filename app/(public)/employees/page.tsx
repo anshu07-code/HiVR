@@ -44,31 +44,37 @@ export default async function EmployeesPage({
   const selectedSubcats = selectedParent ? (childByParent[selectedParent.id] ?? []) : [];
 
   // Build the people query.
+  // NOTE: query from `users` so both `profile:employee_profiles` and
+  // `skills:employee_skills` embeds resolve (both FK to users.id).
   let peopleQuery = sb
-    .from("employee_profiles")
+    .from("users")
     .select(`
-      user_id, bio, languages, location, avg_rating, total_reviews, completion_rate, experience_type,
-      user:users!employee_profiles_user_id_fkey(id, full_name, avatar_url, current_mode),
+      id, full_name, avatar_url, current_mode,
+      profile:employee_profiles(
+        user_id, bio, headline, location, languages, avg_rating, total_reviews,
+        completion_rate, experience_type, overall_trust_tier, response_time_avg_minutes
+      ),
       skills:employee_skills(
-        tier, verification_status, current_wage_band_min, current_wage_band_max, last_tested_at,
+        id, category_id, verification_status, tier, current_wage_band_min, current_wage_band_max, last_tested_at,
         category:skill_categories(id, slug, name, icon, tier, status, parent_category_id)
       )
-    `);
+    `)
+    .in("current_mode", ["employee", "both"] as any);
 
   if (searchParams.q && searchParams.q.trim()) {
     const term = `%${searchParams.q.trim()}%`;
-    peopleQuery = peopleQuery.or(`bio.ilike.${term},location.ilike.${term}`);
+    peopleQuery = peopleQuery.or(`full_name.ilike.${term},profile.bio.ilike.${term},profile.location.ilike.${term}`);
   }
   if (searchParams.min_rating) {
-    peopleQuery = peopleQuery.gte("avg_rating", Number(searchParams.min_rating));
+    peopleQuery = peopleQuery.gte("profile.avg_rating", Number(searchParams.min_rating));
   }
   if (searchParams.tier === "tierA") {
-    peopleQuery = peopleQuery.gte("total_reviews", 1);
+    peopleQuery = peopleQuery.gte("profile.total_reviews", 1);
   }
 
   const { data: everyone } = await peopleQuery
-    .order("avg_rating", { ascending: false })
-    .order("total_reviews", { ascending: false })
+    .order("profile.avg_rating", { ascending: false, nullsFirst: false })
+    .order("profile.total_reviews", { ascending: false, nullsFirst: false })
     .limit(80);
 
   // If a category is selected, filter client-side: keep only people who
@@ -88,8 +94,8 @@ export default async function EmployeesPage({
   const filtered = (everyone ?? []).filter(matchesCat);
 
   // Split into featured (4.5+ stars, 3+ reviews) and rest.
-  const featured = filtered.filter((p: any) => Number(p.avg_rating) >= 4.5 && Number(p.total_reviews) >= 3);
-  const rest = filtered.filter((p: any) => !(Number(p.avg_rating) >= 4.5 && Number(p.total_reviews) >= 3));
+  const featured = filtered.filter((p: any) => Number(p.profile?.avg_rating) >= 4.5 && Number(p.profile?.total_reviews) >= 3);
+  const rest = filtered.filter((p: any) => !(Number(p.profile?.avg_rating) >= 4.5 && Number(p.profile?.total_reviews) >= 3));
 
   // Build the URL helper for chip links.
   const buildHref = (overrides: Partial<typeof searchParams> = {}) => {
@@ -286,38 +292,39 @@ export default async function EmployeesPage({
 
 function EmployeeCard({ p, featured }: { p: any; featured?: boolean }) {
   const skills = (p.skills ?? []).filter((s: any) => s.category?.status === "active" && s.verification_status === "verified");
-  const initials = ((p.user?.full_name ?? "?").split(" ").map((w: string) => w[0]).slice(0, 2).join("") || "?").toUpperCase();
+  const initials = ((p.full_name ?? "?").split(" ").map((w: string) => w[0]).slice(0, 2).join("") || "?").toUpperCase();
+  const prof = p.profile;
   return (
     <Card className={featured ? "border-primary/30 ring-1 ring-primary/10" : ""}>
       <CardContent className="space-y-3 p-5">
         <div className="flex items-start gap-3">
           <Avatar className="h-12 w-12">
-            <AvatarImage src={p.user?.avatar_url ?? undefined} />
+            <AvatarImage src={p.avatar_url ?? undefined} />
             <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <h3 className="truncate font-display text-base font-semibold">{p.user?.full_name ?? "Anonymous"}</h3>
+              <h3 className="truncate font-display text-base font-semibold">{p.full_name ?? "Anonymous"}</h3>
               {featured && <Badge variant="default" className="text-[10px]"><Sparkles className="mr-1 h-3 w-3" />Featured</Badge>}
             </div>
-            {p.location && (
+            {prof?.location && (
               <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
-                <MapPin className="h-3 w-3" /><span>{p.location}</span>
+                <MapPin className="h-3 w-3" /><span>{prof?.location}</span>
               </div>
             )}
             <div className="mt-1 flex items-center gap-1.5 text-xs">
               <div className="flex items-center gap-0.5 text-amber-500">
                 {Array.from({ length: 5 }).map((_, i) => (
-                  <Star key={i} className={`h-3 w-3 ${i < Math.round(Number(p.avg_rating ?? 0)) ? "fill-current" : ""}`} />
+                  <Star key={i} className={`h-3 w-3 ${i < Math.round(Number(prof?.avg_rating ?? 0)) ? "fill-current" : ""}`} />
                 ))}
               </div>
-              <span className="font-medium">{Number(p.avg_rating ?? 0).toFixed(2)}</span>
-              <span className="text-muted-foreground">({p.total_reviews} review{p.total_reviews === 1 ? "" : "s"})</span>
+              <span className="font-medium">{Number(prof?.avg_rating ?? 0).toFixed(2)}</span>
+              <span className="text-muted-foreground">({prof?.total_reviews} review{prof?.total_reviews === 1 ? "" : "s"})</span>
             </div>
           </div>
         </div>
 
-        {p.bio && <p className="line-clamp-2 text-sm text-muted-foreground">{p.bio}</p>}
+        {prof?.bio && <p className="line-clamp-2 text-sm text-muted-foreground">{prof?.bio}</p>}
 
         {skills.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
@@ -332,10 +339,10 @@ function EmployeeCard({ p, featured }: { p: any; featured?: boolean }) {
 
         <div className="flex items-center justify-between border-t pt-3">
           <span className="text-xs text-muted-foreground">
-            {Number(p.completion_rate ?? 0) > 0 && <>{Math.round(Number(p.completion_rate) * 100)}% completion</>}
+            {Number(prof?.completion_rate ?? 0) > 0 && <>{Math.round(Number(prof?.completion_rate) * 100)}% completion</>}
           </span>
           <Button asChild size="sm" variant={featured ? "gradient" : "outline"}>
-            <Link href="/dashboard">Hire</Link>
+            <Link href={`/people/${p.id}`}>View profile</Link>
           </Button>
         </div>
       </CardContent>

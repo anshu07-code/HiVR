@@ -53,6 +53,16 @@ export async function applyToTaskAction(
     };
   }
 
+  // Task must be open (not upcoming, closed, cancelled, or in_contract)
+  const { data: taskStatus } = await sb
+    .from("task_posts")
+    .select("status")
+    .eq("id", taskId)
+    .single();
+  if (taskStatus?.status !== "open") {
+    return { error: "This task is not accepting applications right now." };
+  }
+
   // Pause / rate-limit check.
   const ctx = await getEmployeeApplyContext({ userId: user.id, taskId });
   if (!ctx.canApply) return { error: ctx.blockedReason ?? "Not allowed to apply right now." };

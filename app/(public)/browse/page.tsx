@@ -82,7 +82,8 @@ export default async function BrowsePage({ searchParams }: { searchParams: { cat
   // Build main query
   let query = sb
     .from("task_posts")
-    .select("id, buyer_id, title, description, pricing_model, budget_min, budget_max, status, created_at, deadline, category:skill_categories!inner(slug, name, icon, tier)");
+    .select("id, buyer_id, title, description, pricing_model, budget_min, budget_max, status, created_at, deadline, category:skill_categories!inner(slug, name, icon, tier)")
+    .eq("is_private", false); // private hires/negotiations never appear in browse
 
   if (mine && viewer) {
     if (isEmployeeOnly) {

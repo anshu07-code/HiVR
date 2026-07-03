@@ -63,7 +63,7 @@ export default async function PostTaskPage({ searchParams }: { searchParams: { e
 
       <Card>
         <CardHeader>
-          <CardTitle className="font-display text-2xl">Post a task</CardTitle>
+          <CardTitle data-tour="post-task" className="font-display text-2xl">Post a task</CardTitle>
           <CardDescription>Pick the kind of work, then tell us what you need. AI will help you tighten the description.</CardDescription>
         </CardHeader>
         <CardContent>

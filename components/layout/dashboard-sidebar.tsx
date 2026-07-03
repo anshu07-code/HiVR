@@ -7,17 +7,20 @@ import {
   LayoutDashboard, Briefcase, Wallet, Award, ShieldCheck, MessageSquare, Star,
   Settings, ChevronsLeft, ChevronsRight, ListChecks, FileText, Users, BarChart3, Calendar, Sparkles,
   Search, UserSearch, FolderTree, BookOpen, Tag, Building2, Activity, FolderKanban, Zap, Eye, Bell,
-  TrendingUp,
+  TrendingUp, Handshake,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "./logo";
 import { Button } from "@/components/ui/button";
+import { TourTrigger } from "@/components/onboarding/tour-guide";
+import { UnreadMessagesBadge } from "./unread-messages-badge";
 
 type Item = { href: string; label: string; Icon: React.ComponentType<{ className?: string }> };
 
 const EMPLOYEE_NAV: Item[] = [
   { href: "/dashboard",            label: "Overview",          Icon: LayoutDashboard },
   { href: "/dashboard/applications", label: "My Applications",  Icon: FileText },
+  { href: "/dashboard/job-offers", label: "Job Offers",        Icon: Handshake },
   { href: "/dashboard/profile",    label: "Build Your Profile", Icon: UserSearch },
   { href: "/onboarding/verify",    label: "Get Verified",      Icon: ShieldCheck },
   { href: "/dashboard/workspaces", label: "Workspaces",        Icon: FolderKanban },
@@ -40,6 +43,7 @@ const BUYER_NAV: Item[] = [
   { href: "/dashboard",            label: "Overview",          Icon: LayoutDashboard },
   { href: "/find-people",          label: "Find People",       Icon: UserSearch },
   { href: "/dashboard/tasks",      label: "My Posted Tasks",   Icon: ListChecks },
+  { href: "/dashboard/job-offers", label: "Job Offers",        Icon: Handshake },
   { href: "/onboarding/verify",    label: "Get Verified",      Icon: ShieldCheck },
   { href: "/dashboard/workspaces", label: "Workspaces",        Icon: FolderKanban },
   { href: "/dashboard/contracts",  label: "Contracts",         Icon: Briefcase },
@@ -174,6 +178,7 @@ function SidebarNav({ items, collapsed }: { items: Item[]; collapsed: boolean })
             )}
             <Icon className="h-[18px] w-[18px] shrink-0" />
             {!collapsed && <span className="truncate">{label}</span>}
+            {!collapsed && href === "/dashboard/messages" && <UnreadMessagesBadge />}
           </Link>
         );
       })}
@@ -208,11 +213,12 @@ export function DashboardSidebar({ mode = "employee", currentMode }: { mode?: Si
       </div>
       <PublicQuickLinks collapsed={collapsed} />
       <SidebarNav items={nav} collapsed={collapsed} />
-      <div className="border-t p-2">
+      <div className="border-t p-2 space-y-1">
+        {!collapsed && <TourTrigger />}
         <Button
           variant="ghost"
           size="sm"
-          className="w-full justify-center"
+          className="w-full"
           onClick={() => setCollapsed(v => !v)}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >

@@ -6,7 +6,7 @@ import {
   Share2, Star, Edit2, FolderX, FileX, Link2Off, Loader2, Activity, Filter,
   ShieldAlert, Send, RefreshCw, CheckCircle2, Lock, Gift, FileText, MessageSquare, History,
 } from "lucide-react";
-import { cn, timeAgo } from "@/lib/utils";
+import { cn, timeAgo, formatPaise } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 
@@ -110,6 +110,7 @@ export function VaultActivityTimeline({
   const sbRef = React.useRef<ReturnType<typeof createClient> | null>(null);
   const [items, setItems] = React.useState<TimelineItem[]>([]);
   const [actorNames, setActorNames] = React.useState<Record<string, string>>({});
+  const [workspaceParties, setWorkspaceParties] = React.useState<Record<string, string>>({});
   const [loading, setLoading] = React.useState(true);
   const [filter, setFilter] = React.useState<FilterKind>("all");
   const [expanded, setExpanded] = React.useState(false);
@@ -123,13 +124,13 @@ export function VaultActivityTimeline({
         .select("id, workspace_id, vault_item_id, actor_id, actor_name, event, file_name, file_size, metadata, created_at")
         .eq("workspace_id", workspaceId)
         .order("created_at", { ascending: false })
-        .limit(100),
+        .limit(250),
       sb
         .from("workspace_events")
         .select("id, workspace_id, actor_id, kind, payload, created_at")
         .eq("workspace_id", workspaceId)
         .order("created_at", { ascending: false })
-        .limit(100),
+        .limit(250),
     ]);
     const merged: TimelineItem[] = [
       ...((vaultRes.data ?? []) as VaultEvent[]).map((v) => ({ ...v, source: "vault" as const })),
@@ -137,6 +138,29 @@ export function VaultActivityTimeline({
     ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     setItems(merged);
     setLoading(false);
+  }, [workspaceId]);
+
+  // Fetch workspace buyer/employee names as the primary actor resolution
+  // (most workspace events are performed by buyer or employee, so we
+  // preload their names so the timeline shows "Aarav funded the escrow"
+  // instead of "Someone funded the escrow").
+  React.useEffect(() => {
+    if (!sbRef.current) sbRef.current = createClient();
+    const sb = sbRef.current;
+    sb.from("workspaces")
+      .select("buyer_id, employee_id, buyer:users!workspaces_buyer_id_fkey(full_name), employee:users!workspaces_employee_id_fkey(full_name)")
+      .eq("id", workspaceId)
+      .single()
+      .then(({ data }) => {
+        if (!data) return;
+        const d = data as any;
+        const names: Record<string, string> = {};
+        if (d.buyer_id && d.buyer?.full_name) names[d.buyer_id] = d.buyer.full_name;
+        if (d.employee_id && d.employee?.full_name) names[d.employee_id] = d.employee.full_name;
+        setWorkspaceParties(names);
+        // Pre-seed actorNames so the first render already shows names
+        setActorNames((p) => ({ ...names, ...p }));
+      });
   }, [workspaceId]);
 
   React.useEffect(() => {
@@ -205,8 +229,19 @@ export function VaultActivityTimeline({
     const id = (it as any).actor_id as string | null;
     const denorm = (it as any).actor_name as string | null;
     if (denorm) return denorm;
-    if (id === currentUserId) return "You";
+    if (id && id === currentUserId) return "You";
     if (id && actorNames[id]) return actorNames[id]!;
+    if (id && workspaceParties[id]) return workspaceParties[id]!;
+    // Generic role-based fallbacks when the name hasn't been resolved yet
+    if (it.source === "workspace") {
+      const w = it as WorkspaceEvent;
+      if (w.kind === "escrow_funded") return "Buyer";
+      if (w.kind === "delivered") return "Employee";
+      if (w.kind === "completed") return "Buyer";
+      if (w.kind === "revision_requested") return "Buyer";
+      if (w.kind === "frozen") return "Admin";
+      if (w.kind === "reopened") return "Admin";
+    }
     return "Someone";
   }
 

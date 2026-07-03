@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { notify } from "@/lib/notifications/helpers";
 import { SecurityError, requireUuid, enforceRateLimit } from "@/lib/security";
 import { encodeWorkspaceSlug } from "@/lib/workspace-slug";
@@ -41,7 +41,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "Workspace has no associated contract" }, { status: 400 });
     }
 
-    // Mark workspace done via RPC (sets contract status = 'completed', release_at, etc.).
+    // Mark workspace done via RPC. Migration 0127 moved the wallet
+    // credit + payment status update + employee_profiles bump INTO
+    // this function so the whole "complete contract" transaction is
+    // atomic. The RPC now returns { wallet_credited_paise, has_razorpay,
+    // employee_payout_paise, ... }.
     const { data: markResult, error: markErr } = await sb.rpc("mark_workspace_done" as any, {
       p_workspace_id: workspaceId,
     } as any);
@@ -49,57 +53,25 @@ export async function POST(req: NextRequest) {
     const result = markResult as any;
     if (!result || result.ok === false) return NextResponse.json({ ok: false, error: result?.error ?? "Failed" }, { status: 400 });
 
-    // Immediately release escrow — credit the employee's wallet.
-    const admin = createAdminClient();
     const employeeId = w.employee_id;
+    const employeePayout = Number(result.employee_payout_paise ?? 0);
+    const platformFee = Number(result.platform_fee_paise ?? 0);
+    const awaitingWebhook = !!result.awaiting_webhook;
 
-    // Fetch contract + payment info.
-    const { data: contract, error: contractErr } = await admin
-      .from("contracts")
-      .select("id, employee_payout_paise, agreed_price, payments(id, amount, platform_fee_amount, razorpay_payment_id, escrow_released)")
-      .eq("id", w.contract_id)
-      .maybeSingle();
-    if (contractErr) {
-      console.error("[mark-done] contract fetch failed", contractErr);
-    }
-
-    if (contract) {
-      const c = contract as any;
-      let employeeWalletCreditPaise = 0;
-
-      // Release all unreleased payments.
-      const payments = c.payments ?? [];
-      for (const p of payments) {
-        if (!p.escrow_released) {
-          await admin.from("payments").update({
-            status: "released",
-            escrow_released: true,
-          }).eq("id", p.id);
-
-          // Wallet-funded payments (no razorpay_payment_id) — credit the employee.
-          if (!p.razorpay_payment_id) {
-            employeeWalletCreditPaise += Math.max(
-              0,
-              Number(p.amount ?? 0) - Number(p.platform_fee_amount ?? 0)
-            );
-          }
-        }
-      }
-
-      const employeePayout = Number(c.employee_payout_paise ?? employeeWalletCreditPaise ?? 0);
-      if (employeePayout > 0) {
-        await admin.rpc("wallet_credit" as any, {
-          p_user_id: employeeId,
-          p_amount_paise: employeePayout,
-          p_kind: "escrow_release",
-          p_description: `Payment released for contract ${c.id}`,
-          p_ref_type: "workspace",
-          p_ref_id: workspaceId,
-          p_metadata: { trigger: "mark_done", workspace_id: workspaceId, contract_id: c.id },
-        } as any);
-      }
-
-      // Notify the employee about the payment.
+    // Migration 0133 split the credit: employee's wallet + HiVR Revenue.
+    // For Razorpay-funded contracts the money is still in Razorpay's
+    // escrow — both wallets get `pending_paise` (not withdrawable)
+    // until the transfer.processed webhook fires. For wallet-funded
+    // contracts both wallets get `balance_paise` immediately.
+    if (awaitingWebhook) {
+      await notify({
+        userId: employeeId,
+        kind: "payment_released",
+        title: "Payment pending Razorpay release",
+        body: `${formatPaise(employeePayout)} is pending Razorpay escrow release. Once it settles in HiVR's pool, you'll be able to withdraw it.`,
+        link: `/dashboard/workspaces/${encodeWorkspaceSlug("workspace", workspaceId)}`,
+      });
+    } else {
       await notify({
         userId: employeeId,
         kind: "payment_released",
@@ -114,11 +86,31 @@ export async function POST(req: NextRequest) {
       userId: user.id,
       kind: "workspace_done",
       title: "Workspace completed ✓",
-      body: "All vault files approved. Payment has been released to the employee.",
+      body: awaitingWebhook
+        ? `All vault files approved. Employee's ${formatPaise(employeePayout)} is pending Razorpay escrow release.`
+        : "All vault files approved. Payment has been released to the employee.",
       link: `/dashboard/workspaces/${workspaceId}`,
     });
 
-    return NextResponse.json({ ok: true, amount_credited_paise: contract ? Number((contract as any).employee_payout_paise ?? 0) : 0 });
+    // Force the dashboard to re-fetch. Without this, the page is stuck
+    // on whatever the server saw at the last navigation. Realtime can
+    // take a moment to deliver events (or might not fire in some edge
+    // cases like payment-provider webhooks), so an explicit
+    // revalidatePath is the belt-and-braces guarantee.
+    revalidatePath("/dashboard", "layout");
+    revalidatePath("/dashboard/contracts", "page");
+    revalidatePath(`/dashboard/contracts/${w.contract_id}`, "page");
+    revalidatePath("/dashboard/workspaces", "page");
+    revalidatePath("/dashboard/payments", "page");
+    revalidatePath("/dashboard/earnings", "page");
+
+    return NextResponse.json({
+      ok: true,
+      employee_id: employeeId,
+      employee_payout_paise: employeePayout,
+      platform_fee_paise: platformFee,
+      awaiting_webhook: awaitingWebhook,
+    });
   } catch (e) {
     if (e instanceof SecurityError) {
       return NextResponse.json({ ok: false, error: e.message }, { status: e.status });

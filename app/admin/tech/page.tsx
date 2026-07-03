@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { timeAgo } from "@/lib/utils";
 import { LiveMonitoringPanel } from "@/components/admin/live-monitoring-panel";
 import { VaultMonitorPanel } from "@/components/admin/vault-monitor-panel";
+import { SettlementMonitorPanel } from "@/components/admin/settlement-monitor-panel";
+import { RealtimePreHiringChats } from "@/components/admin/realtime-prehiring";
 
 export const dynamic = "force-dynamic";
 
@@ -70,20 +72,6 @@ export default async function TechAdminHome() {
     .order("created_at", { ascending: false })
     .limit(15);
 
-  // Recent chat activity (contract)
-  const { data: recentChats } = await sb
-    .from("contracts")
-    .select("id, last_message_at, status, buyer:users!contracts_buyer_id_fkey(full_name), employee:users!contracts_employee_id_fkey(full_name)")
-    .order("last_message_at", { ascending: false, nullsFirst: false })
-    .limit(15);
-
-  // Recent chat activity (workspace)
-  const { data: recentWorkspaces } = await sb
-    .from("workspaces")
-    .select("id, status, last_message_at, buyer:users!workspaces_buyer_id_fkey(full_name), employee:users!workspaces_employee_id_fkey(full_name)")
-    .order("last_message_at", { ascending: false, nullsFirst: false })
-    .limit(15);
-
   return (
     <div className="container max-w-6xl space-y-6 py-8">
       <div>
@@ -124,37 +112,16 @@ export default async function TechAdminHome() {
         </Card>
       </div>
 
-      <LiveMonitoringPanel />
+      <LiveMonitoringPanel monitorPath="/admin/tech/chat" />
       <VaultMonitorPanel />
+      <SettlementMonitorPanel />
 
-      {/* Pre-hiring chat monitoring */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-amber-600">
-            <MessageSquare className="h-4 w-4" />Pre-hiring chats ({preHiringCount ?? 0})
-          </CardTitle>
-          <CardDescription>Recent direct messages between buyers and applicants before hiring (task_messages).</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-1.5">
-          {!recentPreHiring || recentPreHiring.length === 0 ? (
-            <p className="py-4 text-center text-sm text-muted-foreground">No pre-hiring chat activity.</p>
-          ) : recentPreHiring.map((m: any) => (
-            <Link
-              key={m.id}
-              href={`/admin/tech/chat/${m.task_id}`}
-              className="block rounded-lg border p-2.5 text-xs transition-colors hover:bg-muted/50"
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-medium">
-                  {m.sender?.full_name ?? "?"} → {m.receiver?.full_name ?? "?"}
-                </span>
-                <span className="text-muted-foreground">{timeAgo(m.created_at)}</span>
-              </div>
-              <p className="mt-0.5 truncate text-muted-foreground">{m.body}</p>
-            </Link>
-          ))}
-        </CardContent>
-      </Card>
+      <RealtimePreHiringChats initialData={recentPreHiring as any} />
+
+      {/* Pre-hiring chat count stat card */}
+      <div className="text-right text-xs text-muted-foreground">
+        Total pre-hiring messages: {preHiringCount ?? 0}
+      </div>
 
       {/* Q&A monitoring */}
       <Card>
@@ -241,65 +208,6 @@ export default async function TechAdminHome() {
         </Card>
       )}
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent contract chats</CardTitle>
-            <CardDescription>Click a row to open the live monitor.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-1.5">
-            {!recentChats || recentChats.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">No recent chat activity.</p>
-            ) : recentChats.map((c: any) => (
-              <Link
-                key={c.id}
-                href={`/admin/monitor/${c.id}`}
-                className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50"
-              >
-                <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm">
-                    <span className="font-semibold">{c.buyer?.full_name ?? "Buyer"}</span>
-                    <span className="text-muted-foreground"> ↔ </span>
-                    <span className="font-semibold">{c.employee?.full_name ?? "Employee"}</span>
-                  </p>
-                  <p className="text-xs text-muted-foreground">Last activity {timeAgo(c.last_message_at)}</p>
-                </div>
-                <Badge variant="outline" className="text-[10px]">{c.status}</Badge>
-              </Link>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent workspace chats</CardTitle>
-            <CardDescription>Workspace conversations with the latest message activity.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-1.5">
-            {!recentWorkspaces || recentWorkspaces.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">No workspace activity.</p>
-            ) : recentWorkspaces.map((w: any) => (
-              <Link
-                key={w.id}
-                href={`/admin/monitor/${w.id}`}
-                className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50"
-              >
-                <Briefcase className="h-4 w-4 text-muted-foreground" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm">
-                    <span className="font-semibold">{w.buyer?.full_name ?? "Buyer"}</span>
-                    <span className="text-muted-foreground"> ↔ </span>
-                    <span className="font-semibold">{w.employee?.full_name ?? "Employee"}</span>
-                  </p>
-                  <p className="text-xs text-muted-foreground">Last activity {timeAgo(w.last_message_at)}</p>
-                </div>
-                <Badge variant="outline" className="text-[10px]">{w.status}</Badge>
-              </Link>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }

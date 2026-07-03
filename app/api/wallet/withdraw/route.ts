@@ -59,15 +59,20 @@ export async function POST(req: NextRequest) {
 
   // Read wallet + employee profile + user payout method
   const [{ data: wallet }, { data: ep }, { data: me }] = await Promise.all([
-    admin.from("user_wallets").select("balance_paise, is_frozen").eq("user_id", user.id).maybeSingle(),
+    admin.from("user_wallets").select("balance_paise, pending_paise, is_frozen").eq("user_id", user.id).maybeSingle(),
     admin.from("employee_profiles").select("withdrawals_this_month, last_withdrawal_reset, withdrawal_penalty_paise, payouts_pending_count").eq("user_id", user.id).maybeSingle(),
     admin.from("users").select("payout_method, upi_id, upi_verified_at, account_last4, ifsc, bank_verified_at").eq("id", user.id).maybeSingle(),
   ]);
 
   if (!wallet) return NextResponse.json({ ok: false, error: "Wallet not found" }, { status: 404 });
   if (wallet.is_frozen) return NextResponse.json({ ok: false, error: "Wallet is frozen" }, { status: 400 });
+  // Only `balance_paise` is withdrawable. `pending_paise` (Razorpay
+  // escrow releases still in flight) is excluded.
   if (wallet.balance_paise < amountPaise) {
-    return NextResponse.json({ ok: false, error: "Insufficient wallet balance" }, { status: 400 });
+    return NextResponse.json({
+      ok: false,
+      error: `Insufficient withdrawable balance. You have ${formatInr(wallet.balance_paise)} available and ${formatInr(wallet.pending_paise ?? 0)} pending Razorpay escrow release.`,
+    }, { status: 400 });
   }
   if (!ep) return NextResponse.json({ ok: false, error: "Employee profile not found — only employees can withdraw" }, { status: 400 });
 

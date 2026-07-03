@@ -17,6 +17,7 @@ export function FileScopeDisputeModal({
   const [fileUrl, setFileUrl] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [submitted, setSubmitted] = React.useState(false);
 
   const submit = async () => {
     setBusy(true);
@@ -31,8 +32,27 @@ export function FileScopeDisputeModal({
     setBusy(false);
     const data = await r.json().catch(() => ({}));
     if (!r.ok || !data.ok) { setError(data?.error ?? "Failed"); return; }
-    onDone();
+    setSubmitted(true);
   };
+
+  if (submitted) {
+    return (
+      <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
+        <div className="w-full max-w-md rounded-lg border bg-card p-6 shadow-xl text-center" onClick={(e) => e.stopPropagation()}>
+          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-primary/10">
+            <ShieldAlert className="h-6 w-6 text-primary" />
+          </div>
+          <h3 className="font-display text-lg font-semibold">Dispute submitted</h3>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Our team will review it and get back to you within 7 days. The workspace has been temporarily paused.
+          </p>
+          <div className="mt-5 flex justify-center gap-2">
+            <Button size="sm" onClick={onDone}>Got it</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
@@ -44,7 +64,7 @@ export function FileScopeDisputeModal({
           <Button variant="ghost" size="icon" onClick={onClose}><X className="h-4 w-4" /></Button>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
-          Cite specific discrepancies between the original brief and what the buyer is asking. An admin will review within 7 days.
+          Cite specific discrepancies between the original brief and what the buyer is asking. Our team will review it.
         </p>
         <div className="mt-3 space-y-3">
           <div>

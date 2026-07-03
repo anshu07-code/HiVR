@@ -35,7 +35,7 @@ export function MobileBottomTabs({ mode = "buyer" }: Props) {
   ];
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/90 backdrop-blur md:hidden select-none" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+    <nav className="sticky bottom-0 z-30 border-t bg-background/90 backdrop-blur md:hidden select-none" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
       <ul className="flex h-16 items-stretch justify-around">
         {TABS.map(({ href, label, Icon, primary, premium, middle }) => {
           const active = pathname === href || (href !== "/" && pathname.startsWith(href + "/"));

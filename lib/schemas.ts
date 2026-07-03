@@ -121,6 +121,9 @@ export const TaskPostSchema = z.object({
     nanToUndefined,
     z.number().int().positive().max(720).optional(),
   ),
+  scheduled_publish_at: z.string().optional(),
+  show_in_upcoming: z.boolean().default(true),
+  openings: z.coerce.number().int().min(1).max(50).default(1),
 }).refine(d => d.budget_max >= d.budget_min, {
   message: "Max budget must be ≥ min budget",
   path: ["budget_max"],

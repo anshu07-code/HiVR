@@ -39,6 +39,7 @@ export function ThemeCycleButton({ className }: { className?: string }) {
   return (
     <button
       type="button"
+      data-tour="theme-switcher"
       onClick={cycle}
       aria-label={`Theme: ${label}. Click to switch.`}
       title={`Theme: ${label} (click to cycle)`}

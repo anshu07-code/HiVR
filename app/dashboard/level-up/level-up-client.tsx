@@ -100,7 +100,7 @@ function CriterionRow({
 export function LevelUpClient({
   evaluation, availableSlots, myBookings,
 }: {
-  evaluation: EvalResult;
+  evaluation: EvalResult | null;
   availableSlots: Slot[];
   myBookings: Booking[];
 }) {
@@ -108,6 +108,20 @@ export function LevelUpClient({
   const [bookingId, setBookingId] = React.useState<string | null>(null);
   const [err, setErr] = React.useState<string | null>(null);
   const [ok, setOk] = React.useState<string | null>(null);
+
+  if (!evaluation) {
+    return (
+      <div className="container max-w-3xl space-y-6 py-8">
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed p-12 text-center">
+          <TrendingUp className="h-10 w-10 text-muted-foreground" />
+          <h2 className="font-display text-lg font-semibold">Level-up data unavailable</h2>
+          <p className="max-w-sm text-sm text-muted-foreground">
+            The level-up system is being updated. Check back later or contact support to learn about tier progression.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const tierMeta = TIER_META[evaluation.current_tier];
   const nextMeta = evaluation.next_tier ? TIER_META[evaluation.next_tier] : null;
@@ -200,9 +214,9 @@ export function LevelUpClient({
               met={!missingFor("completed_contracts")}
             />
             <CriterionRow
-              label={`Average rating (${evaluation.progress.avg_rating.toFixed(2)} / ${evaluation.criteria.min_avg_rating?.toFixed(2) ?? "—"})`}
+              label={`Average rating (${(evaluation.progress.avg_rating ?? 0).toFixed(2)} / ${evaluation.criteria.min_avg_rating?.toFixed(2) ?? "—"})`}
               icon={Star}
-              have={evaluation.progress.avg_rating.toFixed(2)}
+              have={(evaluation.progress.avg_rating ?? 0).toFixed(2)}
               need={evaluation.criteria.min_avg_rating?.toFixed(2)}
               met={!missingFor("avg_rating")}
             />

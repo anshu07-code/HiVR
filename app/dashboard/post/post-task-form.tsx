@@ -15,6 +15,7 @@ import { SearchableCategorySelect } from "@/components/ui/searchable-category-se
 import { TaskPostSchema, type TaskPost } from "@/lib/schemas";
 import { allowedPricingModels, PRICING_MODEL_LABELS } from "@/lib/constants";
 import { BriefBuilder, type BriefValue, type BriefTemplate, validateBrief } from "@/components/brief/brief-builder";
+import { cn } from "@/lib/utils";
 
 type Cat = {
   id: string;
@@ -155,7 +156,12 @@ export function PostTaskForm({ categories, kycComplete = true, remainingHour, re
       if (values.deadline) fd.set("deadline", values.deadline);
       if (values.estimated_hours) fd.set("estimated_hours", String(values.estimated_hours));
       fd.set("skills_required", (values.skills_required ?? []).join(","));
-      if (values.scheduled_publish_at) fd.set("scheduled_publish_at", values.scheduled_publish_at);
+      if (values.scheduled_publish_at) {
+        // Append client timezone offset so the server interprets it correctly
+        const offset = -new Date().getTimezoneOffset();
+        const tz = `${offset >= 0 ? "+" : "-"}${String(Math.floor(Math.abs(offset) / 60)).padStart(2, "0")}:${String(Math.abs(offset) % 60).padStart(2, "0")}`;
+        fd.set("scheduled_publish_at", values.scheduled_publish_at + tz);
+      }
       fd.set("show_in_upcoming", values.show_in_upcoming ? "true" : "false");
       fd.set("brief", JSON.stringify({
         checklist_items: (briefValue.checklist_items ?? []).filter(c => c.text.trim().length > 0),
@@ -319,7 +325,13 @@ export function PostTaskForm({ categories, kycComplete = true, remainingHour, re
       {/* ---------- DEADLINE ---------- */}
       <div className="space-y-1.5">
         <Label htmlFor="deadline">Apply-by deadline <span className="text-destructive">*</span></Label>
-        <Input id="deadline" type="datetime-local" {...register("deadline", { required: "Deadline is required" })} />
+        <div className="relative">
+          <Input id="deadline" type="datetime-local" {...register("deadline", { required: "Deadline is required" })}
+            className="pl-9" />
+          <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+        </div>
         {errors.deadline && <p className="text-xs text-destructive">{errors.deadline.message as string}</p>}
         <p className="text-xs text-muted-foreground">After this, the task auto-closes. You can extend or close it manually later from the task page.</p>
       </div>
@@ -330,42 +342,48 @@ export function PostTaskForm({ categories, kycComplete = true, remainingHour, re
 
 
       {/* ---------- SCHEDULING ---------- */}
-      <div className="rounded-lg border bg-muted/30 p-3">
-        <label className="flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="mt-0.5 h-4 w-4 rounded border-input"
-            checked={scheduleEnabled}
-            onChange={(e) => setScheduleEnabled(e.target.checked)}
-          />
-          <div className="flex-1">
-            <span className="font-medium">Schedule this task for later</span>
+      <div className="rounded-xl border border-primary/10 bg-gradient-to-br from-primary/[0.03] via-background to-background p-4 shadow-sm">
+        <label className="flex cursor-pointer items-start gap-3">
+          <button type="button" onClick={() => setScheduleEnabled(!scheduleEnabled)}
+            className={cn("relative mt-0.5 h-5 w-9 shrink-0 rounded-full border transition-colors",
+              scheduleEnabled ? "border-primary/40 bg-primary/20" : "border-input bg-muted/50")}>
+            <div className="h-4 w-4 rounded-full bg-white shadow-sm transition-transform"
+              style={{ transform: `translate(${scheduleEnabled ? 18 : 2}px, 2px)` }} />
+          </button>
+          <div className="flex-1 select-none" onClick={() => setScheduleEnabled(!scheduleEnabled)}>
+            <span className="font-semibold">Schedule for later</span>
             <p className="mt-0.5 text-xs text-muted-foreground">
               Pick a date+time and the task goes live automatically. Before then it lives in the
-              <strong> Upcoming</strong> section — switch the toggle below to hide it.
+              <strong> Upcoming</strong> section.
             </p>
           </div>
         </label>
         {scheduleEnabled && (
-          <div className="mt-3 space-y-3 pl-6">
+          <div className="mt-4 space-y-3 border-t border-border/50 pt-4">
             <div className="space-y-1.5">
-              <Label htmlFor="scheduled_publish_at" className="text-xs">Publish at</Label>
-              <Input
-                id="scheduled_publish_at"
-                type="datetime-local"
-                value={scheduledAt}
-                onChange={(e) => setScheduledAt(e.target.value)}
-                min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)}
-              />
+              <Label htmlFor="scheduled_publish_at" className="text-xs font-medium">Publish at</Label>
+              <div className="relative">
+                <Input
+                  id="scheduled_publish_at"
+                  type="datetime-local"
+                  value={scheduledAt}
+                  onChange={(e) => setScheduledAt(e.target.value)}
+                  min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)}
+                  className="border-primary/20 focus:border-primary/40 pl-9"
+                />
+                <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
             </div>
-            <label className="flex items-center gap-2 text-xs">
+            <label className="flex cursor-pointer items-center gap-2.5 text-xs text-muted-foreground">
               <input
                 type="checkbox"
-                className="h-4 w-4 rounded border-input"
+                className="h-4 w-4 rounded border-input accent-primary"
                 checked={showInUpcoming}
                 onChange={(e) => setShowInUpcoming(e.target.checked)}
               />
-              <span>Show in the <strong>Upcoming</strong> section (on by default)</span>
+              <span>Show in the <strong className="text-foreground">Upcoming</strong> section</span>
             </label>
           </div>
         )}
@@ -378,10 +396,19 @@ export function PostTaskForm({ categories, kycComplete = true, remainingHour, re
         </div>
       )}
 
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="ghost" onClick={() => router.back()}>Cancel</Button>
-        <Button type="submit" variant="gradient" disabled={submitting}>
-          {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Post task <ArrowRight className="h-4 w-4" /></>}
+      <div className="flex items-center justify-end gap-3 border-t border-border/50 pt-6">
+        <Button type="button" variant="ghost" onClick={() => router.back()} className="text-muted-foreground">
+          Cancel
+        </Button>
+        <Button type="submit" variant="gradient" disabled={submitting} className="relative overflow-hidden shadow-xl shadow-primary/25">
+          {submitting ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <span className="inline-flex items-center gap-2">
+              Post task
+              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+            </span>
+          )}
         </Button>
       </div>
     </form>

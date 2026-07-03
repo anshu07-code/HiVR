@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { MessagesInbox } from "@/components/messages/messages-inbox";
+import type { DirectMsg } from "@/components/messages/messages-inbox";
 
 export const dynamic = "force-dynamic";
 
@@ -9,12 +10,11 @@ export default async function MessagesPage() {
   const { data: { user } } = await sb.auth.getUser();
   if (!user) redirect("/auth/signin?next=/dashboard/messages");
 
-  // Pull the latest message per conversation (contract + workspace)
-  // in parallel. RLS scopes each to the parties involved.
   const [
     { data: contractMsgs },
     { data: workspaceMsgs },
     { data: supportMsgs },
+    { data: directMsgs },
   ] = await Promise.all([
     sb
       .from("messages")
@@ -57,14 +57,24 @@ export default async function MessagesPage() {
       .or(`sender_id.eq.${user.id}`)
       .order("created_at", { ascending: false })
       .limit(50),
+    sb
+      .from("direct_messages")
+      .select(`
+        id, sender_id, receiver_id, body, created_at,
+        sender:users!direct_messages_sender_id_fkey(id, full_name, avatar_url),
+        receiver:users!direct_messages_receiver_id_fkey(id, full_name, avatar_url)
+      `)
+      .order("created_at", { ascending: false })
+      .limit(200),
   ]);
 
   return (
     <MessagesInbox
       userId={user.id}
-      initialContractMsgs={(contractMsgs ?? []) as any[]}
-      initialWorkspaceMsgs={(workspaceMsgs ?? []) as any[]}
-      initialSupportMsgs={(supportMsgs ?? []) as any[]}
+      initialContractMsgs={(contractMsgs ?? []) as any}
+      initialWorkspaceMsgs={(workspaceMsgs ?? []) as any}
+      initialSupportMsgs={(supportMsgs ?? []) as any}
+      initialDirectMsgs={(directMsgs ?? []) as any}
     />
   );
 }

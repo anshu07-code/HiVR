@@ -92,10 +92,80 @@ export function NotificationBell({ userId, initialUnread, initialRecent }: { use
       await (sb.from("notifications") as any).update({ read_at: new Date().toISOString() }).eq("id", n.id);
       setUnread((c) => Math.max(0, c - 1));
     }
-    if (n.link) {
-      setOpen(false);
-      router.push(n.link);
+    setOpen(false);
+
+    const target = n.link;
+    if (!target) return;
+
+    try {
+      const url = new URL(target, window.location.origin);
+      const settleAppId = url.searchParams.get("settleAppId");
+      const sb = createClient();
+
+      // — Settlement: resolve to current state —
+      if (settleAppId) {
+        const { data: rounds } = await sb
+          .from("settlement_rounds")
+          .select("id, round_number, offered_by, amount_paise, time_minutes, message, status, parent_round_id, created_at")
+          .eq("application_id", settleAppId)
+          .order("round_number", { ascending: false })
+          .limit(3);
+
+        const allRounds = (rounds ?? []) as any[];
+        const lastRound = allRounds[0];
+
+        if (lastRound?.status === "accepted") {
+          // Find the contract created by this settlement
+          const { data: app } = await sb
+            .from("task_applications")
+            .select("task_id")
+            .eq("id", settleAppId)
+            .maybeSingle();
+          if (app) {
+            const { data: contract } = await sb
+              .from("contracts")
+              .select("id")
+              .eq("task_post_id", (app as any).task_id)
+              .eq("employee_id", userId)
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (contract) {
+              router.push(`/dashboard/contracts/${(contract as any).id}`);
+              return;
+            }
+          }
+        }
+
+        if (lastRound?.status === "declined") {
+          router.push(`/dashboard/applications?settleAppId=${settleAppId}&declined=1`);
+          return;
+        }
+      }
+
+      // — hire_offer / hiring_stage: check for existing contracts —
+      if (n.type === "hire_offer" || n.type === "hiring_stage") {
+        const { data: contracts } = await sb
+          .from("contracts")
+          .select("id, created_at")
+          .eq("employee_id", userId)
+          .in("status", ["active", "pending_acceptance", "completed", "delivered", "disputed"])
+          .order("created_at", { ascending: false })
+          .limit(1);
+        if (contracts && contracts.length > 0) {
+          const latest = (contracts as any[])[0];
+          if (new Date(latest.created_at) > new Date(n.created_at)) {
+            router.push(`/dashboard/contracts/${latest.id}`);
+            return;
+          }
+        }
+      }
+    } catch {
+      // If parsing fails, fall through to default navigation
     }
+
+    // Default: navigate to original link
+    router.push(target);
   }
 
   async function markAllRead() {
@@ -126,7 +196,7 @@ export function NotificationBell({ userId, initialUnread, initialRecent }: { use
             </Button>
           )}
         </div>
-        <div>
+        <div className="max-h-80 overflow-y-auto scrollbar-thin">
           {recent.length === 0 && (
             <div className="p-6 text-center text-sm text-muted-foreground">
               <Bell className="mx-auto h-8 w-8 opacity-30" />

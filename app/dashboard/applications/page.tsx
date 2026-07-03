@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const metadata = { title: "My applications — HiVR" };
 
-export default async function MyApplicationsPage() {
+export default async function MyApplicationsPage({ searchParams }: { searchParams: { settleAppId?: string } }) {
   noStore();
   const sb = createClient();
   const { data: { user } } = await sb.auth.getUser();
@@ -49,7 +49,7 @@ export default async function MyApplicationsPage() {
 
   const [tasksRes, offersRes, interviewsRes] = await Promise.all([
     taskIds.length
-      ? sb.from("task_posts").select("id, title, status, budget_min, budget_max, pricing_model, deadline, published_at, created_at, category:skill_categories(name, icon, tier), buyer:users!task_posts_buyer_id_fkey(id, full_name)").in("id", taskIds)
+      ? sb.from("task_posts").select("id, title, status, budget_min, budget_max, pricing_model, estimated_hours, deadline, published_at, created_at, category:skill_categories(name, icon, tier), buyer:users!task_posts_buyer_id_fkey(id, full_name)").in("id", taskIds)
       : Promise.resolve({ data: [] as any[] }),
     ids.length
       ? sb.from("application_offers").select("id, application_id, status, amount_paise, expires_at, created_at, message").in("application_id", ids).order("created_at", { ascending: false })
@@ -112,7 +112,7 @@ export default async function MyApplicationsPage() {
         </div>
       )}
 
-      <MyApplicationsList initialApplications={applications as any} contractMap={Object.fromEntries(contractMap)} />
+      <MyApplicationsList initialApplications={applications as any} contractMap={Object.fromEntries(contractMap)} settleAppId={searchParams.settleAppId} />
     </div>
   );
 }

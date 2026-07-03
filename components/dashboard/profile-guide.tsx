@@ -21,15 +21,15 @@ import { Progress } from "@/components/ui/progress";
 import { PersonCard } from "@/components/find-people/person-card";
 import {
   CheckCircle2, Circle, Sparkles, Camera, MapPin, FileText, Briefcase,
-  Award, Clock, BadgeCheck, ArrowRight, Lightbulb, X,
+  Award, Clock, ArrowRight, Lightbulb, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Initial = {
-  fullName: string; email: string; avatarUrl: string | null; coverUrl: string | null;
+  fullName: string; email: string; avatarUrl: string | null; coverUrl?: string | null;
   headline: string; bio: string; location: string; experienceType: string;
   hourlyRatePaise: number | null; availabilityHours: number | null; timezone: string;
-  skills: { category_id: string; name?: string; slug?: string; icon?: string; is_primary?: boolean; years_experience?: number }[];
+  skills: { category_id: string; name?: string; slug?: string; icon?: string; is_primary?: boolean; years_experience?: number; rate_per_hour_paise?: number | null; rate_per_task_paise?: number | null }[];
   socialLinks: any[];
 };
 
@@ -104,12 +104,12 @@ const STEPS: Array<{
   },
   {
     id: "rate",
-    label: "Set an hourly rate",
-    why: "Cards without a rate get filtered out by buyers who use a budget. Even a placeholder is better than blank.",
-    cardPart: "Rate in the location row",
-    tab: "basics",
+    label: "Set your rates per skill",
+    why: "When adding skills below, set a rate for each. Buyers compare rates in search results.",
+    cardPart: "Shown beside each skill pill",
+    tab: "skills",
     Icon: Briefcase,
-    isDone: (i) => (i.hourlyRatePaise ?? 0) > 0,
+    isDone: (i) => i.skills.some((s) => (s as any).rate_per_hour_paise || (s as any).rate_per_task_paise),
   },
   {
     id: "availability",
@@ -129,31 +129,10 @@ const STEPS: Array<{
     Icon: Award,
     isDone: (i) => i.skills.length >= 1,
   },
-  {
-    id: "links",
-    label: "Add at least 1 social link",
-    why: "Portfolio / GitHub / LinkedIn build trust. Adds the 'verified by external proof' signal.",
-    cardPart: "Boosted to the public profile",
-    tab: "links",
-    Icon: BadgeCheck,
-    isDone: (i) => i.socialLinks.length >= 1,
-  },
-  {
-    id: "verified",
-    label: "Complete KYC (Aadhaar)",
-    why: "Adds the green checkmark on your avatar. Verified cards rank higher in search results.",
-    cardPart: "Green checkmark on the avatar",
-    tab: "basics",
-    Icon: BadgeCheck,
-    isDone: (i) => false, // KYC status isn't on `Initial`; we show this as always-pending
-  },
 ];
 
 export function ProfileGuide({ initial, currentTab, setTab, initialCompleteness }: Props) {
-  const [dismissed, setDismissed] = React.useState(() => {
-    if (typeof window === "undefined") return false;
-    return sessionStorage.getItem("pg_dismissed") === "true";
-  });
+  const [collapsed, setCollapsed] = React.useState(false);
   const [activeStep, setActiveStep] = React.useState<string | null>(null);
 
   // Compute per-step status from the live data.
@@ -166,20 +145,8 @@ export function ProfileGuide({ initial, currentTab, setTab, initialCompleteness 
   const liveCompleteness = Math.round((doneCount / totalCount) * 100);
 
   React.useEffect(() => {
-    sessionStorage.setItem("pg_dismissed", String(dismissed));
-  }, [dismissed]);
-
-  if (dismissed) {
-    return (
-      <button
-        onClick={() => setDismissed(false)}
-        className="fixed bottom-24 right-4 z-30 inline-flex items-center gap-1.5 rounded-full border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm transition-colors hover:bg-accent md:bottom-6"
-      >
-        <Lightbulb className="h-3.5 w-3.5" />
-        Show profile guide
-      </button>
-    );
-  }
+    sessionStorage.setItem("pg_collapsed", String(collapsed));
+  }, [collapsed]);
 
   return (
     <Card className="overflow-hidden border-primary/20">
@@ -191,19 +158,20 @@ export function ProfileGuide({ initial, currentTab, setTab, initialCompleteness 
           <div>
             <CardTitle className="text-base">Profile guide — build a card buyers click</CardTitle>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              The card on the left is your live preview. As you fill in the form, it updates in real time. Use the steps on the right to track what's still missing.
+              The card on the left is your live preview. Use the steps on the right to track what's still missing.
             </p>
           </div>
         </div>
         <button
-          onClick={() => setDismissed(true)}
+          onClick={() => setCollapsed(!collapsed)}
           className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-          aria-label="Dismiss guide"
+          aria-label={collapsed ? "Expand guide" : "Collapse guide"}
         >
-          <X className="h-4 w-4" />
+          {collapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
         </button>
       </CardHeader>
 
+      {!collapsed && (
       <CardContent className="grid gap-5 p-5 md:grid-cols-[260px,1fr]">
         {/* Live preview */}
         <div className="rounded-lg border bg-muted/30 p-4">
@@ -300,6 +268,7 @@ export function ProfileGuide({ initial, currentTab, setTab, initialCompleteness 
           </ol>
         </div>
       </CardContent>
+      )}
     </Card>
   );
 }

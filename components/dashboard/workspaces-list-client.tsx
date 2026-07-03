@@ -28,7 +28,7 @@ type WorkspaceRow = {
   employee_name: string | null;
 };
 
-const ACTIVE_STATUSES = ["awaiting_funding", "active", "paused", "frozen", "disputed"];
+const ACTIVE_STATUSES = ["awaiting_funding", "funded", "delivered", "in_review", "frozen"];
 const PAST_STATUSES = ["completed", "cancelled"];
 
 function isActive(s: string) { return ACTIVE_STATUSES.includes(s); }
@@ -50,15 +50,29 @@ export function WorkspacesListClient({ initialList, currentUserId }: { initialLi
 
     const channel = sb
       .channel("workspaces-list-live")
-      .on("postgres_changes", { event: "*", schema: "public", table: "workspaces" }, refresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "contracts" }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "workspaces", filter: `buyer_id=eq.${currentUserId}` }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "workspaces", filter: `employee_id=eq.${currentUserId}` }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "contracts", filter: `buyer_id=eq.${currentUserId}` }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "contracts", filter: `employee_id=eq.${currentUserId}` }, refresh)
       .subscribe();
 
     return () => { sb.removeChannel(channel); };
-  }, []);
+  }, [currentUserId]);
 
-  const active = list.filter(w => isActive(w.status));
-  const past   = list.filter(w => isPast(w.status));
+  const active = list
+    .filter(w => isActive(w.status))
+    .sort((a, b) => {
+      const aTime = a.last_message_at || a.updated_at || a.created_at;
+      const bTime = b.last_message_at || b.updated_at || b.created_at;
+      return new Date(bTime).getTime() - new Date(aTime).getTime();
+    });
+  const past   = list
+    .filter(w => isPast(w.status))
+    .sort((a, b) => {
+      const aTime = a.completed_at || a.updated_at || a.created_at;
+      const bTime = b.completed_at || b.updated_at || b.created_at;
+      return new Date(bTime).getTime() - new Date(aTime).getTime();
+    });
 
   function renderList(items: WorkspaceRow[]) {
     if (items.length === 0) {

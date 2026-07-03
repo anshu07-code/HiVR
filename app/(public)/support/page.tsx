@@ -52,7 +52,7 @@ export default async function SupportPage({ searchParams }: { searchParams: { ca
   return (
     <>      <main className="container max-w-4xl py-8 space-y-6">
         <header>
-          <h1 className="font-display text-3xl font-semibold tracking-tight">Support</h1>
+          <h1 data-tour="support" className="font-display text-3xl font-semibold tracking-tight">Support</h1>
           <p className="text-sm text-muted-foreground">
             Ask the AI assistant instantly, or open a ticket and a human agent will respond.
             The floating AI button in the corner is also always available.

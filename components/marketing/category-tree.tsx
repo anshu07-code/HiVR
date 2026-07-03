@@ -102,7 +102,7 @@ export function CategoryTree({
                               {s.status === "active" ? (
                                 <div className="mt-2 flex items-center justify-between">
                                   <Link
-                                    href={`/browse?category=${s.slug}`}
+                                    href={`/categories/${s.slug}`}
                                     className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
                                   >
                                     See tasks <ArrowRight className="h-3 w-3" />

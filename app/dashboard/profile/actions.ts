@@ -63,24 +63,22 @@ export async function updateProfileBasicsAction(input: {
   headline?: string;
   bio?: string;
   location?: string;
+  languages?: string[];
   hourly_rate_paise?: number;
   availability_hours?: number;
   timezone?: string;
   experience_type?: string;
 }) {
   const { sb, user } = await requireUser();
-  // Split between users (full_name) and employee_profiles
   if (input.full_name !== undefined) {
     await sb.from("users").update({ full_name: input.full_name }).eq("id", user.id);
   }
-  const epUpdate: Record<string, any> = {};
-  for (const k of ["headline","bio","location","hourly_rate_paise","availability_hours","timezone","experience_type"] as const) {
-    if (input[k] !== undefined) epUpdate[k] = input[k];
+  const epUpsert: Record<string, any> = { user_id: user.id };
+  for (const k of ["headline","bio","location","hourly_rate_paise","availability_hours","timezone","experience_type","languages"] as const) {
+    if (input[k] !== undefined) epUpsert[k] = input[k];
   }
-  if (Object.keys(epUpdate).length > 0) {
-    const { error } = await sb.from("employee_profiles").update(epUpdate).eq("user_id", user.id);
-    if (error) return { ok: false, reason: error.message };
-  }
+  const { error } = await sb.from("employee_profiles").upsert(epUpsert, { onConflict: "user_id" });
+  if (error) return { ok: false, reason: error.message };
   revalidatePath("/dashboard/profile");
   revalidatePath(`/people/${user.id}`);
   revalidatePath("/find-people");
@@ -190,7 +188,7 @@ export async function addEducationAction(input: {
   const { sb, user } = await requireUser();
   const { error } = await sb.from("employee_education").insert({
     user_id: user.id, ...input,
-    sort_order: Date.now(),
+    sort_order: Math.floor(Date.now() / 1000),
   });
   if (error) return { ok: false, reason: error.message };
   revalidatePath("/dashboard/profile");
@@ -220,7 +218,7 @@ export async function addExperienceAction(input: {
   const { sb, user } = await requireUser();
   const { error } = await sb.from("employee_experience").insert({
     user_id: user.id, ...input,
-    sort_order: Date.now(),
+    sort_order: Math.floor(Date.now() / 1000),
   });
   if (error) return { ok: false, reason: error.message };
   revalidatePath("/dashboard/profile");
@@ -250,7 +248,7 @@ export async function addProjectAction(input: {
   const { sb, user } = await requireUser();
   const { error } = await sb.from("employee_projects").insert({
     user_id: user.id, ...input,
-    sort_order: Date.now(),
+    sort_order: Math.floor(Date.now() / 1000),
   });
   if (error) return { ok: false, reason: error.message };
   revalidatePath("/dashboard/profile");
@@ -280,7 +278,7 @@ export async function addCertificationAction(input: {
   const { sb, user } = await requireUser();
   const { error } = await sb.from("employee_certifications").insert({
     user_id: user.id, ...input,
-    sort_order: Date.now(),
+    sort_order: Math.floor(Date.now() / 1000),
   });
   if (error) return { ok: false, reason: error.message };
   revalidatePath("/dashboard/profile");
@@ -306,7 +304,7 @@ export async function deleteCertificationAction(id: string) {
 export async function setSocialLinkAction(platform: string, url: string) {
   const { sb, user } = await requireUser();
   const { error } = await sb.from("employee_social_links").upsert({
-    user_id: user.id, platform, url, sort_order: Date.now(),
+    user_id: user.id, platform, url, sort_order: Math.floor(Date.now() / 1000),
   }, { onConflict: "user_id,platform" });
   if (error) return { ok: false, reason: error.message };
   revalidatePath("/dashboard/profile");

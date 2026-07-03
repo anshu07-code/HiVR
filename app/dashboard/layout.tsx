@@ -14,8 +14,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <DashboardClientWrapper userId={userId ?? ""}>
-      <div className="flex min-h-screen bg-background">
-        <DashboardSidebar mode={mode} currentMode={currentMode} />
+      <div className="flex min-h-[100dvh] bg-background">
+        <div data-tour="sidebar"><DashboardSidebar mode={mode} currentMode={currentMode} /></div>
         <main className="flex-1 min-w-0 pb-20 md:pb-0">
           <div className="sticky top-0 z-20 flex items-center border-b bg-background px-2 md:hidden" style={{ height: 44 }}>
             <DashboardMobileSidebar mode={mode} currentMode={currentMode} />
@@ -31,8 +31,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
             Open admin panel
           </a>
         )}
-        <MobileBottomTabs mode={mode} />
       </div>
+      <MobileBottomTabs mode={mode} />
     </DashboardClientWrapper>
   );
 }

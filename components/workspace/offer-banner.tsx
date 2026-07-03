@@ -9,7 +9,7 @@ import { formatPaise, timeUntil } from "@/lib/utils";
 
 type OfferRow = {
   id: string;
-  kind: "application_offer" | "negotiation_offer" | "shortlist";
+  kind: "application_offer" | "negotiation_offer" | "shortlist" | "settlement";
   ref_id: string;
   task_id: string;
   task_title: string;
@@ -22,6 +22,8 @@ type OfferRow = {
   applicant_id: string;
   buyer_id: string;
   side: "employee" | "buyer";
+  round_number?: number;
+  application_id?: string;
 };
 
 const DISMISS_KEY = (id: string) => `offer-banner-dismiss:${id}`;
@@ -63,8 +65,8 @@ export function OfferBanner({ userId, profile }: { userId: string; profile: { cu
     const intervals = (settings as any)?.value?.value ?? [2, 24, 72];
 
     if (side === "employee") {
-      const [{ data: appOffers }, { data: negOffers }, { data: shortlists }] = await Promise.all([
-        (sb as any).from("application_offers").select("id, application_id, task_post_id, amount_paise, expires_at, message, created_at, applications:task_applications!inner(id, task_post_id, employee_id, task:task_posts!inner(id, title, buyer:users!task_posts_buyer_id_fkey(id, full_name)))")
+      const [{ data: appOffers }, { data: negOffers }, { data: shortlists }, { data: allSettleRounds }] = await Promise.all([
+        (sb as any).from("application_offers").select("id, application_id, amount_paise, expires_at, message, created_at, applications:task_applications!inner(id, task_id, employee_id, task:task_posts!inner(id, title, buyer:users!task_posts_buyer_id_fkey(id, full_name)))")
           .eq("status", "pending")
           .eq("applications.employee_id", userId)
           .gt("expires_at", new Date().toISOString()),
@@ -73,10 +75,16 @@ export function OfferBanner({ userId, profile }: { userId: string; profile: { cu
           .eq("employee_id", userId)
           .eq("status", "pending"),
         (sb as any).from("task_applications")
-          .select("id, task_post_id, employee_id, created_at, updated_at, task:task_posts!inner(id, title, buyer:users!task_posts_buyer_id_fkey(id, full_name))")
+          .select("id, task_id, employee_id, created_at, updated_at, task:task_posts!inner(id, title, buyer:users!task_posts_buyer_id_fkey(id, full_name))")
           .eq("employee_id", userId)
           .eq("status", "shortlisted"),
+        (sb as any).from("settlement_rounds")
+          .select("id, application_id, round_number, amount_paise, status, offered_by, created_at, application:task_applications!inner(id, task_id, employee_id, task:task_posts!inner(id, title, buyer:users!task_posts_buyer_id_fkey(id, full_name)))")
+          .eq("application.employee_id", userId)
+          .eq("status", "pending"),
       ]);
+      const settleAppIds = new Set((allSettleRounds ?? []).map((r: any) => r.application_id));
+      const settleRounds = (allSettleRounds ?? []).filter((r: any) => r.offered_by === "buyer");
 
       const rows: OfferRow[] = [];
 
@@ -94,7 +102,7 @@ export function OfferBanner({ userId, profile }: { userId: string; profile: { cu
           id: `ao:${o.id}`,
           kind: "application_offer",
           ref_id: o.id,
-          task_id: o.task_post_id,
+          task_id: o.applications?.task_id ?? o.applications?.task?.id,
           task_title: o.applications?.task?.title ?? "Task",
           amount_paise: o.amount_paise,
           expires_at: o.expires_at,
@@ -135,12 +143,13 @@ export function OfferBanner({ userId, profile }: { userId: string; profile: { cu
       }
 
       for (const a of (shortlists ?? []) as any[]) {
+        if (settleAppIds.has(a.id)) continue;
         if (isDismissed(`sl:${a.id}`)) continue;
         rows.push({
           id: `sl:${a.id}`,
           kind: "shortlist",
           ref_id: a.id,
-          task_id: a.task_post_id,
+          task_id: a.task_id ?? a.task?.id,
           task_title: a.task?.title ?? "Task",
           amount_paise: null,
           expires_at: null,
@@ -154,24 +163,56 @@ export function OfferBanner({ userId, profile }: { userId: string; profile: { cu
         });
       }
 
+      for (const r of (settleRounds ?? []) as any[]) {
+        if (isDismissed(`st:${r.id}`)) continue;
+        rows.push({
+          id: `st:${r.id}`,
+          kind: "settlement",
+          ref_id: r.id,
+          task_id: r.application?.task_id ?? r.application?.task?.id,
+          task_title: r.application?.task?.title ?? "Task",
+          amount_paise: r.amount_paise,
+          expires_at: null,
+          buyer_name: r.application?.task?.buyer?.full_name ?? null,
+          employee_name: null,
+          message: `Round ${r.round_number} counter`,
+          created_at: r.created_at,
+          applicant_id: userId,
+          buyer_id: r.application?.task?.buyer?.id ?? "",
+          side: "employee",
+          round_number: r.round_number,
+          application_id: r.application_id,
+        });
+      }
+
       setOffers(rows);
     } else {
-      const { data: pendingApps } = await (sb as any)
-        .from("task_applications")
-        .select("id, task_post_id, employee_id, created_at, updated_at, employee:users!task_applications_employee_id_fkey(id, full_name), task:task_posts!inner(id, title, buyer_id)")
-        .eq("task.buyer_id", userId)
-        .not("status", "eq", "hired")
-        .not("status", "eq", "rejected")
-        .not("status", "eq", "withdrawn");
+      const [{ data: pendingApps }, { data: allSettleRounds }] = await Promise.all([
+        (sb as any).from("task_applications")
+          .select("id, task_id, employee_id, created_at, updated_at, employee:users!task_applications_employee_id_fkey(id, full_name), task:task_posts!inner(id, title, buyer_id)")
+          .eq("task.buyer_id", userId)
+          .not("status", "eq", "hired")
+          .not("status", "eq", "rejected")
+          .not("status", "eq", "withdrawn"),
+        (sb as any).from("settlement_rounds")
+          .select("id, application_id, round_number, amount_paise, status, offered_by, created_at, application:task_applications!inner(id, task_id, employee_id, employee:users!task_applications_employee_id_fkey(id, full_name), task:task_posts!inner(id, title, buyer_id))")
+          .eq("status", "pending"),
+      ]);
+
+      const settleRounds = (allSettleRounds ?? []).filter(
+        (r: any) => r.application?.task?.buyer_id === userId && r.offered_by === "employee"
+      );
+      const settleAppIds = new Set((settleRounds ?? []).map((r: any) => r.application_id));
 
       const rows: OfferRow[] = [];
       for (const a of (pendingApps ?? []) as any[]) {
+        if (settleAppIds.has(a.id)) continue;
         if (isDismissed(`ba:${a.id}`)) continue;
         rows.push({
           id: `ba:${a.id}`,
           kind: "application_offer",
           ref_id: a.id,
-          task_id: a.task_post_id,
+          task_id: a.task_id ?? a.task?.id,
           task_title: a.task?.title ?? "Task",
           amount_paise: null,
           expires_at: null,
@@ -184,6 +225,29 @@ export function OfferBanner({ userId, profile }: { userId: string; profile: { cu
           side: "buyer",
         });
       }
+
+      for (const r of (settleRounds ?? []) as any[]) {
+        if (isDismissed(`st:${r.id}`)) continue;
+        rows.push({
+          id: `st:${r.id}`,
+          kind: "settlement",
+          ref_id: r.id,
+          task_id: r.application?.task_id ?? r.application?.task?.id,
+          task_title: r.application?.task?.title ?? "Task",
+          amount_paise: r.amount_paise,
+          expires_at: null,
+          buyer_name: null,
+          employee_name: r.application?.employee?.full_name ?? null,
+          message: `Round ${r.round_number} counter`,
+          created_at: r.created_at,
+          applicant_id: r.application?.employee_id ?? "",
+          buyer_id: userId,
+          side: "buyer",
+          round_number: r.round_number,
+          application_id: r.application_id,
+        });
+      }
+
       setOffers(rows);
     }
   }, [side, userId]);
@@ -197,6 +261,7 @@ export function OfferBanner({ userId, profile }: { userId: string; profile: { cu
       .on("postgres_changes", { event: "*", schema: "public", table: "application_offers" }, () => load())
       .on("postgres_changes", { event: "*", schema: "public", table: "negotiation_offers" }, () => load())
       .on("postgres_changes", { event: "*", schema: "public", table: "task_applications" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "settlement_rounds" }, () => load())
       .subscribe();
     const t = setInterval(() => setNow(Date.now()), 30_000);
     return () => { clearInterval(t); sb.removeChannel(channel); };
@@ -277,7 +342,11 @@ export function OfferBanner({ userId, profile }: { userId: string; profile: { cu
                   )}
                 </p>
               </div>
-              {isEmployee ? (
+              {o.kind === "settlement" ? (
+                <Button size="sm" variant="outline" className="h-6 shrink-0 px-2 text-[10px]" asChild>
+                  <Link href={isEmployee ? `/dashboard/applications?settleAppId=${o.application_id}` : `/dashboard/tasks/${o.task_id}/applicants?settleAppId=${o.application_id}`}>View</Link>
+                </Button>
+              ) : isEmployee ? (
                 <div className="flex shrink-0 items-center gap-1">
                   <Button size="sm" variant="gradient" className="h-6 px-2 text-[10px]" disabled={busyId === o.id || expired} onClick={() => respond(o, "accepted")}>
                     {busyId === o.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
