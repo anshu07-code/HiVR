@@ -114,7 +114,8 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
   const isAdmin = userRoles.includes("admin");
   const hasEmployeeRole = isAdmin || userRoles.includes("employee");
   const isInEmployeeMode = hasEmployeeRole && (isAdmin || meProfile?.current_mode === "employee" || meProfile?.current_mode === "both" || !meProfile?.current_mode);
-  const canEmployeeAct = !!user && hasEmployeeRole && isInEmployeeMode && !isBuyer && (!task.deadline || new Date(task.deadline) > new Date());
+  const taskClosed = task.status === "closed" || task.status === "cancelled" || task.status === "in_contract" || task.status === "upcoming";
+  const canEmployeeAct = !!user && hasEmployeeRole && isInEmployeeMode && !isBuyer && !taskClosed && (!task.deadline || new Date(task.deadline) > new Date());
   const tierLabel = (task as any).category?.tier === "role_engagement" ? "Tier B · Role engagement" : "Tier A · Micro-task";
   const initials = ((buyerUser?.full_name ?? "??").split(" ").map((w: string) => w[0]).slice(0, 2).join("") || "??").toUpperCase();
 
@@ -332,6 +333,15 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
             {/* APPLY CTA — right side on desktop, sticky */}
             <div className="md:w-72 shrink-0 md:self-start apply-cta-panel">
               <div className="rounded-xl border bg-card p-5 shadow-sm">
+                {task.status !== "open" && (
+                  <div className="mb-3 inline-flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-[11px] font-medium text-destructive">
+                    <Clock className="h-3 w-3" />
+                    {task.status === "closed" && "Closed (filled)"}
+                    {task.status === "cancelled" && "Cancelled"}
+                    {task.status === "in_contract" && "In contract"}
+                    {task.status === "upcoming" && "Upcoming"}
+                  </div>
+                )}
                 <div className="text-xs uppercase tracking-wider text-muted-foreground">Compensation</div>
                 <div className="mt-1 font-display text-2xl font-bold">
                   {formatPaise(task.budget_min)}

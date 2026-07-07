@@ -108,15 +108,13 @@ export const TaskPostSchema = z.object({
   deadline: z.preprocess(
     (v) => {
       if (typeof v !== "string" || v.length === 0) return undefined;
-      // datetime-local returns "YYYY-MM-DDTHH:mm" or "YYYY-MM-DDTHH:mm:ss"
-      // — normalize to full ISO before validating.
       if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(v)) {
         return new Date(v).toISOString();
       }
       return v;
     },
     z.string().datetime().optional(),
-  ),
+  ).refine((v) => !v || new Date(v) > new Date(), { message: "Deadline must be in the future", path: ["deadline"] }),
   estimated_hours: z.preprocess(
     nanToUndefined,
     z.number().positive().max(720).optional(),

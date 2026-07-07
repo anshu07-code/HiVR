@@ -34,10 +34,11 @@ export function PostTaskForm({ categories, kycComplete = true, remainingHour, re
   const [error, setError] = React.useState<string | null>(serverError ?? null);
   const [draftDesc, setDraftDesc] = React.useState("");
   const [improving, setImproving] = React.useState(false);
+  const [improveError, setImproveError] = React.useState<string | null>(null);
   const [briefValue, setBriefValue] = React.useState<BriefValue>({ checklist_items: [], notes: "" });
   const [openings, setOpenings] = React.useState<number>(1);
   const [estHrs, setEstHrs] = React.useState<number | "">("");
-  const [estMin, setEstMin] = React.useState<number>(0);
+  const [estMin, setEstMin] = React.useState<number | "">("");
   const errorRef = React.useRef<HTMLDivElement | null>(null);
 
   // Auto-scroll the error message into view when it appears.
@@ -120,6 +121,7 @@ export function PostTaskForm({ categories, kycComplete = true, remainingHour, re
   async function improveDescription() {
     if (!draftDesc || !selectedChild) return;
     setImproving(true);
+    setImproveError(null);
     try {
       const res = await fetch("/api/ai/improve-description", {
         method: "POST",
@@ -130,7 +132,11 @@ export function PostTaskForm({ categories, kycComplete = true, remainingHour, re
       if (json.improved) {
         setDraftDesc(json.improved);
         setValue("description", json.improved);
+      } else {
+        setImproveError(json.error ?? "AI returned no improvement. Try again.");
       }
+    } catch (e) {
+      setImproveError((e as Error)?.message ?? "Could not reach AI service.");
     } finally { setImproving(false); }
   }
 
@@ -236,6 +242,7 @@ export function PostTaskForm({ categories, kycComplete = true, remainingHour, re
           onChange={e => { setDraftDesc(e.target.value); setValue("description", e.target.value); }}
         />
         {errors.description && <p className="text-xs text-destructive">{errors.description.message}</p>}
+        {improveError && <p className="text-xs text-destructive">{improveError}</p>}
       </div>
 
       {selectedChild && (
@@ -276,36 +283,39 @@ export function PostTaskForm({ categories, kycComplete = true, remainingHour, re
             <div className="space-y-1.5">
               <Label>Estimated {pricingModel.includes("daily") ? "days" : "time"}</Label>
               <div className="flex gap-2">
-                <div className="flex-1">
-                  <Input
-                    type="number" min={1}
-                    placeholder={pricingModel.includes("daily") ? "Days" : "Hrs"}
-                    value={estHrs}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setEstHrs(v === "" ? "" : Number(v));
-                      const h = v === "" || isNaN(Number(v)) ? 0 : Number(v);
-                      setValue("estimated_hours", h + estMin / 60);
-                    }}
-                    onWheel={(e) => (e.target as HTMLElement).blur()}
-                  />
-                </div>
-                {!pricingModel.includes("daily") && (
                   <div className="flex-1">
                     <Input
-                      type="number" min={0} max={59}
-                      placeholder="Min"
-                      value={estMin}
+                      type="number" min={1}
+                      placeholder={pricingModel.includes("daily") ? "Days" : "Hrs"}
+                      value={estHrs}
                       onChange={(e) => {
-                        const m = Math.min(59, Math.max(0, parseInt(e.target.value) || 0));
-                        setEstMin(m);
-                        const h = estHrs === "" ? 0 : estHrs;
-                        setValue("estimated_hours", h + Math.round(m / 60 * 100) / 100);
+                        const v = e.target.value;
+                        setEstHrs(v === "" ? "" : Number(v));
+                        const h = v === "" || isNaN(Number(v)) ? 0 : Number(v);
+                        const m = estMin === "" ? 0 : estMin;
+                        setValue("estimated_hours", h + m / 60);
                       }}
                       onWheel={(e) => (e.target as HTMLElement).blur()}
                     />
                   </div>
-                )}
+                  {!pricingModel.includes("daily") && (
+                    <div className="flex-1">
+                      <Input
+                        type="number" min={0} max={59}
+                        placeholder="Min"
+                        value={estMin}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (raw === "") { setEstMin(""); setValue("estimated_hours", (estHrs === "" ? 0 : estHrs) + 0); return; }
+                          const m = Math.min(59, Math.max(0, parseInt(raw) || 0));
+                          setEstMin(m);
+                          const h = estHrs === "" ? 0 : estHrs;
+                          setValue("estimated_hours", h + Math.round(m / 60 * 100) / 100);
+                        }}
+                        onWheel={(e) => (e.target as HTMLElement).blur()}
+                      />
+                    </div>
+                  )}
               </div>
             </div>
           )}
