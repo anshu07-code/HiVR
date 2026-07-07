@@ -1167,7 +1167,7 @@ function ProfileBuilderInner({
                       <div>
                         <p className="text-sm font-semibold">{p.title}{p.is_featured && <Star className="ml-1 inline h-3 w-3 text-amber-500" />}</p>
                         {p.role && <p className="text-xs text-muted-foreground">{p.role}</p>}
-                        {p.url && <p className="mt-0.5 inline-flex items-center gap-0.5 text-xs text-muted-foreground"><Globe className="h-2.5 w-2.5" />{new URL(p.url.startsWith("http") ? p.url : `https://${p.url}`).hostname}</p>}
+                        {p.url && <p className="mt-0.5 inline-flex items-center gap-0.5 text-xs text-muted-foreground"><Globe className="h-2.5 w-2.5" />{(() => { try { return new URL(p.url.startsWith("http") ? p.url : `https://${p.url}`).hostname; } catch { return "link"; } })()}</p>}
                         {p.verification_status === "approved" && <span className="mt-0.5 inline-flex items-center gap-0.5 text-xs text-emerald-600"><BadgeCheck className="h-3 w-3" />Verified</span>}
                         {p.verification_status === "rejected" && <span className="mt-0.5 inline-flex items-center gap-0.5 text-xs text-rose-600"><XCircle className="h-3 w-3" />Flagged</span>}
                         {p.verification_status === "pending" && <span className="mt-0.5 inline-flex items-center gap-0.5 text-xs text-amber-600"><Clock className="h-3 w-3" />Verification pending</span>}
@@ -1260,7 +1260,7 @@ function ProfileBuilderInner({
                     <div>
                       <p className="text-sm font-semibold">{c.name}</p>
                       <p className="text-xs text-muted-foreground">{c.issuer} · {c.issued_at ?? ""} {c.expires_at ? `– ${c.expires_at}` : ""}</p>
-                      {c.url && <p className="inline-flex items-center gap-0.5 text-xs text-muted-foreground"><Globe className="h-2.5 w-2.5" />{new URL(c.url).hostname}</p>}
+                      {c.url && <p className="inline-flex items-center gap-0.5 text-xs text-muted-foreground"><Globe className="h-2.5 w-2.5" />{(() => { try { return new URL(c.url.startsWith("http") ? c.url : `https://${c.url}`).hostname; } catch { return "link"; } })()}</p>}
                     </div>
                     <Button size="sm" variant="ghost" onClick={async () => { await deleteCertificationAction(c.id); router.refresh(); }}>
                       <Trash2 className="h-3.5 w-3.5" />
