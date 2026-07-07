@@ -11,7 +11,7 @@ import {
 
 /**
  * POST /api/contracts/create
- * Body: { task_post_id, employee_id, category_id, tier, pricing_model, agreed_price_inr, milestones? }
+ * Body: { task_post_id?, gig_id?, employee_id, category_id, tier, pricing_model, agreed_price_inr, milestones? }
  *
  * Server-side validation:
  *   - All UUIDs validated
@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
 
     const body = (await req.json()) as {
       task_post_id?: string;
+      gig_id?: string;
       employee_id?: string;
       category_id?: string;
       tier?: string;
@@ -156,11 +157,23 @@ export async function POST(req: NextRequest) {
     const feePct = settings.platform_fee_pct_by_tier.verified;
     const feePaise = Math.round(amountPaise * feePct);
 
+    // Validate gig_id if provided
+    let gigId: string | null = null;
+    if (body.gig_id) {
+      try { gigId = requireUuid(body.gig_id, "gig_id"); } catch (e) {
+        if (e instanceof SecurityError) return NextResponse.json({ error: e.message }, { status: e.status });
+        throw e;
+      }
+      const { data: gig } = await sb.from("gigs").select("id").eq("id", gigId).eq("status", "active").maybeSingle();
+      if (!gig) return NextResponse.json({ error: "gig not found or inactive" }, { status: 404 });
+    }
+
     // 1. Create contract row
     const { data: contract, error: cErr } = await sb.from("contracts").insert({
       buyer_id: user.id,
       employee_id: employeeId,
       task_post_id: body.task_post_id ?? null,
+      gig_id: gigId,
       category_id: categoryId,
       tier: body.tier,
       pricing_model: body.pricing_model,

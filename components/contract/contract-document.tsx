@@ -11,11 +11,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CategoryIcon } from "@/components/marketing/category-icon";
+import { GigRibbon } from "@/components/contract/gig-ribbon";
 import { cn, formatPaise, timeAgo } from "@/lib/utils";
 
 type Props = {
   contract: any;
   task: any | null;
+  contractCategory: any | null;
   workspace: any | null;
   checklist: any[];
   buyer: any | null;
@@ -42,7 +44,7 @@ function fmtDateTime(iso: string | null | undefined) {
 }
 
 export function ContractDocument({
-  contract, task, workspace, checklist, buyer, employee, buyerAck, employeeAck,
+  contract, task, contractCategory, workspace, checklist, buyer, employee, buyerAck, employeeAck,
   currentUserRole, walletBalancePaise, onSign, onFundFromWallet, onFundRazorpay, onWithdraw, withdrawing, signing,
 }: Props) {
   const isFunded    = !!workspace?.escrow_funded;
@@ -50,7 +52,7 @@ export function ContractDocument({
   const isCancelled = contract?.status === "cancelled" || workspace?.status === "cancelled";
   const cancelledBy: string | null = (contract as any)?.cancelled_by ?? null;
   const cancellationReason: string | null = (contract as any)?.cancellation_reason ?? null;
-  const taskCategory = task?.category ?? null;
+  const taskCategory = task?.category ?? contractCategory ?? null;
   const taskIcon = taskCategory?.icon ?? "boxes";
   const agreedPaise = Number(contract?.agreed_price ?? 0);
   const incentivePaise = Number(contract?.incentive_amount_paise ?? task?.incentive_amount_paise ?? 0);
@@ -66,7 +68,33 @@ export function ContractDocument({
   const walletHasEnough   = walletBalancePaise !== null && walletBalancePaise >= agreedPaise;
 
   function handlePrint() {
-    if (typeof window !== "undefined") window.print();
+    if (typeof window === "undefined") return;
+    const el = document.getElementById("print-contract");
+    if (!el) { window.print(); return; }
+
+    const styles = Array.from(document.styleSheets)
+      .flatMap((s) => {
+        try { return Array.from(s.cssRules || []).map((r) => r.cssText); } catch { return []; }
+      })
+      .join("\n");
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Contract</title>
+<style>${styles}</style>
+<style>
+  @page { margin: 20mm; }
+  body { background:#fff!important;color:#000!important;padding:0;margin:0; }
+  .no-print { display:none!important; }
+  nav,aside,[data-tour="sidebar"]{display:none!important;}
+  * { -webkit-print-color-adjust:exact!important;print-color-adjust:exact!important; }
+</style>
+</head><body>${el.innerHTML}</body></html>`;
+
+    const w = window.open("", "_blank");
+    if (!w) { window.print(); return; }
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => { w.print(); w.close(); }, 300);
   }
 
   return (
@@ -84,7 +112,7 @@ export function ContractDocument({
               </Link>
             </Button>
           )}
-          <Button size="sm" variant="ghost" onClick={handlePrint} title="Print or save as PDF">
+          <Button size="sm" variant="ghost" onClick={handlePrint} disabled={!myAck || !theirAck} title={myAck && theirAck ? "Print or save as PDF" : "Signatures required from both parties to print"}>
             <Printer className="h-3.5 w-3.5" />Print
           </Button>
         </div>
@@ -142,7 +170,8 @@ export function ContractDocument({
       </div>
 
       {/* === THE DOCUMENT === */}
-      <Card className="overflow-hidden border-2 print:border-0 print:shadow-none">
+      <Card id="print-contract" className="overflow-hidden border-2 print:overflow-visible print:border print:border-gray-300 print:shadow-none relative">
+        {contract?.gig_id && <GigRibbon />}
         {/* Letterhead */}
         <div className="border-b bg-gradient-to-br from-primary/[0.04] via-background to-primary/[0.02] px-8 py-6">
           <div className="flex items-start justify-between gap-4">
@@ -152,7 +181,7 @@ export function ContractDocument({
               </div>
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Service Agreement</p>
-                <h1 className="font-display text-2xl font-bold tracking-tight">{task?.title ?? "Contract"}</h1>
+                <h1 className="font-display text-2xl font-bold tracking-tight">{task?.title ?? contractCategory?.name ?? "Contract"}</h1>
                 <p className="text-[11px] text-muted-foreground">
                   Issued {fmtDate(contract.started_at ?? task?.created_at)}
                 </p>
@@ -281,10 +310,9 @@ export function ContractDocument({
             <ol className="list-decimal space-y-1.5 pl-5 text-sm leading-relaxed text-foreground/90">
               <li><strong>Escrow.</strong> The buyer deposits the agreed price with HiVR upon signing. Funds are released to the employee only after the buyer marks the workspace as complete, or as otherwise required under HiVR&apos;s dispute resolution process.</li>
               <li><strong>No off-platform contact.</strong> All communication must remain inside the HiVR workspace. Sharing personal phone numbers, email addresses, or third-party payment handles is prohibited and will be auto-blocked.</li>
-              <li><strong>Delivery.</strong> The employee must mark every checklist item as done and submit the workspace for review when complete. The buyer has a reasonable review period to approve, request revision, or raise a dispute.</li>
+              <li><strong>Delivery.</strong> As an employee, I will complete the work on time as discussed. Late delivery can happen due to any unavoidable circumstance only.</li>
               <li><strong>Disputes.</strong> Either party may raise a dispute. HiVR will hold the escrow pending review by Trust &amp; Safety. All evidence (chat, vault files, checklist notes) is preserved on-platform.</li>
-              <li><strong>Fund release.</strong> Once the buyer marks the workspace complete, HiVR releases the escrow (agreed price less the platform fee) to the employee&apos;s HiVR wallet within 12 hours. The employee may then withdraw to their verified bank account or UPI at any time.</li>
-              <li><strong>Mutual cancellation.</strong> Either party may request to cancel the contract from inside the workspace. The other party must agree before the cancellation takes effect. <em>If the buyer raised the request and the employee agrees:</em> the buyer is refunded 70% of the escrowed amount to their HiVR wallet; the remaining 30% is retained by HiVR as a platform fee. <em>If the employee raised the request and the buyer agrees:</em> the buyer is refunded the full escrowed amount to their HiVR wallet, the employee&apos;s trust rating is reduced, and 30% of the employee&apos;s fee on their very next contract is withheld as a cancellation fee for this contract. The contract record will clearly state which party requested the cancellation.</li>
+              <li><strong>Fund release.</strong> Once the buyer marks the workspace complete, HiVR releases the escrow (agreed price less the platform fee) to the employee&apos;s HiVR wallet immediately. The employee may then withdraw to their verified bank account or UPI at any time.</li>
             </ol>
           </section>
 
@@ -304,7 +332,7 @@ export function ContractDocument({
 
           {/* Sign CTA */}
           {!myAck && onSign && (
-            <div className="no-print rounded-md border border-primary/30 bg-primary/5 p-4">
+            <div id="sign-contract" className="no-print rounded-md border border-primary/30 bg-primary/5 p-4">
               <p className="text-sm">
                 <strong>Your signature is required</strong> to confirm you agree to the terms above. The contract is binding once both parties have signed.
               </p>
@@ -438,7 +466,7 @@ function SignatureBlock({ role, user, ack }: { role: string; user: any; ack: any
           </p>
           <div className="mt-1 border-t pt-1 text-[10px] text-muted-foreground">
             <p>Signed {fmtDateTime(ack.signed_at)}</p>
-            {ack.ip_address && <p>IP: {ack.ip_address}</p>}
+
           </div>
         </div>
       ) : (

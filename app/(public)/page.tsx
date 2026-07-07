@@ -11,6 +11,7 @@ import { HiVRShowcaseVideo } from "@/components/marketing/showcase-video";
 import { HeroVisual } from "@/components/marketing/hero-visual";
 import { SignupBonusBanner } from "@/components/marketing/signup-bonus-banner";
 import { createClient } from "@/lib/supabase/server";
+import { toggleRoleAction } from "./landing-actions";
 
 // Always fetch fresh — these counts must update the moment a category is
 // flipped Live, a sample task is seeded, or a featured employee signs up.
@@ -24,12 +25,25 @@ export default async function HomePage() {
     .order("sort_order");
 
   let user = null;
+  let userMode: string | null = null;
+  let userRoles: string[] = [];
   try {
     const res = await sb.auth.getUser();
     user = res.data.user;
+    if (user) {
+      const { data: profile } = await sb.from("users").select("current_mode, roles").eq("id", user.id).single();
+      if (profile) {
+        userMode = profile.current_mode;
+        userRoles = (profile.roles as string[]) ?? [];
+      }
+    }
   } catch {
     // fallback if token refresh races with middleware
   }
+
+  const activeCategoryCount = categories?.filter(
+    c => c.status === "active" && !c.parent_category_id
+  ).length ?? 0;
 
   return (
     <>
@@ -47,7 +61,7 @@ export default async function HomePage() {
           </div>
           <div className="container grid items-center gap-12 py-16 md:grid-cols-2 md:py-24">
             <div>
-              <Badge variant="tierA" className="mb-5">Now live — 3 Active categories</Badge>
+              <Badge variant="tierA" className="mb-5">Now live — {activeCategoryCount} Active categor{activeCategoryCount === 1 ? "y" : "ies"}</Badge>
               <h1 data-tour="landing-hero" className="font-display text-4xl font-semibold leading-[1.05] tracking-tight text-balance md:text-5xl lg:text-6xl">
                 Small jobs.<br />
                 <span className="gradient-text">Verified people.</span>
@@ -56,12 +70,27 @@ export default async function HomePage() {
                 HiVR breaks work into hireable micro-tasks — fix one bug, clean one spreadsheet, solve one doubt, build one endpoint. Hire by the hour, day, task, or month. Identity-verified, escrow-protected, no off-platform leakage.
               </p>
               <div className="mt-7 flex flex-wrap items-center gap-3">
-                <Button asChild size="lg" variant="gradient" className="shadow-xl shadow-primary/25">
-                  <Link href="/auth/signup?role=buyer">Hire someone <ArrowRight className="h-4 w-4" /></Link>
-                </Button>
-                <Button asChild size="lg" variant="outline" className="backdrop-blur-sm">
-                  <Link href="/auth/signup?role=employee">Become an Employee</Link>
-                </Button>
+                {user ? (
+                  <>
+                    <Button asChild size="lg" variant="gradient" className="shadow-xl shadow-primary/25">
+                      <Link href="/find-people">Hire someone <ArrowRight className="h-4 w-4" /></Link>
+                    </Button>
+                    <form action={toggleRoleAction}>
+                      <Button type="submit" size="lg" variant="outline" className="backdrop-blur-sm">
+                        {userMode === "employee" ? "Switch to Buyer" : "Become an Employee"}
+                      </Button>
+                    </form>
+                  </>
+                ) : (
+                  <>
+                    <Button asChild size="lg" variant="gradient" className="shadow-xl shadow-primary/25">
+                      <Link href="/auth/signup?role=buyer">Hire someone <ArrowRight className="h-4 w-4" /></Link>
+                    </Button>
+                    <Button asChild size="lg" variant="outline" className="backdrop-blur-sm">
+                      <Link href="/auth/signup?role=employee">Become an Employee</Link>
+                    </Button>
+                  </>
+                )}
               </div>
               <ul className="mt-7 flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
                 <li className="inline-flex items-center gap-1.5"><ShieldCheck className="h-4 w-4 text-success" />Aadhaar / PAN verified</li>
@@ -101,29 +130,29 @@ export default async function HomePage() {
           <div className="grid gap-5 md:grid-cols-2">
             <Card>
               <CardContent className="space-y-3 p-6">
-                <Badge variant="tierA">Tier A — Micro-Tasks</Badge>
-                <h3 className="font-display text-xl font-semibold">Bounded, single-sitting work</h3>
+                <Badge variant="tierA">Tier A — Quick Gigs</Badge>
+                <h3 className="font-display text-xl font-semibold">Small tasks, done fast</h3>
                 <p className="text-sm text-muted-foreground">
-                  Spreadsheet &amp; data work, tech bug fixes, live mentoring. Billed by the hour, day, month, or fixed-per-task. Automated practical test to join.
+                  Logo design, API fixes, SEO audit, blog writing, video editing — bite-sized work across {activeCategoryCount} categor{activeCategoryCount === 1 ? "y" : "ies"}. Billed hourly or fixed-price.
                 </p>
                 <ul className="space-y-1.5 text-sm">
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-success" />Fast onboarding (auto-test)</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-success" />Higher volume, lower price floor</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-success" />Live in: Spreadsheet &amp; Data, Tech Micro-Tasks, Mentoring</li>
+                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-success" />Auto-verified onboarding</li>
+                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-success" />Escrow-protected payments</li>
+                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-success" />{activeCategoryCount} categor{activeCategoryCount === 1 ? "y" : "ies"}, 100+ sub-skills</li>
                 </ul>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="space-y-3 p-6">
-                <Badge variant="tierB">Tier B — Role Engagements</Badge>
-                <h3 className="font-display text-xl font-semibold">Multi-week project capacity</h3>
+                <Badge variant="tierB">Tier B — Large Projects</Badge>
+                <h3 className="font-display text-xl font-semibold">Multi-week engagements</h3>
                 <p className="text-sm text-muted-foreground">
-                  Full Stack, AI/ML, NLP, Mobile, DevOps, Design. Billed per day or per milestone — never hourly. Portfolio review + live technical interview to join.
+                  Full-stack builds, AI chatbots, brand identity, marketing strategy, data engineering — deep project work. Billed per day or per milestone.
                 </p>
                 <ul className="space-y-1.5 text-sm">
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-success" />Milestone-based escrow for stage payouts</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-success" />Higher revenue per contract</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-success" />Live in: Full Stack, AI/ML, NLP</li>
+                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-success" />Milestone-based escrow</li>
+                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-success" />Portfolio + live interview</li>
+                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-success" />Dedicated project managers</li>
                 </ul>
               </CardContent>
             </Card>
@@ -145,6 +174,7 @@ export default async function HomePage() {
               title="What you can hire for"
               description="We launch new categories every month based on real waitlist demand. Hover any card to explore."
               statusLabel="Active"
+              viewAllHref="/categories"
             />
           </div>
         </section>
@@ -158,6 +188,7 @@ export default async function HomePage() {
               title="Launching next"
               description="These categories are in development. Hover to preview."
               statusLabel="Coming"
+              viewAllHref="/categories#coming-soon"
             />
           </div>
         </section>
@@ -200,7 +231,7 @@ export default async function HomePage() {
                   </div>
                 </div>
                 <Button asChild variant="gradient" size="sm" className="w-full">
-                  <Link href="/auth/signup?role=buyer">Hire someone <ArrowRight className="ml-1 h-4 w-4" /></Link>
+                  <Link href={user ? "/find-people" : "/auth/signup?role=buyer"}>Hire someone <ArrowRight className="ml-1 h-4 w-4" /></Link>
                 </Button>
               </CardContent>
             </Card>
@@ -229,9 +260,17 @@ export default async function HomePage() {
                     <p className="text-sm text-muted-foreground">Work is funded upfront in escrow. Deliver milestones, get approved, and receive payment — securely and on time.</p>
                   </div>
                 </div>
-                <Button asChild variant="outline" size="sm" className="w-full border-emerald-500/30 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950">
-                  <Link href="/auth/signup?role=employee">Start earning <ArrowRight className="ml-1 h-4 w-4" /></Link>
-                </Button>
+                {user ? (
+                  <form action={toggleRoleAction} className="w-full">
+                    <Button type="submit" variant="outline" size="sm" className="w-full border-emerald-500/30 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950">
+                      {userMode === "employee" ? "Switch to Buyer" : "Start earning"} <ArrowRight className="ml-1 h-4 w-4" />
+                    </Button>
+                  </form>
+                ) : (
+                  <Button asChild variant="outline" size="sm" className="w-full border-emerald-500/30 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950">
+                    <Link href="/auth/signup?role=employee">Start earning <ArrowRight className="ml-1 h-4 w-4" /></Link>
+                  </Button>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -270,12 +309,20 @@ export default async function HomePage() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-3 md:justify-end">
-                <Button asChild size="lg" variant="gradient" className="shadow-xl shadow-primary/25">
-                  <Link href="/auth/signup?role=buyer">Hire someone <ArrowRight className="h-4 w-4" /></Link>
-                </Button>
-                <Button asChild size="lg" variant="outline" className="backdrop-blur-sm">
-                  <Link href="/auth/signup?role=employee">Start earning</Link>
-                </Button>
+                {user ? (
+                  <Button asChild size="lg" variant="gradient" className="shadow-xl shadow-primary/25">
+                    <Link href="/find-people">Hire someone <ArrowRight className="h-4 w-4" /></Link>
+                  </Button>
+                ) : (
+                  <>
+                    <Button asChild size="lg" variant="gradient" className="shadow-xl shadow-primary/25">
+                      <Link href="/auth/signup?role=buyer">Hire someone <ArrowRight className="h-4 w-4" /></Link>
+                    </Button>
+                    <Button asChild size="lg" variant="outline" className="backdrop-blur-sm">
+                      <Link href="/auth/signup?role=employee">Start earning</Link>
+                    </Button>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>

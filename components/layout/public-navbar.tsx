@@ -37,15 +37,8 @@ type Profile = {
 } | null;
 
 export async function PublicNavbar() {
-  // Resolve auth + initial bell data on the server. This single round
-  // trip covers: (a) who is signed in, (b) their profile fields used
-  // by the avatar / dropdown, and (c) the first 15 notifications +
-  // unread count for the bell badge. The client never has to repeat
-  // any of these on mount.
   let user = null;
   let profile: Profile = null;
-  let notifUnread = 0;
-  let notifRecent: any[] = [];
 
   try {
     const sb = createClient();
@@ -53,23 +46,14 @@ export async function PublicNavbar() {
     user = res.data.user;
 
     if (user) {
-      const [profileRes, countRes, listRes] = await Promise.all([
+      const [profileRes] = await Promise.all([
         sb
           .from("users")
           .select("full_name, avatar_url, current_mode, roles")
           .eq("id", user.id)
           .maybeSingle(),
-        (sb.rpc as any)("unread_notification_count", { p_user_id: user.id }),
-        sb
-          .from("notifications")
-          .select("id, type, title, body, link, read_at, created_at")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(15),
       ]);
       profile = (profileRes.data as Profile) ?? null;
-      notifUnread = typeof countRes === "number" ? countRes : (countRes?.data ?? 0);
-      notifRecent = (listRes as any)?.data ?? [];
     }
   } catch {
     // Graceful fallback: if auth refresh races with middleware, render logged-out state.
@@ -99,12 +83,8 @@ export async function PublicNavbar() {
             </Button>
             {user ? (
               <PublicNavbarUserMenu
-                userId={user.id}
                 email={user.email ?? ""}
                 profile={profile}
-                notifUnread={notifUnread}
-                notifRecent={notifRecent}
-              
               />
             ) : (
               <>

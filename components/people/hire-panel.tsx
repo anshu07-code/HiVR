@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
@@ -8,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Briefcase, Send, Loader2, CheckCircle2, AlertCircle, X, ExternalLink, Handshake, Zap } from "lucide-react";
+import { Briefcase, Loader2, AlertCircle, ExternalLink, Handshake, Zap, Clock, X } from "lucide-react";
 import { formatPaise } from "@/lib/utils";
 import { hireDirectlyAction, startNegotiationAction } from "@/app/people/[id]/_actions/actions";
 import { useRouter } from "next/navigation";
@@ -42,14 +43,16 @@ export function HirePanel({
   employeeSkills?: { id: string; categoryId: string; name: string; ratePerTask: number | null; isPrimary: boolean }[];
 }) {
   const [open, setOpen] = React.useState(false);
-  const [step, setStep] = React.useState<"form" | "result">("form");
+  const [step, setStep] = React.useState<"form" | "propose" | "result">("form");
   const [mode, setMode] = React.useState<"direct" | "negotiate" | null>(null);
   const [title, setTitle] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [sending, setSending] = React.useState(false);
-  const [result, setResult] = React.useState<{ ok: boolean; message: string; taskId?: string; contractId?: string } | null>(null);
+  const [result, setResult] = React.useState<{ ok: boolean; message: string; offerId?: string } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = React.useState<string>("");
+  const [expectedDays, setExpectedDays] = React.useState("");
+  const [proposedPrice, setProposedPrice] = React.useState<number>(0);
   const router = useRouter();
 
   const skills = employeeSkills ?? [];
@@ -76,7 +79,8 @@ export function HirePanel({
       fd.set("title", title.trim());
       fd.set("description", description.trim());
       if (selectedCategoryId) fd.set("categoryId", selectedCategoryId);
-      fd.set("ratePaise", String(effectiveRate));
+      fd.set("ratePaise", String(actionMode === "negotiate" && proposedPrice > 0 ? proposedPrice : effectiveRate));
+      fd.set("expectedDays", expectedDays);
 
       const action = actionMode === "direct" ? hireDirectlyAction : startNegotiationAction;
       const res: any = await action(fd);
@@ -102,17 +106,11 @@ export function HirePanel({
     setDescription("");
     setError(null);
     setResult(null);
+    setProposedPrice(0);
   };
 
-  const resultTitle = mode === "direct" ? "Hired!" : "Offer sent!";
-  const resultIcon = mode === "direct" ? Zap : Handshake;
-  const ResultIcon = resultIcon;
-  const resultBtnLabel = mode === "direct" ? "View contract" : "View my tasks";
-  const resultBtnHref = mode === "direct"
-    ? `/dashboard/contracts/${result?.contractId ?? ""}`
-    : result?.taskId
-      ? `/dashboard/tasks?task=${result.taskId}`
-      : "/dashboard/tasks";
+  const resultTitle = "Offer sent!";
+  const ResultIcon = Handshake;
 
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
@@ -121,7 +119,7 @@ export function HirePanel({
           <Briefcase className="h-3.5 w-3.5" />Hire this person
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto" style={{ scrollbarWidth: "none" }}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
             <Avatar className="h-8 w-8">
@@ -194,6 +192,23 @@ export function HirePanel({
               />
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="expectedDays">Expected delivery (days)</Label>
+              <div className="relative">
+                <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="expectedDays"
+                    type="number"
+                    min={1}
+                    placeholder="e.g. 7"
+                    className="pl-9"
+                    value={expectedDays}
+                    onChange={(e) => setExpectedDays(e.target.value)}
+                    onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                  />
+              </div>
+            </div>
+
             <div className="rounded-lg bg-muted/50 p-4 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">
@@ -218,16 +233,15 @@ export function HirePanel({
 
             <div className="flex gap-3">
               <Button
-                onClick={() => handleSubmit("negotiate")}
+                onClick={() => {
+                  setProposedPrice(effectiveRate);
+                  setStep("propose");
+                }}
                 disabled={!title.trim() || !description.trim() || sending || todayClicks >= 3}
                 variant="outline"
                 className="flex-1 gap-2"
               >
-                {sending && mode === "negotiate" ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Handshake className="h-4 w-4" />
-                )}
+                <Handshake className="h-4 w-4" />
                 Start negotiation
               </Button>
               <Button
@@ -250,46 +264,101 @@ export function HirePanel({
           </div>
         )}
 
-        {step === "result" && result && result.ok && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-            <div className="relative mx-4 w-full max-w-md rounded-2xl border bg-background p-8 shadow-2xl text-center">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute right-3 top-3"
-                onClick={() => { setOpen(false); reset(); }}
-              >
+        {step === "propose" && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" className="h-7 px-1" onClick={() => setStep("form")}>
                 <X className="h-4 w-4" />
               </Button>
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/10">
-                <ResultIcon className="h-8 w-8 text-emerald-600" />
+              <span className="text-sm font-medium">Propose your terms to {firstName}</span>
+            </div>
+
+            <div className="rounded-lg border bg-card/50 p-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">{selectedSkill ? `${selectedSkill.name} rate` : "Standing rate"}</span>
+                <span className="font-semibold">{formatPaise(effectiveRate)}</span>
               </div>
-              <h3 className="text-xl font-semibold">{resultTitle}</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {mode === "direct" ? (
-                  <>
-                    You hired <span className="font-medium text-foreground">{firstName}</span> for{" "}
-                    <span className="font-medium text-foreground">"{title}"</span> at{" "}
-                    <span className="font-semibold text-foreground">{formatPaise(effectiveRate)}</span>.
-                    A contract has been created.
-                  </>
-                ) : (
-                  <>
-                    <span className="font-medium text-foreground">{firstName}</span> has been notified about your offer for{" "}
-                    <span className="font-medium text-foreground">"{title}"</span> at{" "}
-                    <span className="font-semibold text-foreground">{formatPaise(effectiveRate)}</span>.
-                    They can negotiate down to <strong>{formatPaise(Math.round(effectiveRate * 0.8))}</strong>.
-                  </>
-                )}
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Negotiation floor: <span className="font-medium">{formatPaise(Math.round(effectiveRate * 0.8))}</span> (-20%)
               </p>
-              <div className="mt-6 flex gap-3">
-                <Button variant="outline" className="flex-1" onClick={() => { setOpen(false); reset(); }}>
-                  Close
-                </Button>
-                <Button className="flex-1 gap-1.5" onClick={() => { setOpen(false); router.push(resultBtnHref); reset(); }}>
-                  {resultBtnLabel} <ExternalLink className="h-3.5 w-3.5" />
-                </Button>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs">Your proposed price (₹)</Label>
+              <Input
+                type="number"
+                min={1}
+                value={proposedPrice ? Math.round(proposedPrice / 100) : ""}
+                onChange={(e) => {
+                  const val = Number(e.target.value) * 100;
+                  setProposedPrice(Math.min(val, effectiveRate));
+                }}
+                onWheel={(e) => (e.target as HTMLInputElement).blur()}
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Range: {formatPaise(Math.round(effectiveRate * 0.8))} – {formatPaise(effectiveRate)}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs">Expected delivery (days)</Label>
+              <Input
+                type="number"
+                min={1}
+                placeholder="e.g. 7"
+                value={expectedDays}
+                onChange={(e) => setExpectedDays(e.target.value)}
+                onWheel={(e) => (e.target as HTMLInputElement).blur()}
+              />
+            </div>
+
+            {error && (
+              <div className="flex items-center gap-2 rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                {error}
               </div>
+            )}
+
+            <Button className="w-full" size="lg"
+              onClick={() => handleSubmit("negotiate")} disabled={sending || !proposedPrice}>
+              {sending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Handshake className="h-4 w-4 mr-2" />}
+              Send Negotiation Offer — {formatPaise(proposedPrice)}
+            </Button>
+          </div>
+        )}
+
+        {step === "result" && result && result.ok && (
+          <div className="text-center py-4">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/10">
+              <ResultIcon className="h-8 w-8 text-emerald-600" />
+            </div>
+            <h3 className="text-xl font-semibold">{resultTitle}</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {mode === "direct" ? (
+                <>
+                  Offer sent to <span className="font-medium text-foreground">{firstName}</span> for{" "}
+                  <span className="font-medium text-foreground">"{title}"</span> at{" "}
+                  <span className="font-semibold text-foreground">{formatPaise(effectiveRate)}</span>.
+                  They'll review and respond on Job Offers.
+                </>
+              ) : (
+                <>
+                  <span className="font-medium text-foreground">{firstName}</span> has been notified about your offer for{" "}
+                  <span className="font-medium text-foreground">"{title}"</span> at{" "}
+                  <span className="font-semibold text-foreground">{formatPaise(effectiveRate)}</span>.
+                  Negotiate via Job Offers — 4 rounds, -20% floor.
+                </>
+              )}
+            </p>
+            <div className="mt-6 flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => { setOpen(false); reset(); }}>
+                Close
+              </Button>
+              <Button asChild className="flex-1 gap-1.5">
+                <Link href="/dashboard/job-offers" onClick={() => { setOpen(false); reset(); }}>
+                  Go to Job Offers <ExternalLink className="h-3.5 w-3.5" />
+                </Link>
+              </Button>
             </div>
           </div>
         )}

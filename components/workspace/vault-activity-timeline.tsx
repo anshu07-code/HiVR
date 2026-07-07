@@ -111,6 +111,8 @@ export function VaultActivityTimeline({
   const [items, setItems] = React.useState<TimelineItem[]>([]);
   const [actorNames, setActorNames] = React.useState<Record<string, string>>({});
   const [workspaceParties, setWorkspaceParties] = React.useState<Record<string, string>>({});
+  const [buyerId, setBuyerId] = React.useState<string | null>(null);
+  const [employeeId, setEmployeeId] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [filter, setFilter] = React.useState<FilterKind>("all");
   const [expanded, setExpanded] = React.useState(false);
@@ -158,6 +160,8 @@ export function VaultActivityTimeline({
         if (d.buyer_id && d.buyer?.full_name) names[d.buyer_id] = d.buyer.full_name;
         if (d.employee_id && d.employee?.full_name) names[d.employee_id] = d.employee.full_name;
         setWorkspaceParties(names);
+        if (d.buyer_id) setBuyerId(d.buyer_id);
+        if (d.employee_id) setEmployeeId(d.employee_id);
         // Pre-seed actorNames so the first render already shows names
         setActorNames((p) => ({ ...names, ...p }));
       });
@@ -232,15 +236,22 @@ export function VaultActivityTimeline({
     if (id && id === currentUserId) return "You";
     if (id && actorNames[id]) return actorNames[id]!;
     if (id && workspaceParties[id]) return workspaceParties[id]!;
-    // Generic role-based fallbacks when the name hasn't been resolved yet
+    // Fallback: actor_id may be null for events created before the
+    // actor_id backfill migration. Use the known buyer/employee ID
+    // to resolve the name from the workspace parties map.
     if (it.source === "workspace") {
       const w = it as WorkspaceEvent;
-      if (w.kind === "escrow_funded") return "Buyer";
-      if (w.kind === "delivered") return "Employee";
-      if (w.kind === "completed") return "Buyer";
-      if (w.kind === "revision_requested") return "Buyer";
-      if (w.kind === "frozen") return "Admin";
-      if (w.kind === "reopened") return "Admin";
+      if (w.kind === "escrow_funded" || w.kind === "completed" || w.kind === "revision_requested") {
+        if (buyerId && workspaceParties[buyerId]) return workspaceParties[buyerId]!;
+        if (buyerId && buyerId === currentUserId) return "You";
+        return "Buyer";
+      }
+      if (w.kind === "delivered") {
+        if (employeeId && workspaceParties[employeeId]) return workspaceParties[employeeId]!;
+        if (employeeId && employeeId === currentUserId) return "You";
+        return "Employee";
+      }
+      if (w.kind === "frozen" || w.kind === "reopened") return "Admin";
     }
     return "Someone";
   }

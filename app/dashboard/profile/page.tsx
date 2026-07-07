@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, ExternalLink, Users } from "lucide-react";
 import { ProfileBuilder } from "./profile-builder";
 import { BuyerProfileBuilder } from "./buyer-profile-builder";
-import { ModeSwitcher } from "@/app/dashboard/mode-switcher";
+import { toggleRoleAction } from "@/app/(public)/landing-actions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Build your profile — HiVR" };
@@ -28,6 +28,7 @@ export default async function ProfilePage() {
     { data: experience },
     { data: projects },
     { data: certifications },
+    { data: achievements },
     { data: resume },
     { data: resumeParsed },
     { data: socialLinks },
@@ -36,7 +37,7 @@ export default async function ProfilePage() {
     { data: standingRates },
     { data: bp },
   ] = await Promise.all([
-    sb.from("users").select("id, full_name, email, avatar_url, cover_url, phone, roles, current_mode").eq("id", user.id).maybeSingle(),
+    sb.from("users").select("id, full_name, email, avatar_url, cover_url, phone, roles, current_mode, last_active").eq("id", user.id).maybeSingle(),
     sb.from("employee_profiles").select("*").eq("user_id", user.id).maybeSingle(),
     sb.from("employee_skills").select("id, category_id, is_primary, years_experience, rate_per_hour_paise, rate_per_task_paise, rate_per_day_paise, rate_per_week_paise, category:skill_categories(name, slug, icon, tier)").eq("employee_id", user.id),
     sb.from("skill_categories").select("id, name, slug, icon, tier, parent_category_id, status").eq("status", "active").order("sort_order"),
@@ -44,6 +45,7 @@ export default async function ProfilePage() {
     sb.from("employee_experience").select("*").eq("user_id", user.id).order("sort_order", { ascending: false }),
     sb.from("employee_projects").select("*").eq("user_id", user.id).order("sort_order", { ascending: false }),
     sb.from("employee_certifications").select("*").eq("user_id", user.id).order("sort_order", { ascending: false }),
+    sb.from("employee_achievements").select("*").eq("user_id", user.id).order("sort_order", { ascending: false }),
     sb.from("employee_resume").select("*").eq("user_id", user.id).maybeSingle(),
     sb.from("resumes").select("id, parsed_skills, parsed_years, parsed_projects, parse_status, parse_error").eq("user_id", user.id).maybeSingle(),
     sb.from("employee_social_links").select("*").eq("user_id", user.id),
@@ -81,9 +83,13 @@ export default async function ProfilePage() {
   if ((projects ?? []).length >= 1) completeness += 10;
   if ((certifications ?? []).length >= 1) completeness += 5;
   if ((socialLinks ?? []).length >= 1) completeness += 5;
+  if (resume || (resumeParsed && (resumeParsed as any).parse_status === "parsed")) completeness += 5;
   completeness = Math.min(100, completeness);
 
-  const avatarUrl = (userRow as any)?.avatar_url ?? null;
+  const rawAvatarUrl = (userRow as any)?.avatar_url ?? null;
+  const rawCoverUrl = (userRow as any)?.cover_url ?? null;
+  const lastActive = (userRow as any)?.last_active ?? null;
+  const avatarUrl = rawAvatarUrl && lastActive ? `${rawAvatarUrl}?v=${lastActive}` : rawAvatarUrl;
   const fullName = (userRow as any)?.full_name ?? "";
 
   return isBuyerMode ? (
@@ -96,7 +102,12 @@ export default async function ProfilePage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <ModeSwitcher roles={roles} currentMode={currentMode} />
+          <form action={toggleRoleAction}>
+            <input type="hidden" name="next" value="/dashboard/profile" />
+            <Button type="submit" variant="outline" size="sm">
+              {currentMode === "employee" ? "Switch to Buyer" : "Become an Employee"}
+            </Button>
+          </form>
           <Button asChild variant="ghost" size="sm">
             <Link href="/dashboard">
               <ArrowLeft className="h-3.5 w-3.5" />
@@ -108,6 +119,7 @@ export default async function ProfilePage() {
       <BuyerProfileBuilder
         userId={user.id}
         avatarUrl={avatarUrl}
+        coverUrl={rawCoverUrl && lastActive ? `${rawCoverUrl}?v=${lastActive}` : rawCoverUrl}
         fullName={fullName}
         email={(userRow as any)?.email ?? ""}
         buyerProfile={bp as any}
@@ -123,13 +135,12 @@ export default async function ProfilePage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <ModeSwitcher roles={roles} currentMode={currentMode} />
-          <Button asChild variant="outline" size="sm">
-            <Link href={`/people/${user.id}`}>
-              <ExternalLink className="h-3.5 w-3.5" />
-              Preview public profile
-            </Link>
-          </Button>
+          <form action={toggleRoleAction}>
+            <input type="hidden" name="next" value="/dashboard/profile" />
+            <Button type="submit" variant="outline" size="sm">
+              {currentMode === "employee" ? "Switch to Buyer" : "Become an Employee"}
+            </Button>
+          </form>
           <Button asChild variant="ghost" size="sm">
             <Link href="/dashboard">
               <ArrowLeft className="h-3.5 w-3.5" />
@@ -169,6 +180,7 @@ export default async function ProfilePage() {
           trustTier: (ep as any)?.overall_trust_tier ?? "provisional",
           instantProfile: instantProfile as any,
           availability: availability as any,
+          achievements: (achievements ?? []) as any[],
           standingRates: (standingRates ?? []) as any[],
         }}
         categories={parents as any[]}

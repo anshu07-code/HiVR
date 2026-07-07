@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Send, Paperclip, Loader2, Eye, ShieldAlert, Lock, FileText, Download, AlertTriangle, History, Wifi, WifiOff, RefreshCw } from "lucide-react";
+import { Send, Paperclip, Loader2, Eye, ShieldAlert, Lock, FileText, Download, AlertTriangle, History, Wifi, WifiOff, RefreshCw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -62,6 +62,7 @@ export function WorkspaceChat({
   const [sending, setSending] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
   const [downloadingId, setDownloadingId] = React.useState<string | null>(null);
+  const [chatError, setChatError] = React.useState<string | null>(null);
   const [connection, setConnection] = React.useState<"connecting" | "online" | "offline">("connecting");
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
@@ -176,7 +177,7 @@ export function WorkspaceChat({
     const data = await r.json().catch(() => ({}));
     if (!r.ok || !data.ok) {
       setText(c);
-      alert(data?.error ?? "Failed to send");
+      setChatError(data?.error ?? "Failed to send");
     }
   };
 
@@ -186,7 +187,7 @@ export function WorkspaceChat({
     if (!file) return;
     if (isLocked) return;
     if (file.size > 25 * 1024 * 1024) {
-      alert(`File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max is 25 MB.`);
+      setChatError(`File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max is 25 MB.`);
       return;
     }
     setUploading(true);
@@ -199,7 +200,7 @@ export function WorkspaceChat({
       let upData: any = {};
       try { upData = upText ? JSON.parse(upText) : {}; } catch { upData = { error: upText }; }
       if (!upRes.ok || upData.ok === false) {
-        alert(`Upload failed: ${upData?.error ?? upRes.statusText ?? "Unknown error"}`);
+        setChatError(`Upload failed: ${upData?.error ?? upRes.statusText ?? "Unknown error"}`);
         return;
       }
       const note = `Shared a file: ${upData.originalName ?? upData.name}`;
@@ -211,7 +212,7 @@ export function WorkspaceChat({
       let sendData: any = {};
       try { sendData = sendText ? JSON.parse(sendText) : {}; } catch { sendData = { error: sendText }; }
       if (!sendRes.ok || sendData.ok === false) {
-        alert(`Message failed: ${sendData?.error ?? sendRes.statusText ?? "Unknown error"}`);
+        setChatError(`Message failed: ${sendData?.error ?? sendRes.statusText ?? "Unknown error"}`);
       }
     } finally {
       setUploading(false);
@@ -226,13 +227,13 @@ export function WorkspaceChat({
         body: JSON.stringify({ vaultId }),
       });
       const data = await r.json();
-      if (!r.ok || !data.ok) { alert(data?.error ?? "Failed"); return; }
+      if (!r.ok || !data.ok) { setChatError(data?.error ?? "Failed"); return; }
       // Fetch as blob + download — keeps the signed URL out of the
       // browser address bar / history.
       const { downloadFromSignedUrl } = await import("@/lib/safe-download");
       await downloadFromSignedUrl(data.url, data.name ?? "download");
     } catch (e) {
-      alert(`Download failed: ${(e as Error).message}`);
+      setChatError(`Download failed: ${(e as Error).message}`);
     } finally {
       setDownloadingId(null);
     }
@@ -349,6 +350,16 @@ export function WorkspaceChat({
         <div className="mx-3 mb-1 flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-2.5 py-1.5 text-[11px] text-destructive">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
           <span>This message will be blocked — it looks like a phone number, email, or off-platform contact.</span>
+        </div>
+      )}
+
+      {chatError && (
+        <div className="mx-3 mb-1 flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-2.5 py-1.5 text-[11px] text-destructive">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          <span className="flex-1">{chatError}</span>
+          <button type="button" onClick={() => setChatError(null)} className="text-destructive/60 hover:text-destructive">
+            <X className="h-3 w-3" />
+          </button>
         </div>
       )}
 

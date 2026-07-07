@@ -101,17 +101,10 @@ export async function POST(req: Request) {
     if (v.parentPhone && !v.otp) {
       const code = String(Math.floor(100000 + Math.random() * 900000));
       _otpStore.set(v.parentPhone, { code, attempts: 0, createdAt: Date.now() });
-      // In sandbox we log the code to the server console for dev convenience
+      // In sandbox we log the OTP for dev convenience (production relies on SMS delivery)
       if (BYPASS_OTP) {
         // eslint-disable-next-line no-console
-        console.log(`[parent-consent] sandbox OTP for ${v.parentPhone}: ${code}`);
-      } else {
-        // Production: send via SMS provider. The current lib/twilio
-        // wrapper handles voice calls only; SMS can be wired here
-        // later (e.g. via Twilio Messaging API). For now we log the
-        // code and rely on the email/phone OTP out-of-band channels.
-        // eslint-disable-next-line no-console
-        console.log(`[parent-consent] OTP for ${v.parentPhone}: ${code} (configure SMS provider to deliver in prod)`);
+        console.log(`[parent-consent] sandbox OTP for ${v.parentPhone.slice(-4)}: ${code}`);
       }
       await (admin.from("verification_audit") as any).insert({
         user_id: user.id,

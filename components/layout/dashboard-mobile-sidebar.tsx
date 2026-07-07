@@ -8,7 +8,7 @@ import {
   X, LayoutDashboard, Briefcase, Wallet, Award, ShieldCheck, MessageSquare, Star,
   Settings, ListChecks, FileText, Users, BarChart3, Calendar, Sparkles,
   Search, UserSearch, FolderTree, BookOpen, Tag, Building2, Activity, FolderKanban, Eye, Bell,
-  TrendingUp, Handshake, LogOut, Menu,
+  TrendingUp, Handshake, LogOut, Menu, Heart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,8 @@ const EMPLOYEE_NAV: Item[] = [
   { href: "/dashboard/applications", label: "My Applications",  Icon: FileText },
   { href: "/dashboard/job-offers", label: "Job Offers",        Icon: Handshake },
   { href: "/dashboard/profile",    label: "Build Your Profile", Icon: UserSearch },
+  { href: "/dashboard/gigs",       label: "My Gigs",            Icon: Tag },
+  { href: "/dashboard/saved",      label: "Saved",              Icon: Heart },
   { href: "/onboarding/verify",    label: "Get Verified",      Icon: ShieldCheck },
   { href: "/dashboard/workspaces", label: "Workspaces",        Icon: FolderKanban },
   { href: "/dashboard/contracts",  label: "Contracts",          Icon: Briefcase },
@@ -45,6 +47,7 @@ const BUYER_NAV: Item[] = [
   { href: "/find-people",          label: "Find People",       Icon: UserSearch },
   { href: "/dashboard/tasks",      label: "My Posted Tasks",   Icon: ListChecks },
   { href: "/dashboard/job-offers", label: "Job Offers",        Icon: Handshake },
+  { href: "/dashboard/saved",      label: "Saved",              Icon: Heart },
   { href: "/onboarding/verify",    label: "Get Verified",      Icon: ShieldCheck },
   { href: "/dashboard/workspaces", label: "Workspaces",        Icon: FolderKanban },
   { href: "/dashboard/contracts",  label: "Contracts",         Icon: Briefcase },

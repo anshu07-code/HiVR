@@ -9,15 +9,15 @@ import type { PricingModel, CategoryTier } from "./supabase/types";
 /** Pricing models allowed for Tier A (micro-tasks). */
 export const TIER_A_PRICING_MODELS: PricingModel[] = [
   "hourly",
+  "daily",
+  "monthly",
   "fixed",
 ];
 
 /** Pricing models allowed for Tier B (role engagements). */
 export const TIER_B_PRICING_MODELS: PricingModel[] = [
-  "hourly",
-  "fixed",
   "daily_rate",
-  "weekly_rate",
+  "fixed_milestone",
 ];
 
 /** Returns the allowed pricing models for a category tier. */
@@ -39,13 +39,34 @@ export const PRICING_MODEL_LABELS: Record<PricingModel, string> = {
 /** Wage bands (₹) for the launch categories. Tweak in admin settings later. */
 export const WAGE_BANDS_INR: Record<string, { min: number; max: number }> = {
   // Tier A
-  "spreadsheet-data-work":          { min: 150,  max: 800  },
-  "tech-micro-tasks":               { min: 400,  max: 2500 },
-  "mentoring-live-doubt-solving":   { min: 200,  max: 1500 },
-  // Tier B (per day, not per hour)
-  "fullstack-dev":                  { min: 2500, max: 12000 },
-  "ai-ml-engineering":              { min: 3500, max: 15000 },
-  "nlp-data-science":               { min: 3000, max: 12000 },
+  "graphic-design-creative":        { min: 200,  max: 2000 },
+  "programming-tech":               { min: 400,  max: 2500 },
+  "digital-marketing":              { min: 200,  max: 2000 },
+  "writing-translation":            { min: 150,  max: 1500 },
+  "video-animation":                { min: 500,  max: 3000 },
+  "ai-services":                    { min: 500,  max: 3000 },
+  "business-services":              { min: 200,  max: 1500 },
+  "finance-accounting":             { min: 300,  max: 2000 },
+  "data-analytics":                 { min: 400,  max: 2500 },
+  "photography":                    { min: 300,  max: 2000 },
+  "personal-growth-consulting":     { min: 200,  max: 1500 },
+  "sales":                          { min: 200,  max: 2000 },
+  "qa-testing":                     { min: 300,  max: 2000 },
+  "music-audio":                    { min: 500,  max: 3000 },
+  // Tier B (per day)
+  "graphic-design-creative-b":      { min: 2500, max: 10000 },
+  "programming-tech-b":             { min: 3000, max: 15000 },
+  "digital-marketing-b":            { min: 2000, max: 10000 },
+  "writing-translation-b":          { min: 1500, max: 8000  },
+  "video-animation-b":              { min: 3000, max: 12000 },
+  "ai-services-b":                  { min: 4000, max: 18000 },
+  "business-services-b":            { min: 2000, max: 10000 },
+  "finance-accounting-b":           { min: 2500, max: 12000 },
+  "data-analytics-b":               { min: 3000, max: 15000 },
+  "photography-b":                  { min: 2000, max: 10000 },
+  "sales-b":                        { min: 2000, max: 10000 },
+  "qa-testing-b":                   { min: 2500, max: 10000 },
+  "music-audio-b":                  { min: 3000, max: 12000 },
 };
 
 /** Anti-circumvention thresholds (admin-editable in production). */

@@ -400,7 +400,7 @@ export function PaymentsHistory({
         <Button asChild variant="ghost" size="sm" className="mb-2">
           <Link href="/dashboard"><ArrowUpRight className="h-3.5 w-3.5" />Dashboard</Link>
         </Button>
-        <h1 className="font-display text-3xl font-semibold tracking-tight">Payment details</h1>
+        <h1 className="font-display text-3xl font-semibold tracking-tight" data-tour="earnings-header">Payment details</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {role === "employee"
             ? "Where you'll be paid, your earnings, refunds, and transaction history — all in one place."

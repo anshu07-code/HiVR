@@ -3,6 +3,7 @@ import { BrickWallGallery } from "@/components/marketing/brick-wall-gallery";
 import { CategoryStickyNav } from "@/components/marketing/category-sticky-nav";
 import { ComingSoonZone } from "@/components/marketing/coming-soon-zone";
 import { FindFreelancersCTA } from "@/components/marketing/find-freelancers-cta";
+import { SuggestCategoryModal } from "@/components/marketing/suggest-category-modal";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "All categories — HiVR" };
@@ -80,7 +81,22 @@ export default async function CategoriesPage() {
       </section>
 
       {/* Coming soon */}
-      <ComingSoonZone comingParents={comingParents} />
+      <div id="coming-soon">
+        <ComingSoonZone comingParents={comingParents} />
+      </div>
+
+      {/* Suggest a category */}
+      <section className="border-t py-16">
+        <div className="mx-auto max-w-7xl px-4 text-center">
+          <h2 className="font-display text-2xl font-semibold tracking-tight">Don&apos;t see what you&apos;re looking for?</h2>
+          <p className="mt-2 text-muted-foreground text-pretty max-w-lg mx-auto">
+            We add new categories every month based on what people like you request. Tell us what you need and we&apos;ll prioritise it.
+          </p>
+          <div className="mt-6">
+            <SuggestCategoryModal />
+          </div>
+        </div>
+      </section>
 
       {/* Find freelancers CTA */}
       <FindFreelancersCTA />

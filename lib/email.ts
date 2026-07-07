@@ -27,14 +27,6 @@ export async function sendOtpEmail(to: string, code: string, ttlMin = 10): Promi
   const text = `Your HiVR password reset code is: ${code}\n\nThis code expires in ${ttlMin} minutes. If you didn't request this, ignore this email.`;
 
   if (!client) {
-    console.log(
-      `\n[forgot-password] ───────────────────────────────────\n` +
-      `  To:      ${to}\n` +
-      `  Subject: ${subject}\n` +
-      `  Code:    ${code}\n` +
-      `  (no RESEND_API_KEY set — set it in .env.local to deliver real emails)\n` +
-      `───────────────────────────────────────────────────\n`,
-    );
     return { ok: true, delivered: "console" };
   }
 

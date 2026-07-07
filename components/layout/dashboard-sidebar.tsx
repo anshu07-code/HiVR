@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Briefcase, Wallet, Award, ShieldCheck, MessageSquare, Star,
   Settings, ChevronsLeft, ChevronsRight, ListChecks, FileText, Users, BarChart3, Calendar, Sparkles,
   Search, UserSearch, FolderTree, BookOpen, Tag, Building2, Activity, FolderKanban, Zap, Eye, Bell,
-  TrendingUp, Handshake,
+  TrendingUp, Handshake, Heart, FolderGit2, Lightbulb,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "./logo";
@@ -22,6 +22,8 @@ const EMPLOYEE_NAV: Item[] = [
   { href: "/dashboard/applications", label: "My Applications",  Icon: FileText },
   { href: "/dashboard/job-offers", label: "Job Offers",        Icon: Handshake },
   { href: "/dashboard/profile",    label: "Build Your Profile", Icon: UserSearch },
+  { href: "/dashboard/gigs",       label: "My Gigs",            Icon: Tag },
+  { href: "/dashboard/saved",      label: "Saved",              Icon: Heart },
   { href: "/onboarding/verify",    label: "Get Verified",      Icon: ShieldCheck },
   { href: "/dashboard/workspaces", label: "Workspaces",        Icon: FolderKanban },
   { href: "/dashboard/contracts",  label: "Contracts",          Icon: Briefcase },
@@ -44,6 +46,7 @@ const BUYER_NAV: Item[] = [
   { href: "/find-people",          label: "Find People",       Icon: UserSearch },
   { href: "/dashboard/tasks",      label: "My Posted Tasks",   Icon: ListChecks },
   { href: "/dashboard/job-offers", label: "Job Offers",        Icon: Handshake },
+  { href: "/dashboard/saved",      label: "Saved",              Icon: Heart },
   { href: "/onboarding/verify",    label: "Get Verified",      Icon: ShieldCheck },
   { href: "/dashboard/workspaces", label: "Workspaces",        Icon: FolderKanban },
   { href: "/dashboard/contracts",  label: "Contracts",         Icon: Briefcase },
@@ -66,6 +69,7 @@ const ADMIN_NAV: Item[] = [
   { href: "/admin/tech",       label: "Tech Panel",     Icon: Activity },
   { href: "/admin/monitor",    label: "Live Monitor",   Icon: Eye },
   { href: "/admin/categories", label: "Categories",   Icon: ListChecks },
+  { href: "/admin/suggestions", label: "Suggestions",   Icon: Lightbulb },
   { href: "/admin/interviews", label: "Interviews",       Icon: Calendar },
   { href: "/admin/skills/questions", label: "Skill Questions", Icon: BookOpen },
   { href: "/admin/disputes",   label: "Disputes",     Icon: FileText },
@@ -73,6 +77,7 @@ const ADMIN_NAV: Item[] = [
   { href: "/admin/subscriptions", label: "Subscriptions", Icon: Wallet },
   { href: "/admin/support",    label: "Support",      Icon: MessageSquare },
   { href: "/admin/finance",    label: "Finance",      Icon: BarChart3 },
+  { href: "/admin/projects",   label: "Project Verification", Icon: FolderGit2 },
   { href: "/admin/settings",   label: "Settings",     Icon: Settings },
 ];
 

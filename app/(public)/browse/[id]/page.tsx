@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { ShareButton } from "./share-button";
 import { TimeAgo } from "@/components/time-ago";
+import { SquirrelPanelMatch } from "./squirrel-wrapper";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -112,7 +113,7 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
   const isAdmin = userRoles.includes("admin");
   const hasEmployeeRole = isAdmin || userRoles.includes("employee");
   const isInEmployeeMode = hasEmployeeRole && (isAdmin || meProfile?.current_mode === "employee" || meProfile?.current_mode === "both" || !meProfile?.current_mode);
-  const canEmployeeAct = !!user && hasEmployeeRole && isInEmployeeMode && !isBuyer;
+  const canEmployeeAct = !!user && hasEmployeeRole && isInEmployeeMode && !isBuyer && (!task.deadline || new Date(task.deadline) > new Date());
   const tierLabel = (task as any).category?.tier === "role_engagement" ? "Tier B · Role engagement" : "Tier A · Micro-task";
   const initials = ((buyerUser?.full_name ?? "??").split(" ").map((w: string) => w[0]).slice(0, 2).join("") || "??").toUpperCase();
 
@@ -164,6 +165,60 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
     }
   }
 
+  // Squirrel mood — intelligent, contextual
+  const taskOpen = task.status === "open" && (!task.deadline || new Date(task.deadline) > new Date());
+  const isBothMode = userRoles.includes("employee") && userRoles.includes("buyer");
+  const isPureBuyer = userRoles.includes("buyer") && !userRoles.includes("employee");
+  let squirrelMood: "excited" | "happy" | "neutral" | "sad" | "waving" | "worried" | "drinking" = "neutral";
+  let squirrelNote: string | undefined;
+
+  if (!user) {
+    squirrelMood = "drinking";
+    squirrelNote = "Sign in to apply for this task.";
+  } else if (task.status !== "open") {
+    squirrelMood = "sad";
+    squirrelNote = "Ah Task closed! You were late! 😢";
+  } else if (myApp) {
+    squirrelMood = "happy";
+    squirrelNote = "You've applied! Fingers crossed 🤞 I'm rooting for you!";
+  } else if (isBuyer) {
+    squirrelMood = "neutral";
+    squirrelNote = "You posted this task!";
+  } else if (isPureBuyer) {
+    squirrelMood = "neutral";
+    squirrelNote = "Hello! You can also post a task and get your job done.";
+  } else if (!isInEmployeeMode && isBothMode) {
+    squirrelMood = "neutral";
+    squirrelNote = "Switch to employee mode in the header to apply for this task!";
+  } else if (!hasEmployeeRole) {
+    squirrelMood = "neutral";
+    squirrelNote = "Only employees can apply. Want to become an employee? Update your role in settings.";
+  } else if (taskOpen && applyCtx) {
+    if (applyCtx.paused) {
+      squirrelMood = "neutral";
+      squirrelNote = applyCtx.blockedReason ?? "Your applications are paused. Contact support to unpause.";
+    } else if (applyCtx.hasSkill && applyCtx.canApply) {
+      squirrelMood = "excited";
+      const skills = applyCtx.matchedSkills.length > 0 ? applyCtx.matchedSkills.slice(0, 3).join(", ") : "";
+      squirrelNote = `Task is Open, Apply fast! You have ${skills ? skills + " " : ""}— buyers love verified skills!`;
+    } else if (!applyCtx.hasSkill && applyCtx.canApply) {
+      squirrelMood = "worried";
+      squirrelNote = "Skills does not match. Apply at your own risk.";
+    } else if (!applyCtx.canApply) {
+      squirrelMood = "neutral";
+      squirrelNote = applyCtx.blockedReason ?? "Your profile needs some work before you can apply.";
+    } else {
+      squirrelMood = "neutral";
+      squirrelNote = "You can apply for this task! Fill in a cover note to stand out.";
+    }
+  } else if (!taskOpen && hasEmployeeRole) {
+    squirrelMood = "sad";
+    squirrelNote = "Ah Task closed! You were late! 😢";
+  } else {
+    squirrelMood = "neutral";
+    squirrelNote = "Welcome! I'm HiVR Squirrel 🐿️ — your guide to finding work.";
+  }
+
   return (
     <div className="min-h-screen bg-muted/30">
       {/* Realtime subscription — re-renders the page when applications,
@@ -197,6 +252,8 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
             {hasInteractions && (
               <TaskActions
                 taskId={taskId}
+                taskStatus={task.status}
+                taskDeadline={task.deadline}
                 initialLiked={hasLiked}
                 initialLikesCount={likes.length}
                 initialApplied={!!myApp}
@@ -215,8 +272,8 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
       {/* ============ HERO ============ */}
       <div className="border-b bg-background">
         <div className="container pb-0 pt-8">
-          <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
-            <div className="flex-1 min-w-0">
+          <div className="flex flex-col gap-6 md:flex-row md:items-stretch md:justify-between">
+            <div className="flex-1 min-w-0 flex flex-col">
               {/* Tags row */}
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <Badge variant={(task as any).category?.tier === "role_engagement" ? "tierB" : "tierA"}>
@@ -234,7 +291,7 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
               </div>
 
               {/* Title */}
-              <h1 className="font-display text-2xl font-bold tracking-tight md:text-3xl lg:text-4xl">
+              <h1 className="font-display text-2xl font-bold tracking-tight md:text-3xl lg:text-4xl" data-tour="browse-detail-header">
                 {task.title}
               </h1>
 
@@ -268,10 +325,34 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
                 <StatPill Icon={Users} label="Applicants" value={String(appsCount)} hint={shortlisted > 0 ? `${shortlisted} shortlisted` : undefined} />
                 <StatPill Icon={Briefcase} label="Openings" value={String((task as any).openings ?? 1)} hint={String((task as any).openings ?? 1) === "1" ? undefined : `${(task as any).openings ?? 1} hires`} />
               </div>
+
+              {/* Squirrel — left column only, below stats */}
+              <div className="mt-4">
+                <SquirrelPanelMatch
+                  mood={squirrelMood}
+                  message={squirrelNote}
+                  task={{
+                    id: task.id,
+                    title: task.title,
+                    description: task.description,
+                    pricing_model: task.pricing_model,
+                    budget_min: task.budget_min,
+                    budget_max: task.budget_max,
+                    deadline: task.deadline ?? null,
+                    category_name: (task as any).category?.name ?? undefined,
+                    skills_required: (task as any).skills_required ?? [],
+                    status: task.status,
+                    deliverables: (task as any).deliverables ?? null,
+                    buyer_name: buyerUser?.full_name ?? undefined,
+                  }}
+                  applicantCount={appCountView}
+                  isOwnTask={isBuyer}
+                />
+              </div>
             </div>
 
             {/* APPLY CTA — right side on desktop, sticky */}
-            <div className="md:w-72 shrink-0">
+            <div className="md:w-72 shrink-0 md:self-start apply-cta-panel">
               <div className="rounded-xl border bg-card p-5 shadow-sm">
                 <div className="text-xs uppercase tracking-wider text-muted-foreground">Compensation</div>
                 <div className="mt-1 font-display text-2xl font-bold">
@@ -309,6 +390,8 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
                   <div className="mt-4 space-y-2">
                     <TaskActions
                       taskId={taskId}
+                      taskStatus={task.status}
+                      taskDeadline={task.deadline}
                       initialLiked={hasLiked}
                       initialLikesCount={likes.length}
                       initialApplied={!!myApp}
@@ -354,8 +437,8 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
                   <div>
                     <div className="font-display text-lg font-semibold">{hired}</div>
                     <div className="text-muted-foreground">Hired</div>
-                  </div>
-                </div>
+              </div>
+            </div>
               </div>
             </div>
           </div>

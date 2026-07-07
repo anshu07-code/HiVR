@@ -19,11 +19,11 @@ export async function GET() {
       .or(`buyer_id.eq.${user.id},employee_id.eq.${user.id}`)
       .order("created_at", { ascending: false, nullsFirst: false })
       .limit(100),
-    sb.from("users").select("id, full_name, email"),
+    sb.from("users").select("id, full_name"),
     sb.from("contracts").select("id, task_post_id, agreed_price, status"),
   ]);
 
-  const userById: Record<string, { full_name: string | null; email: string | null }> = {};
+  const userById: Record<string, { full_name: string | null }> = {};
   for (const u of (profiles ?? []) as any[]) userById[u.id] = u;
 
   const myContractIds = new Set((workspaces ?? []).map((w: any) => w.contract_id).filter(Boolean));

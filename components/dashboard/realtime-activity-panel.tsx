@@ -111,8 +111,8 @@ export function RealtimeActivityPanel({
     return activity.filter((a) => new Date(a.at).getTime() >= cutoff);
   }, [activity, timeRange]);
 
-  const displayActivity = collapsed ? filteredActivity.slice(0, 4) : filteredActivity;
-  const hasMore = filteredActivity.length > 4;
+  const displayActivity = collapsed ? filteredActivity.slice(0, 5) : filteredActivity;
+  const hasMore = filteredActivity.length > 5;
 
   React.useEffect(() => {
     if (!sbRef.current) sbRef.current = createClient();

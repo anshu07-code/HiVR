@@ -36,6 +36,8 @@ export function PostTaskForm({ categories, kycComplete = true, remainingHour, re
   const [improving, setImproving] = React.useState(false);
   const [briefValue, setBriefValue] = React.useState<BriefValue>({ checklist_items: [], notes: "" });
   const [openings, setOpenings] = React.useState<number>(1);
+  const [estHrs, setEstHrs] = React.useState<number | "">("");
+  const [estMin, setEstMin] = React.useState<number>(0);
   const errorRef = React.useRef<HTMLDivElement | null>(null);
 
   // Auto-scroll the error message into view when it appears.
@@ -221,7 +223,7 @@ export function PostTaskForm({ categories, kycComplete = true, remainingHour, re
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <Label htmlFor="description">Description</Label>
-          <Button type="button" size="sm" variant="ghost" onClick={improveDescription} disabled={improving || !draftDesc}>
+          <Button type="button" size="sm" variant="ghost" onClick={improveDescription} disabled={improving || !draftDesc} data-tour="ai-improve-btn">
             {improving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
             Improve with AI
           </Button>
@@ -263,17 +265,48 @@ export function PostTaskForm({ categories, kycComplete = true, remainingHour, re
         <div className="space-y-3">
           <div className="space-y-1.5">
             <Label htmlFor="budget_min">Budget min (₹)</Label>
-            <Input id="budget_min" type="number" min={100} {...register("budget_min", { valueAsNumber: true })} />
+            <Input id="budget_min" type="number" min={100} {...register("budget_min", { valueAsNumber: true })} onWheel={(e) => (e.target as HTMLElement).blur()} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="budget_max">Budget max (₹)</Label>
-            <Input id="budget_max" type="number" min={100} {...register("budget_max", { valueAsNumber: true })} />
+            <Input id="budget_max" type="number" min={100} {...register("budget_max", { valueAsNumber: true })} onWheel={(e) => (e.target as HTMLElement).blur()} />
             {errors.budget_max && <p className="text-xs text-destructive">{errors.budget_max.message}</p>}
           </div>
           {(pricingModel === "hourly" || pricingModel === "daily" || pricingModel === "daily_rate") && (
             <div className="space-y-1.5">
-              <Label htmlFor="estimated_hours">Estimated {pricingModel.includes("daily") ? "days" : "hours"}</Label>
-              <Input id="estimated_hours" type="number" min={1} {...register("estimated_hours", { valueAsNumber: true })} />
+              <Label>Estimated {pricingModel.includes("daily") ? "days" : "time"}</Label>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <Input
+                    type="number" min={1}
+                    placeholder={pricingModel.includes("daily") ? "Days" : "Hrs"}
+                    value={estHrs}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setEstHrs(v === "" ? "" : Number(v));
+                      const h = v === "" || isNaN(Number(v)) ? 0 : Number(v);
+                      setValue("estimated_hours", h + estMin / 60);
+                    }}
+                    onWheel={(e) => (e.target as HTMLElement).blur()}
+                  />
+                </div>
+                {!pricingModel.includes("daily") && (
+                  <div className="flex-1">
+                    <Input
+                      type="number" min={0} max={59}
+                      placeholder="Min"
+                      value={estMin}
+                      onChange={(e) => {
+                        const m = Math.min(59, Math.max(0, parseInt(e.target.value) || 0));
+                        setEstMin(m);
+                        const h = estHrs === "" ? 0 : estHrs;
+                        setValue("estimated_hours", h + Math.round(m / 60 * 100) / 100);
+                      }}
+                      onWheel={(e) => (e.target as HTMLElement).blur()}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           )}
           {selectedChild && (

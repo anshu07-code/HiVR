@@ -228,6 +228,19 @@ export function InstantHireLanding({
 
   return (
     <>
+      {/* COMING SOON BANNER */}
+      <div className="border-b border-primary/20 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5">
+        <div className="container flex items-center justify-center gap-2 py-3 text-sm">
+          <Badge variant="outline" className="border-primary/30 bg-primary/10 px-3 py-1 text-[11px]">
+            <Clock className="mr-1 h-3 w-3" /> Coming soon
+          </Badge>
+          <span className="text-muted-foreground">
+            Instant Hire is in early preview. We&rsquo;ll launch it fully once we have enough
+            active users to serve everyone efficiently.
+          </span>
+        </div>
+      </div>
+
       {hiringError && (
         <div className="border-b border-destructive/30 bg-destructive/5">
           <div className="container py-2.5 text-xs text-destructive">

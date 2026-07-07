@@ -35,7 +35,7 @@ declare
   v_meta jsonb[] := array[
     jsonb_build_object('name', 'Anshuti Tiwari',     'avatar', 'https://i.pravatar.cc/300?img=16'),
     jsonb_build_object('name', 'Prerana Bothra',     'avatar', 'https://i.pravatar.cc/300?img=47'),
-    jsonb_build_object('name', 'Nupur Maheshwari',   'avatar', 'https://i.pravatar.cc/300?img=48')
+    jsonb_build_object('name', 'Nupur Maheshwari',   'avatar', 'https://i.pravatar.cc/300?img=5')
   ];
   v_user_id   uuid;
   v_email_t   text;

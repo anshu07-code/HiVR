@@ -205,7 +205,7 @@ export function NotificationsCenter({ userId, initial }: { userId: string; initi
   return (
     <div className="container max-w-4xl space-y-6 py-8">
       <div>
-        <h1 className="font-display text-3xl font-semibold tracking-tight">Notifications</h1>
+        <h1 className="font-display text-3xl font-semibold tracking-tight" data-tour="notifications-header">Notifications</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Every important event — funded escrows, submitted deliveries, file reviews, payments,
           and messages — lands here in real time.

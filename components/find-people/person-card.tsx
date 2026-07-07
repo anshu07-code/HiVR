@@ -18,6 +18,7 @@ type Props = {
   total_contracts_completed?: number | null;
   hourly_rate_paise?: number | null;
   availability_hours?: number | null;
+  availability_status?: string | null;
   experience_type?: string | null;
   overall_trust_tier?: string | null;
   is_top?: boolean;
@@ -54,7 +55,6 @@ export function PersonCard(p: Props) {
     .toUpperCase();
   const rating = p.avg_rating != null ? Number(p.avg_rating) : null;
   const isTop = !!p.is_top;
-  const isAvailable = !!p.is_available;
   const isVerified = !!p.is_verified;
 
   return (
@@ -72,12 +72,24 @@ export function PersonCard(p: Props) {
               <AvatarImage src={p.avatar_url ?? undefined} alt={p.full_name ?? "Profile"} />
               <AvatarFallback className="text-lg font-semibold">{initials}</AvatarFallback>
             </Avatar>
+             {p.availability_status && ["online","offline","away","busy"].includes(p.availability_status) && (
+              <span
+                className={cn(
+                  "absolute bottom-0 right-0 h-3 w-3 -translate-x-[3px] -translate-y-[3px] rounded-full ring-2 ring-card",
+                  p.availability_status === "online" && "bg-emerald-500",
+                  p.availability_status === "offline" && "bg-gray-400",
+                  p.availability_status === "away" && "bg-red-500",
+                  p.availability_status === "busy" && "bg-yellow-500",
+                )}
+                title={p.availability_status}
+              />
+            )}
             {isVerified && (
               <span
-                className="absolute -bottom-0.5 -right-0.5 grid h-6 w-6 place-items-center rounded-full bg-success text-white ring-2 ring-card"
+                className="absolute -top-0.5 -right-0.5 grid h-5 w-5 place-items-center rounded-full bg-blue-500 text-white ring-2 ring-card"
                 title="Identity verified"
               >
-                <BadgeCheck className="h-3.5 w-3.5" />
+                <BadgeCheck className="h-3 w-3" />
               </span>
             )}
           </div>
@@ -91,20 +103,12 @@ export function PersonCard(p: Props) {
           {/* Badges sit on their own row below the name so they
               never overlap the avatar (which extends above the card
               edge) and never overflow the card width. */}
-          {(isTop || isAvailable) && (
+          {isTop && (
             <div className="mt-1.5 flex flex-wrap items-center justify-center gap-1">
-              {isTop && (
-                <Badge variant="warning" className="text-[10px]">
-                  <Star className="mr-0.5 h-3 w-3 fill-current" />
-                  Top rated
-                </Badge>
-              )}
-              {isAvailable && (
-                <Badge variant="success" className="text-[10px]">
-                  <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-success animate-pulse-slow" />
-                  Available
-                </Badge>
-              )}
+              <Badge variant="warning" className="text-[10px]">
+                <Star className="mr-0.5 h-3 w-3 fill-current" />
+                Top rated
+              </Badge>
             </div>
           )}
           {p.headline && (

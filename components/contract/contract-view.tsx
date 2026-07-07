@@ -10,10 +10,11 @@ import { Button } from "@/components/ui/button";
 import { CheckCircle2, X, LogOut } from "lucide-react";
 
 export function ContractView({
-  contract, task, workspace, checklist, buyer, employee, buyerAck, employeeAck, currentUserRole,
+  contract, task, contractCategory, workspace, checklist, buyer, employee, buyerAck, employeeAck, currentUserRole,
 }: {
   contract: any;
   task: any | null;
+  contractCategory: any | null;
   workspace: any | null;
   checklist: any[];
   buyer: any | null;
@@ -32,6 +33,20 @@ export function ContractView({
   const [withdrawing, setWithdrawing] = React.useState(false);
   const [withdrawReason, setWithdrawReason] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
+
+  // Scroll to #sign-contract hash on mount (navigated from "Sign this contract" link)
+  React.useEffect(() => {
+    if (window.location.hash === "#sign-contract") {
+      const id = "sign-contract";
+      const scroll = () => {
+        const el = document.getElementById(id);
+        if (el) el.scrollIntoView({ behavior: "smooth" });
+      };
+      scroll();
+      // Retry in case the element is rendered slightly after mount
+      setTimeout(scroll, 200);
+    }
+  }, []);
 
   // Pre-fill the signature name with the user's full name
   const me = currentUserRole === "buyer" ? buyer : employee;
@@ -105,6 +120,7 @@ export function ContractView({
       <ContractDocument
         contract={contract}
         task={task}
+        contractCategory={contractCategory}
         workspace={workspace}
         checklist={checklist}
         buyer={buyer}

@@ -7,6 +7,7 @@ import { FolderKanban, ArrowRight } from "lucide-react";
 import { formatINR, timeAgo } from "@/lib/utils";
 import { encodeWorkspaceSlug } from "@/lib/workspace-slug";
 import { ContractsRealtimeWrapper } from "@/components/dashboard/contracts-realtime-wrapper";
+import { GigRibbon } from "@/components/contract/gig-ribbon";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -33,7 +34,7 @@ export default async function MyContracts() {
   ] = await Promise.all([
     sb
       .from("contracts")
-      .select("id, status, agreed_price, started_at, approved_at, buyer_id, employee_id, task_post_id, category_id")
+      .select("id, status, agreed_price, started_at, approved_at, buyer_id, employee_id, task_post_id, category_id, gig_id")
       // Only contracts where the signed-in user is buyer OR employee.
       .or(`buyer_id.eq.${user.id},employee_id.eq.${user.id}`)
       .order("started_at", { ascending: false, nullsFirst: false })
@@ -100,7 +101,7 @@ export default async function MyContracts() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3" data-tour="contracts-list">
           {list.map((c) => {
             const buyer = userById.get(c.buyer_id);
             const employee = userById.get(c.employee_id);
@@ -110,7 +111,8 @@ export default async function MyContracts() {
             const title = task?.title ?? cat?.name ?? "Contract";
             const role = c.buyer_id === user.id ? "Buyer" : "Employee";
             return (
-              <Card key={c.id} className="transition-colors hover:border-primary/40">
+              <Card key={c.id} className="relative transition-colors hover:border-primary/40">
+                {c.gig_id && <GigRibbon />}
                 <CardContent className="p-4">
                   <div className="flex items-start gap-4">
                     <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">

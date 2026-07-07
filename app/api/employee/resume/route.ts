@@ -40,12 +40,10 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  const url = new URL(req.url);
-  const userIdParam = url.searchParams.get("user_id");
   const sb = createClient();
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
-  const targetId = userIdParam ?? user.id;
+  const targetId = user.id;
   const { data: row } = await sb.from("employee_resume").select("storage_path, filename").eq("user_id", targetId).maybeSingle();
   if (!row) return NextResponse.json({ error: "No resume" }, { status: 404 });
   // Use admin client to bypass RLS for the signed URL (the buyer of the

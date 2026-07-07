@@ -255,6 +255,8 @@ export const ALLOWED_FORMATS = {
     "c", "cpp", "h", "hpp", "cs", "php", "sh", "yaml", "yml", "toml",
     "html", "css", "scss", "sql",
   ] as const,
+  /** Accept any file extension — no format restrictions. Used by workspace vault. */
+  all: [] as const,
 };
 
 export type FileFormatGroup = keyof typeof ALLOWED_FORMATS;
@@ -280,6 +282,32 @@ const EXT_FORMAT: Record<string, { ext: string; mime: string; label: string }> =
   json: { ext: "json", mime: "application/json", label: "JSON file" },
   md:   { ext: "md",   mime: "text/markdown", label: "Markdown file" },
   rtf:  { ext: "rtf",  mime: "application/rtf", label: "RTF document" },
+  // Code files — no unique magic bytes, validated by extension + UTF-8
+  py:   { ext: "py",   mime: "text/x-python", label: "Python file" },
+  js:   { ext: "js",   mime: "text/javascript", label: "JavaScript file" },
+  ts:   { ext: "ts",   mime: "text/typescript", label: "TypeScript file" },
+  jsx:  { ext: "jsx",  mime: "text/javascript", label: "JSX file" },
+  tsx:  { ext: "tsx",  mime: "text/typescript", label: "TSX file" },
+  cpp:  { ext: "cpp",  mime: "text/x-c++src", label: "C++ file" },
+  c:    { ext: "c",    mime: "text/x-csrc", label: "C file" },
+  h:    { ext: "h",    mime: "text/x-chdr", label: "Header file" },
+  hpp:  { ext: "hpp",  mime: "text/x-c++hdr", label: "C++ header file" },
+  cs:   { ext: "cs",   mime: "text/x-csharp", label: "C# file" },
+  java: { ext: "java", mime: "text/x-java", label: "Java file" },
+  rb:   { ext: "rb",   mime: "text/x-ruby", label: "Ruby file" },
+  go:   { ext: "go",   mime: "text/x-go", label: "Go file" },
+  rs:   { ext: "rs",   mime: "text/x-rust", label: "Rust file" },
+  kt:   { ext: "kt",   mime: "text/x-kotlin", label: "Kotlin file" },
+  swift:{ ext: "swift",mime: "text/x-swift", label: "Swift file" },
+  php:  { ext: "php",  mime: "text/x-php", label: "PHP file" },
+  sh:   { ext: "sh",   mime: "text/x-shellscript", label: "Shell script" },
+  yaml: { ext: "yaml", mime: "text/yaml", label: "YAML file" },
+  yml:  { ext: "yml",  mime: "text/yaml", label: "YAML file" },
+  toml: { ext: "toml", mime: "text/toml", label: "TOML file" },
+  html: { ext: "html", mime: "text/html", label: "HTML file" },
+  css:  { ext: "css",  mime: "text/css", label: "CSS file" },
+  scss: { ext: "scss", mime: "text/x-scss", label: "SCSS file" },
+  sql:  { ext: "sql",  mime: "text/x-sql", label: "SQL file" },
 };
 
 /**
@@ -297,7 +325,13 @@ const OLE2_EXTENSIONS = new Set(["xls", "doc", "ppt"]);
  * Plain-text extensions with no unique magic bytes — validated by
  * checking the content is valid UTF-8 and rejecting if binary.
  */
-const TEXT_EXTENSIONS = new Set(["csv", "txt", "json", "md", "rtf", "yaml", "yml", "toml", "ini", "cfg", "xml", "svg"]);
+const TEXT_EXTENSIONS = new Set([
+  "csv", "txt", "json", "md", "rtf", "yaml", "yml", "toml", "ini", "cfg", "xml", "svg",
+  // Code files — no unique magic bytes, allow-listed by extension + vault group
+  "js", "ts", "jsx", "tsx", "py", "rb", "go", "rs", "java", "kt", "swift",
+  "c", "cpp", "h", "hpp", "cs", "php", "sh",
+  "html", "css", "scss", "sql",
+]);
 
 export async function validateUploadedFile(
   file: File,
@@ -311,6 +345,14 @@ export async function validateUploadedFile(
       `File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum is ${(maxBytes / 1024 / 1024).toFixed(0)} MB.`,
       413,
     );
+  }
+
+  // "all" group — accept any file format. Bypass magic-byte and extension
+  // validation. Only check size and non-empty.
+  if (group === "all") {
+    const ext = (file.name.split(".").pop() ?? "").toLowerCase();
+    const mime = EXT_FORMAT[ext]?.mime ?? detectSimpleMime(ext);
+    return { ext, mime, label: ext || "file" };
   }
 
   const arrayBuf = await file.arrayBuffer();
@@ -358,6 +400,94 @@ export async function validateUploadedFile(
     );
   }
   return { ext: resolvedExt, mime: resolvedMime ?? "application/octet-stream", label: resolvedLabel ?? resolvedExt };
+}
+
+/** Best-effort MIME lookup for extensions not in EXT_FORMAT. */
+function detectSimpleMime(ext: string): string {
+  const mime: Record<string, string> = {
+    // Images
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    webp: "image/webp",
+    bmp: "image/bmp",
+    heic: "image/heic",
+    heif: "image/heif",
+    tiff: "image/tiff",
+    tif: "image/tiff",
+    ico: "image/x-icon",
+    svg: "image/svg+xml",
+    // Video
+    mp4: "video/mp4",
+    mov: "video/quicktime",
+    webm: "video/webm",
+    avi: "video/x-msvideo",
+    mkv: "video/x-matroska",
+    flv: "video/x-flv",
+    wmv: "video/x-ms-wmv",
+    m4v: "video/x-m4v",
+    "3gp": "video/3gpp",
+    // Audio
+    mp3: "audio/mpeg",
+    wav: "audio/wav",
+    m4a: "audio/mp4",
+    ogg: "audio/ogg",
+    flac: "audio/flac",
+    aac: "audio/aac",
+    wma: "audio/x-ms-wma",
+    opus: "audio/opus",
+    // Documents
+    pdf: "application/pdf",
+    // Archives
+    zip: "application/zip",
+    rar: "application/vnd.rar",
+    "7z": "application/x-7z-compressed",
+    tar: "application/x-tar",
+    gz: "application/gzip",
+    tgz: "application/gzip",
+    bz2: "application/x-bzip2",
+    // Executables / system
+    exe: "application/x-msdownload",
+    dll: "application/x-msdownload",
+    msi: "application/x-msi",
+    bat: "application/x-bat",
+    ps1: "application/x-powershell",
+    apk: "application/vnd.android.package-archive",
+    ipa: "application/octet-stream",
+    dmg: "application/x-apple-diskimage",
+    iso: "application/x-iso9660-image",
+    bin: "application/octet-stream",
+    dat: "application/octet-stream",
+    // Text / config
+    log: "text/plain",
+    cfg: "text/plain",
+    ini: "text/plain",
+    env: "text/plain",
+    gitignore: "text/plain",
+    dockerfile: "text/plain",
+    makefile: "text/plain",
+    // Fonts
+    ttf: "font/ttf",
+    otf: "font/otf",
+    woff: "font/woff",
+    woff2: "font/woff2",
+    eot: "application/vnd.ms-fontobject",
+    // Design / 3D
+    eps: "application/postscript",
+    ai: "application/postscript",
+    psd: "image/vnd.adobe.photoshop",
+    indd: "application/x-indesign",
+    skp: "application/x-sketchup",
+    step: "model/step",
+    stl: "model/stl",
+    blend: "application/x-blender",
+    fbx: "application/x-fbx",
+    obj: "model/obj",
+    glb: "model/gltf-binary",
+    gltf: "model/gltf+json",
+  };
+  return mime[ext] ?? "application/octet-stream";
 }
 
 // =============================================================================

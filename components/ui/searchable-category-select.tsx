@@ -104,7 +104,7 @@ export function SearchableCategorySelect({
             autoFocus
           />
         </div>
-        <div className="max-h-72 overflow-y-auto p-1">
+        <div className="max-h-72 overflow-y-auto scrollbar-thin p-1">
           {filteredGroups.length === 0 && (
             <div className="px-3 py-6 text-center text-sm text-muted-foreground">
               No subcategory matches "{search}".

@@ -94,9 +94,9 @@ export function OfferBanner({ userId, profile }: { userId: string; profile: { cu
         const elapsedH = (Date.now() - createdAt) / 3600_000;
         const intervalPassed = intervals.some((h: number) => elapsedH >= h - 0.1);
         if (!intervalPassed && !isDismissed(`ao:${o.id}`)) continue;
-        if (isDismissed(`ao:${o.id}`) && exp > Date.now()) {
+        if (isDismissed(`ao:${o.id}`)) {
           const until = Number(localStorage.getItem(DISMISS_KEY(`ao:${o.id}`)) || 0);
-          if (until < Date.now()) continue;
+          if (until > Date.now()) continue;
         }
         rows.push({
           id: `ao:${o.id}`,

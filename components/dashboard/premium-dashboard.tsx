@@ -420,8 +420,8 @@ function MiniSpark({ series, color }: { series: number[]; color: string }) {
    ==================================================================== */
 function EarningsCard({ daily, accent, title }: { daily: DailyPaise[]; accent: "emerald" | "sky"; title?: string }) {
   const accentClass = accent === "emerald"
-    ? { text: "text-emerald-600", grad: "from-emerald-500/15 to-emerald-500/5", ring: "ring-emerald-500/20" }
-    : { text: "text-sky-600", grad: "from-sky-500/15 to-sky-500/5", ring: "ring-sky-500/20" };
+    ? { text: "text-emerald-600", grad: "from-emerald-500/15 to-emerald-500/5", ring: "ring-emerald-500/20", hex: "#10b981" }
+    : { text: "text-sky-600", grad: "from-sky-500/15 to-sky-500/5", ring: "ring-sky-500/20", hex: "#0ea5e9" };
 
   const total = daily.reduce((s, d) => s + d.paise, 0);
   const rawMax = Math.max(1, ...daily.map((d) => d.paise));
@@ -504,8 +504,8 @@ function EarningsCard({ daily, accent, title }: { daily: DailyPaise[]; accent: "
             >
               <defs>
                 <linearGradient id="earn-grad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={accentClass.text.replace("text-", "").replace("-600", "-500")} stopOpacity="0.4" />
-                  <stop offset="100%" stopColor={accentClass.text.replace("text-", "").replace("-600", "-500")} stopOpacity="0" />
+                  <stop offset="0%" stopColor={accentClass.hex} stopOpacity="0.4" />
+                  <stop offset="100%" stopColor={accentClass.hex} stopOpacity="0" />
                 </linearGradient>
               </defs>
               {tickValues.map((t, i) => {
@@ -520,12 +520,12 @@ function EarningsCard({ daily, accent, title }: { daily: DailyPaise[]; accent: "
                 );
               })}
               <path d={areaPath} fill="url(#earn-grad)" className="earn-fill" />
-              <path d={linePath} fill="none" stroke="currentColor" strokeWidth="1.5" className="earn-line" />
+              <path d={linePath} fill="none" stroke="#000" strokeOpacity="0.7" strokeWidth="1.5" className="earn-line" />
               {hover && (
                 <g pointerEvents="none">
-                  <line x1={hover.x} x2={hover.x} y1={PAD_T} y2={H - PAD_B} stroke="currentColor" strokeOpacity="0.18" className="earn-cursor" />
-                  <circle cx={hover.x} cy={hover.y} r="4" fill="#fff" stroke="currentColor" strokeWidth="1.5" className="earn-dot" />
-                  <circle cx={hover.x} cy={hover.y} r="2.5" fill="currentColor" className="earn-dot-inner" />
+                  <line x1={hover.x} x2={hover.x} y1={PAD_T} y2={H - PAD_B} stroke="#000" strokeOpacity="0.12" className="earn-cursor" />
+                  <circle cx={hover.x} cy={hover.y} r="4" fill="#fff" stroke="#000" strokeOpacity="0.7" strokeWidth="1.5" className="earn-dot" />
+                  <circle cx={hover.x} cy={hover.y} r="2.5" fill="#000" fillOpacity="0.7" className="earn-dot-inner" />
                 </g>
               )}
               {daily.map((d, i) =>
@@ -567,7 +567,7 @@ function EarningsCard({ daily, accent, title }: { daily: DailyPaise[]; accent: "
       </CardContent>
       <style jsx>{`
         .earn-fill { transform-origin: center bottom; animation: earnGrow 0.9s cubic-bezier(0.22, 1, 0.36, 1) both; }
-        .earn-line { stroke-dasharray: 600; stroke-dashoffset: 600; animation: drawEarn 1.2s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both; }
+        .earn-line { stroke-dasharray: 2000; stroke-dashoffset: 2000; animation: drawEarn 1.2s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both; }
         .earn-dot  { transform-origin: center; animation: dotPulse 2s ease-in-out infinite; }
         .earn-cursor { animation: cursorFade 0.15s ease-out both; }
         .earn-tooltip { animation: tooltipIn 0.15s ease-out both; }

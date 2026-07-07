@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { canBuyerPostTask } from "@/lib/auth-context";
+import { allowedPricingModels } from "@/lib/constants";
 import { computeFraudSignals, recordFraudSignals } from "@/lib/fraud-signals";
 import { z } from "zod";
 
@@ -26,7 +27,7 @@ const Schema = z.object({
   budget_min: z.coerce.number().int().positive(),
   budget_max: z.coerce.number().int().positive(),
   deadline: z.string().min(1, "Deadline is required"),
-  estimated_hours: z.coerce.number().int().positive().max(720).optional(),
+  estimated_hours: z.coerce.number().positive().max(720).optional(),
   skills_required: z.array(z.string().min(1).max(60)).max(20).default([]),
   scheduled_publish_at: z.string().optional(),
   show_in_upcoming: z.boolean().default(true),
@@ -82,10 +83,17 @@ export async function createTaskAction(formData: FormData): Promise<void> {
     sample_url: typeof briefJson?.sample_url === "string" ? briefJson.sample_url : undefined,
   };
 
-  // Tier lookup
-  const { data: cat } = await sb.from("skill_categories").select("tier").eq("id", parsed.data.category_id).maybeSingle();
+  // Category lookup — tier + status gate
+  const { data: cat } = await sb.from("skill_categories").select("tier, status").eq("id", parsed.data.category_id).maybeSingle();
   if (!cat) redirect(`/dashboard/post?error=${encodeURIComponent("Category not found")}`);
+  if ((cat as any).status !== "active") redirect(`/dashboard/post?error=${encodeURIComponent("This category is not yet open for tasks. Join the waitlist from the category page.")}`);
   const tier = ((cat as any).tier ?? "micro_task") as "micro_task" | "role_engagement";
+
+  // Validate pricing_model matches the category's tier
+  const allowedForTier = allowedPricingModels(tier);
+  if (!allowedForTier.includes(parsed.data.pricing_model as never)) {
+    redirect(`/dashboard/post?error=${encodeURIComponent(`Tier ${tier === "role_engagement" ? "B" : "A"} categories require pricing_model in (${allowedForTier.join(", ")}); got ${parsed.data.pricing_model}`)}`);
+  }
 
   // KYC + rate-limit gate
   const budgetRupees = parsed.data.budget_max;

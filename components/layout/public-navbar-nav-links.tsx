@@ -40,11 +40,15 @@ export function NavLinks() {
               href={n.href}
               prefetch
               className={cn(
-                "relative whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
-                active && "bg-accent text-foreground"
+                "relative whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent inline-flex items-center gap-1.5",
+                n.label === "Instant" && "text-orange-500 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/20",
+                active && n.label !== "Instant" && "bg-accent text-foreground"
               )}
             >
               {n.label}
+              {n.label === "Instant" && (
+                <span className="rounded-full bg-orange-100 dark:bg-orange-900/30 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-orange-600 dark:text-orange-400">Soon</span>
+              )}
             </Link>
           );
         })}

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Bell, CheckCircle2, Users, ShieldCheck, Sparkles } from "lucide-react";
+import { Bell, CheckCircle2, Users, ShieldCheck, Sparkles, Mail } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ const TYPE_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
   hired: CheckCircle2,
   kyc_verified: ShieldCheck,
   hiring_stage: Sparkles,
+  new_message: Mail,
   default: Bell,
 };
 
@@ -32,6 +33,7 @@ const TYPE_TONE: Record<string, string> = {
   hired: "text-emerald-600",
   kyc_verified: "text-emerald-600",
   hiring_stage: "text-amber-600",
+  new_message: "text-blue-600",
   default: "text-muted-foreground",
 };
 

@@ -487,7 +487,7 @@ export function MessagesInbox({
           <Button asChild variant="ghost" size="sm" className="mb-1">
             <Link href="/dashboard"><ArrowUpRight className="h-3.5 w-3.5" />Dashboard</Link>
           </Button>
-          <h1 className="font-display text-2xl font-semibold tracking-tight">Messages</h1>
+          <h1 className="font-display text-2xl font-semibold tracking-tight" data-tour="messages-header">Messages</h1>
         </div>
       </div>
 

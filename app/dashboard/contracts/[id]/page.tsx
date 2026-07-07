@@ -49,6 +49,7 @@ export default async function ContractDocumentPage({ params }: { params: { id: s
     <ContractView
       contract={bundle.contract}
       task={bundle.task}
+      contractCategory={bundle.contractCategory}
       workspace={bundle.workspace}
       checklist={bundle.checklist}
       buyer={bundle.buyer}

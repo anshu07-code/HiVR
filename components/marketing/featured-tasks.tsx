@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CategoryIcon } from "@/components/marketing/category-icon";
 import { createClient } from "@/lib/supabase/server";
-import { formatINR, timeAgo } from "@/lib/utils";
+import { formatPaise, timeAgo } from "@/lib/utils";
 
 /**
  * Featured open tasks — shown on the homepage, visible to everyone
@@ -18,8 +18,8 @@ export async function FeaturedTasks() {
   const { data: tasks } = await sb
     .from("task_posts")
     .select(`
-      id, title, description, pricing_model, budget_min, budget_max, tier, created_at,
-      category:skill_categories!inner(slug, name, icon)
+      id, title, description, pricing_model, budget_min, budget_max, created_at,
+      category:skill_categories!inner(slug, name, icon, tier)
     `)
     .eq("status", "open")
     .order("created_at", { ascending: false })
@@ -68,8 +68,8 @@ export async function FeaturedTasks() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant={t.tier === "role_engagement" ? "tierB" : "tierA"}>
-                          {t.tier === "role_engagement" ? "Tier B" : "Tier A"}
+                        <Badge variant={t.category?.tier === "role_engagement" ? "tierB" : "tierA"}>
+                          {t.category?.tier === "role_engagement" ? "Tier B" : "Tier A"}
                         </Badge>
                         <span className="text-xs text-muted-foreground">{t.category?.name}</span>
                       </div>
@@ -78,7 +78,7 @@ export async function FeaturedTasks() {
                   <h3 className="line-clamp-2 font-display text-base font-semibold leading-snug">{t.title}</h3>
                   <p className="line-clamp-2 text-sm text-muted-foreground">{t.description}</p>
                   <div className="mt-auto flex items-center justify-between border-t pt-3 text-xs text-muted-foreground">
-                    <span className="font-semibold text-foreground">{formatINR(t.budget_min)}–{formatINR(t.budget_max)}</span>
+                    <span className="font-semibold text-foreground">{formatPaise(t.budget_min)}–{formatPaise(t.budget_max)}</span>
                     <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" />{timeAgo(t.created_at)}</span>
                   </div>
                 </CardContent>

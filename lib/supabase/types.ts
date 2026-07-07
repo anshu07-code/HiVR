@@ -20,6 +20,7 @@ export type VerificationStatus = "pending" | "verified" | "rejected";
 export type CategoryTier = "micro_task" | "role_engagement";
 export type CategoryStatus = "active" | "coming_soon";
 export type SkillVerificationStatus = "provisional" | "verified" | "experienced" | "top_rated";
+export type AvailabilityStatus = "online" | "offline" | "away" | "busy";
 export type QuestionType = "mcq" | "practical";
 export type PricingModel =
   | "hourly"
@@ -115,15 +116,17 @@ export type Database = {
           completion_rate: number;
           response_time_avg_minutes: number;
           lifetime_earnings: number;
+          availability_status: AvailabilityStatus;
           created_at: string;
         };
-        Insert: Omit<Database["public"]["Tables"]["employee_profiles"]["Row"], "created_at" | "avg_rating" | "total_reviews" | "completion_rate" | "response_time_avg_minutes" | "lifetime_earnings" | "overall_trust_tier"> & {
+        Insert: Omit<Database["public"]["Tables"]["employee_profiles"]["Row"], "created_at" | "avg_rating" | "total_reviews" | "completion_rate" | "response_time_avg_minutes" | "lifetime_earnings" | "overall_trust_tier" | "availability_status"> & {
           avg_rating?: number;
           total_reviews?: number;
           completion_rate?: number;
           response_time_avg_minutes?: number;
           lifetime_earnings?: number;
           overall_trust_tier?: TrustTier;
+          availability_status?: AvailabilityStatus;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["employee_profiles"]["Insert"]>;
@@ -295,6 +298,7 @@ export type Database = {
         Row: {
           id: string;
           task_post_id: string | null;
+          gig_id: string | null;
           buyer_id: string;
           employee_id: string;
           category_id: string;
@@ -402,16 +406,26 @@ export type Database = {
         Row: {
           id: string;
           contract_id: string;
+          gig_id: string | null;
           reviewer_id: string;
           reviewee_id: string;
           rating: number;
           comment: string | null;
+          communication_rating: number | null;
+          quality_rating: number | null;
+          value_rating: number | null;
+          worksample_url: string | null;
           is_verified_purchase: boolean;
           editable_until: string;
           created_at: string;
         };
         Insert: Omit<Database["public"]["Tables"]["reviews"]["Row"], "id" | "created_at" | "is_verified_purchase" | "editable_until"> & {
           id?: string;
+          gig_id?: string | null;
+          communication_rating?: number | null;
+          quality_rating?: number | null;
+          value_rating?: number | null;
+          worksample_url?: string | null;
           is_verified_purchase?: boolean;
           editable_until?: string;
           created_at?: string;
@@ -905,6 +919,52 @@ export type Database = {
           last_used_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["ai_response_cache"]["Insert"]>;
+      };
+      gigs: {
+        Row: {
+          id: string;
+          employee_id: string;
+          category_id: string;
+          title: string;
+          slug: string;
+          description: string;
+          pricing_model: "fixed" | "package";
+          price: number | null;
+          delivery_days: number | null;
+          package_basic_title: string | null;
+          package_basic_description: string | null;
+          package_basic_price: number | null;
+          package_basic_delivery: number | null;
+          package_basic_revisions: number | null;
+          package_standard_title: string | null;
+          package_standard_description: string | null;
+          package_standard_price: number | null;
+          package_standard_delivery: number | null;
+          package_standard_revisions: number | null;
+          package_premium_title: string | null;
+          package_premium_description: string | null;
+          package_premium_price: number | null;
+          package_premium_delivery: number | null;
+          package_premium_revisions: number | null;
+          images: Json;
+          deliverables: string[];
+          tip: string | null;
+          metadata: Json;
+          saved_count: number;
+          requirements: string | null;
+          faq: Json;
+          tags: string[] | null;
+          status: "active" | "paused" | "deleted";
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["gigs"]["Row"], "id" | "created_at" | "updated_at" | "slug"> & {
+          id?: string;
+          slug?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["gigs"]["Insert"]>;
       };
     };
   };

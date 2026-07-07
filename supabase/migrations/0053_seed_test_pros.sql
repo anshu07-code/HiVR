@@ -28,7 +28,7 @@ declare
   v_completion numeric;
   v_pros      text[] := array[
     'preranabothra9@gmail.com|Prerana Bothra|https://i.pravatar.cc/300?img=47|Verified React & Next.js engineer — pixel-perfect UI, fast delivery|Mumbai|80000|4.95|38|0.97',
-    'nupur.maheshwari.2010@gmail.com|Nupur Maheshwari|https://i.pravatar.cc/300?img=48|Full-stack TypeScript specialist — UI/UX focused with backend rigor|Bengaluru|70000|4.92|26|0.95',
+    'nupur.maheshwari.2010@gmail.com|Nupur Maheshwari|https://i.pravatar.cc/300?img=5|Full-stack TypeScript specialist — UI/UX focused with backend rigor|Bengaluru|70000|4.92|26|0.95',
     'aarav.sharma@example.com|Aarav Sharma|https://i.pravatar.cc/300?img=12|Motion designer + video editor. After Effects, Premiere, Figma|Pune|45000|4.88|22|0.96',
     'isha.iyer@example.com|Isha Iyer|https://i.pravatar.cc/300?img=20|Data analyst — SQL, Python, dbt, Looker. Migration-friendly.|Hyderabad|55000|4.95|31|0.98',
     'rohan.kapoor@example.com|Rohan Kapoor|https://i.pravatar.cc/300?img=33|SEO + content writer. Long-form, technical, B2B SaaS.|Delhi|35000|4.85|19|0.94',

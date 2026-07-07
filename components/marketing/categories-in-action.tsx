@@ -21,10 +21,30 @@ import { cn } from "@/lib/utils";
  */
 type Variant = "hero" | "card";
 
+function GenericScene(): Scene {
+  return {
+    hero: () => (
+      <div className="relative h-full w-full p-5 text-zinc-100">
+        <div className="flex h-full items-center justify-center">
+          <div className="text-center">
+            <div className="mx-auto h-10 w-10 animate-pulse rounded-full bg-zinc-800" />
+            <p className="mt-3 text-[11px] text-zinc-500">Coming to life</p>
+          </div>
+        </div>
+      </div>
+    ),
+    compact: () => (
+      <div className="flex h-full w-full items-center justify-center">
+        <div className="h-6 w-6 animate-pulse rounded-full bg-zinc-800" />
+      </div>
+    ),
+  };
+}
+
 export function AnimatedCategoryShowcase({
   category, variant = "card",
 }: { category: CategoryId; variant?: Variant }) {
-  const Scene = SCENES[category];
+  const Scene = SCENES[category] ?? GenericScene();
   return (
     <div className={cn(
       "relative overflow-hidden rounded-lg",
@@ -53,11 +73,15 @@ export function AnimatedCategoryShowcase({
 type CategoryId =
   | "spreadsheet" | "tech" | "mentoring"
   | "fullstack" | "ai" | "nlp" | "design" | "devops" | "mobile" | "security" | "pm"
-  | "content" | "finance" | "labeling" | "va" | "translation" | "consulting";
+  | "content" | "finance" | "labeling" | "va" | "translation" | "consulting"
+  | "graphic-design" | "programming" | "digital-marketing" | "writing"
+  | "video-animation" | "ai-services" | "business-services"
+  | "data-analytics" | "photography" | "personal-growth" | "sales"
+  | "qa-testing" | "music-audio";
 
 type Scene = { hero: React.FC; compact: React.FC };
 
-const SCENES: Record<CategoryId, Scene> = {
+const SCENES: Partial<Record<CategoryId, Scene>> = {
   // ─── Tier A (live) ───
   spreadsheet: SpreadsheetScene(),
   tech:        CodeScene(),
@@ -911,27 +935,21 @@ export const CATEGORY_CATALOG: Array<{
   blurb: string;
   href: string;
 }> = [
-  // Tier A (live)
-  { id: "spreadsheet", name: "Spreadsheet & Data",       tier: "tierA", status: "active",      blurb: "CRM hygiene, multi-source reconciliation, messy digitization",  href: "/categories/spreadsheet-data-work" },
-  { id: "tech",        name: "Tech Micro-Tasks",         tier: "tierA", status: "active",      blurb: "Real-codebase bug fixes, deploy help, code review",            href: "/categories/tech-micro-tasks" },
-  { id: "mentoring",   name: "Mentoring & Doubt-Solving",tier: "tierA", status: "active",      blurb: "Live 1:1 sessions, exam strategy, ongoing accountability",     href: "/categories/mentoring-live-doubt-solving" },
-  // Tier B (live)
-  { id: "fullstack",   name: "Full Stack Dev",           tier: "tierB", status: "active",      blurb: "Embedded feature buildouts, MVP sprints, legacy maintenance",   href: "/categories/fullstack-dev" },
-  { id: "ai",          name: "AI / ML Engineering",      tier: "tierB", status: "active",      blurb: "RAG, agents, fine-tuning, ML pipeline engineering",            href: "/categories/ai-ml-engineering" },
-  { id: "nlp",         name: "NLP & Data Science",       tier: "tierB", status: "active",      blurb: "Domain-specific NLP, regional languages, applied data science", href: "/categories/nlp-data-science" },
-  // Tier B (coming soon)
-  { id: "design",      name: "Design",                   tier: "tierB", status: "coming_soon", blurb: "Iterative research, wireframes, stakeholder-facing iteration",   href: "/categories/design" },
-  { id: "devops",      name: "DevOps & Cloud",           tier: "tierB", status: "coming_soon", blurb: "Ongoing management of real cloud / CI-CD / infra",               href: "/categories/devops-cloud" },
-  { id: "mobile",      name: "Mobile App Dev",           tier: "tierB", status: "coming_soon", blurb: "iOS / Android / RN on real products over multi-week engagements", href: "/categories/mobile-dev" },
-  { id: "security",    name: "Cybersecurity",            tier: "tierB", status: "coming_soon", blurb: "Accountability-shaped work in your actual environment",           href: "/categories/cybersecurity" },
-  { id: "pm",          name: "Tech PM",                  tier: "tierB", status: "coming_soon", blurb: "Coordinating a real team / sprint over time",                     href: "/categories/tech-pm" },
-  { id: "consulting",  name: "Consulting",               tier: "tierB", status: "coming_soon", blurb: "Judgment-bearing advisory tied to your actual business",          href: "/categories/consulting" },
-  // Tier A (coming soon)
-  { id: "content",     name: "Content & Copy",           tier: "tierA", status: "coming_soon", blurb: "Brand-voice writing, strategy-aware, not generic blog posts",     href: "/categories/content-writing" },
-  { id: "finance",     name: "Finance & Accounts",       tier: "tierA", status: "coming_soon", blurb: "Live bookkeeping, reconciliation in your real accounts",         href: "/categories/finance-accounts" },
-  { id: "labeling",    name: "Data Labeling",            tier: "tierA", status: "coming_soon", blurb: "Domain-expert labeling on genuinely ambiguous cases",             href: "/categories/data-labeling" },
-  { id: "va",          name: "Virtual Assistant",       tier: "tierA", status: "coming_soon", blurb: "Inbox / calendar / ops with judgment inside your real tools",     href: "/categories/va-ops" },
-  { id: "translation", name: "Translation & L10n",      tier: "tierA", status: "coming_soon", blurb: "Domain-aware translation, not generic machine translation",      href: "/categories/translation" },
+  // Tier A (active)
+  { id: "graphic-design",    name: "Graphic Design & Creative",  tier: "tierA", status: "active", blurb: "Logos, social media, illustrations, print-ready artwork",                    href: "/categories/graphic-design-creative" },
+  { id: "programming",       name: "Programming & Tech",        tier: "tierA", status: "active", blurb: "API integration, bug fixes, landing pages, automation scripts",            href: "/categories/programming-tech" },
+  { id: "digital-marketing", name: "Digital Marketing",         tier: "tierA", status: "active", blurb: "SEO, Google/Facebook ads, email marketing, content marketing",            href: "/categories/digital-marketing" },
+  { id: "writing",           name: "Writing & Translation",     tier: "tierA", status: "active", blurb: "Blog posts, technical writing, resume writing, translation",              href: "/categories/writing-translation" },
+  { id: "video-animation",   name: "Video & Animation",        tier: "tierA", status: "active", blurb: "Video editing, motion graphics, shorts/reels, product videos",             href: "/categories/video-animation" },
+  { id: "ai-services",       name: "AI Services",              tier: "tierA", status: "active", blurb: "Prompt engineering, AI image/voice generation, AI workflow automation",   href: "/categories/ai-services" },
+  { id: "business-services", name: "Business Services",         tier: "tierA", status: "active", blurb: "Virtual assistant, market research, customer support, data entry",        href: "/categories/business-services" },
+  { id: "finance",           name: "Finance & Accounting",      tier: "tierA", status: "active", blurb: "Bookkeeping, budgeting, investment research, financial modeling",         href: "/categories/finance-accounting" },
+  { id: "data-analytics",    name: "Data & Analytics",          tier: "tierA", status: "active", blurb: "Data analysis, visualization, dashboard development, Excel automation",    href: "/categories/data-analytics" },
+  { id: "photography",       name: "Photography",              tier: "tierA", status: "active", blurb: "Photo editing, product retouching, product/real estate photography",       href: "/categories/photography" },
+  { id: "personal-growth",   name: "Personal Growth & Consulting", tier: "tierA", status: "active", blurb: "Language lessons, tutoring, interview prep, CV review",               href: "/categories/personal-growth-consulting" },
+  { id: "sales",             name: "Sales",                    tier: "tierA", status: "active", blurb: "Cold email outreach, appointment setting, sales funnel creation",         href: "/categories/sales" },
+  { id: "qa-testing",        name: "QA & Testing",             tier: "tierA", status: "active", blurb: "Manual testing, performance testing, automation testing, security testing", href: "/categories/qa-testing" },
+  { id: "music-audio",       name: "Music & Audio",            tier: "tierA", status: "active", blurb: "Voice over, music production, songwriting, audiobook production, podcast editing", href: "/categories/music-audio" },
 ];
 
 /**
@@ -945,7 +963,7 @@ export function CategoriesInActionSection() {
       <div className="container">
         <div className="mb-10 max-w-2xl">
           <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-300">
-            <Sparkles className="h-3 w-3" />17 categories · 3 live now
+            <Sparkles className="h-3 w-3" />14 categories · all live
           </Badge>
           <h2 className="mt-3 font-display text-3xl font-semibold tracking-tight md:text-4xl">
             Every category, in action.

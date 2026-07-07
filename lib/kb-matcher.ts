@@ -86,7 +86,7 @@ function hasAnyOverlapWithKB(inputTokens: string[], rawInput: string): boolean {
     }
   }
   // Also require a HiVR-specific anchor word OR the input mentions hivr/support directly.
-  const anchors = ["hivr", "platform", "escrow", "subscription", "plan", "fee", "task", "tier", "category", "employee", "buyer", "razorpay"];
+  const anchors = ["hivr", "platform", "escrow", "subscription", "plan", "fee", "task", "tier", "category", "employee", "buyer", "razorpay", "pricing", "cost", "charge", "hello", "hi", "hey", "thanks", "bye", "help"];
   for (const a of anchors) if (rawInput.toLowerCase().includes(a)) return true;
   return false;
 }
@@ -131,7 +131,7 @@ export function matchQuery(input: string): MatchResult {
   // 3c. Special-case for weak matches: a question about politics / weather /
   // food / etc. may happen to share a word (e.g. "india") with a KB entry.
   // Require a HiVR-anchor word to accept anything below the strong threshold.
-  const anchors = ["hivr", "platform", "escrow", "subscription", "plan", "fee", "task", "tier", "category", "employee", "buyer", "razorpay", "kyc", "aadhaar", "gstin", "skill", "test", "contract", "dispute"];
+  const anchors = ["hivr", "platform", "escrow", "subscription", "plan", "fee", "task", "tier", "category", "employee", "buyer", "razorpay", "kyc", "aadhaar", "gstin", "skill", "test", "contract", "dispute", "pricing", "cost", "charge", "hello", "hi", "hey", "thanks", "bye", "help"];
   const hasAnchor = anchors.some(a => cleaned.toLowerCase().includes(a));
   if (!hasAnchor) return { kind: "off_topic" };
 

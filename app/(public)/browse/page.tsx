@@ -9,6 +9,7 @@ import { CategoryIcon } from "@/components/marketing/category-icon";
 import { VoiceSearch } from "@/components/search/voice-search";
 import { BrowseFilters } from "./filters";
 import { FiltersDropdown } from "./filters-dropdown";
+import { BrowseRealtime } from "./browse-realtime";
 import { formatPaise, timeAgo, timeUntil } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
@@ -56,8 +57,9 @@ export default async function BrowsePage({ searchParams }: { searchParams: { cat
 
   const mine = searchParams.mine === "1" || searchParams.mine === "true";
 
-  // Lazy: auto-promote scheduled tasks.
+  // Lazy: auto-promote scheduled tasks and close expired ones.
   try { await sb.rpc("promote_scheduled_tasks" as any); } catch { /* non-fatal */ }
+  try { await sb.rpc("close_expired_tasks" as any); } catch { /* non-fatal */ }
 
   // Count tasks per category (all statuses) for sidebar
   const { data: taskRowsAll } = await sb.from("task_posts").select("category_id, status").limit(1000);
@@ -210,7 +212,7 @@ export default async function BrowsePage({ searchParams }: { searchParams: { cat
         <div className="container py-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">
+              <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl" data-tour="browse-header">
                 {selectedCategory ? selectedCategory.name : "Browse tasks"}
               </h1>
               <p className="mt-0.5 text-sm text-muted-foreground">
@@ -276,6 +278,18 @@ export default async function BrowsePage({ searchParams }: { searchParams: { cat
                 <User className="h-3.5 w-3.5" />{isEmployeeOnly ? "Applied" : "Mine"}
               </Link>
             )}
+            <div className="ml-auto flex items-center gap-2">
+              {selectedCategory && !isEmployeeOnly && (
+                <Button asChild size="sm" className="shrink-0 gap-1.5 border-0 bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700">
+                  <Link href={`/find-people?skill=${selectedCategory.slug}`}><Users className="h-3.5 w-3.5" />People</Link>
+                </Button>
+              )}
+              {selectedCategory && selectedCategory.parent_category_id !== null && !isEmployeeOnly && (
+                <Button asChild size="sm" className="shrink-0 gap-1.5 border-0 bg-orange-500 text-white hover:bg-orange-600 dark:bg-orange-500 dark:hover:bg-orange-600">
+                  <Link href={`/categories/${selectedCategory.slug}`}><Briefcase className="h-3.5 w-3.5" />Gigs</Link>
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -354,6 +368,7 @@ export default async function BrowsePage({ searchParams }: { searchParams: { cat
           </div>
         </main>
       </div>
+      <BrowseRealtime />
     </div>
   );
 }

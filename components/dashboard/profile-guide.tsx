@@ -31,9 +31,14 @@ type Initial = {
   hourlyRatePaise: number | null; availabilityHours: number | null; timezone: string;
   skills: { category_id: string; name?: string; slug?: string; icon?: string; is_primary?: boolean; years_experience?: number; rate_per_hour_paise?: number | null; rate_per_task_paise?: number | null }[];
   socialLinks: any[];
+  educationCount: number;
+  experienceCount: number;
+  projectsCount: number;
+  certificationsCount: number;
+  hasResume: boolean;
 };
 
-type Tab = "basics" | "skills" | "videos" | "education" | "experience" | "projects" | "certs" | "links" | "resume";
+type Tab = "basics" | "skills" | "videos" | "education" | "experience" | "projects" | "certs" | "achievements" | "links" | "resume";
 
 type Props = {
   initial: Initial;
@@ -69,16 +74,16 @@ const STEPS: Array<{
   {
     id: "name",
     label: "Use your real full name",
-    why: "Buyers want to know who they're hiring. Initials and handles look unfinished.",
+    why: "Buyers want to know who they're hiring.",
     cardPart: "Below the avatar",
     tab: "basics",
     Icon: Sparkles,
-    isDone: (i) => i.fullName.trim().split(/\s+/).length >= 2,
+    isDone: (i) => !!i.fullName,
   },
   {
     id: "headline",
     label: "Write a 1-line headline",
-    why: "Headline shows up right under your name. Think of it as your tagline — what you do, for whom, and why it matters.",
+    why: "Headline shows up right under your name — what you do, for whom, and why it matters.",
     cardPart: "Subtitle under the name",
     tab: "basics",
     Icon: FileText,
@@ -86,12 +91,12 @@ const STEPS: Array<{
   },
   {
     id: "bio",
-    label: "Write a 2-line bio",
-    why: "Buyers scan bios for proof you'll deliver. Mention your strongest skill, years of experience, and the result you produce.",
+    label: "Write a bio",
+    why: "Buyers scan bios for proof you'll deliver. Mention your strongest skill and experience.",
     cardPart: "2 lines under the headline",
     tab: "basics",
     Icon: FileText,
-    isDone: (i) => (i.bio ?? "").trim().length >= 60,
+    isDone: (i) => (i.bio ?? "").trim().length > 20,
   },
   {
     id: "location",
@@ -103,15 +108,6 @@ const STEPS: Array<{
     isDone: (i) => (i.location ?? "").trim().length > 0,
   },
   {
-    id: "rate",
-    label: "Set your rates per skill",
-    why: "When adding skills below, set a rate for each. Buyers compare rates in search results.",
-    cardPart: "Shown beside each skill pill",
-    tab: "skills",
-    Icon: Briefcase,
-    isDone: (i) => i.skills.some((s) => (s as any).rate_per_hour_paise || (s as any).rate_per_task_paise),
-  },
-  {
     id: "availability",
     label: "Set your weekly hours",
     why: "Anything > 0 h/week triggers the green 'Available' badge — buyers filter heavily by this.",
@@ -121,13 +117,76 @@ const STEPS: Array<{
     isDone: (i) => (i.availabilityHours ?? 0) > 0,
   },
   {
-    id: "skills",
+    id: "skills1",
     label: "Add at least 1 skill",
     why: "Skills become the colored pills on the bottom of the card and let you appear in category searches.",
     cardPart: "Skill pills (bottom of card)",
     tab: "skills",
     Icon: Award,
     isDone: (i) => i.skills.length >= 1,
+  },
+  {
+    id: "skills3",
+    label: "Add 3+ skills",
+    why: "Having multiple skills shows you're versatile and increases your match rate in search results.",
+    cardPart: "More skill pills",
+    tab: "skills",
+    Icon: Award,
+    isDone: (i) => i.skills.length >= 3,
+  },
+  {
+    id: "education",
+    label: "Add your education",
+    why: "Buyers trust qualified professionals. Schools, colleges, and certifications build credibility.",
+    cardPart: "Shown in your profile details",
+    tab: "education",
+    Icon: Award,
+    isDone: (i) => i.educationCount > 0,
+  },
+  {
+    id: "experience",
+    label: "Add work experience",
+    why: "Past projects and roles prove you can deliver. Even internships count.",
+    cardPart: "Shown in your profile details",
+    tab: "experience",
+    Icon: Briefcase,
+    isDone: (i) => i.experienceCount > 0,
+  },
+  {
+    id: "projects",
+    label: "Add portfolio projects",
+    why: "Show real work samples — buyers love seeing what you've actually built.",
+    cardPart: "Shown in your profile details",
+    tab: "projects",
+    Icon: Briefcase,
+    isDone: (i) => i.projectsCount > 0,
+  },
+  {
+    id: "certs",
+    label: "Add certifications",
+    why: "Certifications validate your expertise and help you stand out from other freelancers.",
+    cardPart: "Shown in your profile details",
+    tab: "certs",
+    Icon: Award,
+    isDone: (i) => i.certificationsCount > 0,
+  },
+  {
+    id: "resume",
+    label: "Upload your resume",
+    why: "A resume gives buyers a complete picture of your professional background at a glance.",
+    cardPart: "Downloadable from your profile",
+    tab: "resume",
+    Icon: FileText,
+    isDone: (i) => i.hasResume,
+  },
+  {
+    id: "links",
+    label: "Add social links",
+    why: "LinkedIn, GitHub, and portfolio links let buyers verify your work and reach out.",
+    cardPart: "Social links section",
+    tab: "links",
+    Icon: Award,
+    isDone: (i) => (i.socialLinks ?? []).length > 0,
   },
 ];
 
@@ -208,9 +267,9 @@ export function ProfileGuide({ initial, currentTab, setTab, initialCompleteness 
               <span className="font-medium">
                 {doneCount} of {totalCount} steps complete
               </span>
-              <span className="text-muted-foreground">{liveCompleteness}%</span>
+              <span className="text-muted-foreground">{initialCompleteness}%</span>
             </div>
-            <Progress value={liveCompleteness} className="mt-1.5 h-1.5" />
+            <Progress value={initialCompleteness} className="mt-1.5 h-1.5" />
           </div>
 
           <ol className="space-y-1">

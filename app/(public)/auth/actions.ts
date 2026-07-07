@@ -20,13 +20,13 @@ export async function signInWithEmail(formData: FormData) {
     const msg = error.message.toLowerCase();
     if (msg.includes("invalid login") || msg.includes("invalid credentials")) {
       return {
-        error: "Invalid email or password. If you just signed up, check that you clicked the confirmation link in your email — or disable email confirmation in Supabase → Authentication → Sign In/Up → Email.",
+        error: "Invalid email or password.",
       };
     }
     return { error: error.message };
   }
   if (!data?.session) {
-    return { error: "Sign-in didn't return a session. Try again, or disable email confirmation in Supabase." };
+    return { error: "Something went wrong. Please try again." };
   }
 
   // Determine where to route: business users go to /business/dashboard,

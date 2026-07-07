@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Heart, Send, LogIn, CheckCircle2, X, Loader2, Users, ExternalLink, AlertCircle, ShieldAlert, ShieldCheck } from "lucide-react";
+import { Heart, Send, LogIn, CheckCircle2, X, Loader2, Users, ExternalLink, AlertCircle, ShieldAlert, ShieldCheck, Clock } from "lucide-react";
 import { applyToTaskAction, withdrawApplicationAction, likeTaskAction, unlikeTaskAction } from "./actions";
 import { switchModeAction } from "@/app/dashboard/mode-switcher-action";
 
@@ -30,6 +30,8 @@ type ApplyCtxLite = {
 
 export function TaskActions({
   taskId,
+  taskStatus,
+  taskDeadline,
   initialLiked,
   initialLikesCount,
   initialApplied,
@@ -45,6 +47,8 @@ export function TaskActions({
   applyCtx,
 }: {
   taskId: string;
+  taskStatus?: string;
+  taskDeadline?: string | null;
   initialLiked: boolean;
   initialLikesCount: number;
   initialApplied: boolean;
@@ -112,11 +116,30 @@ export function TaskActions({
   // employee-only affordance).
   if (!signedIn || !canEmployeeAct) {
     if (variant === "icon-only") {
-      // Hide the heart entirely when in buyer mode — saving only makes
-      // sense for employees. For not-signed-in users, also hide (the
-      // signin CTA is shown in the full sidebar variant).
       return null;
     }
+
+    const isClosedOrUpcoming = taskStatus === "closed" || taskStatus === "cancelled" || taskStatus === "in_contract" || taskStatus === "upcoming";
+    const deadlinePassed = taskDeadline && new Date(taskDeadline) <= new Date();
+
+    if (isClosedOrUpcoming || deadlinePassed) {
+      let reason = "This task is no longer accepting applications.";
+      if (taskStatus === "upcoming") reason = "This task hasn't opened yet. Check back when it is published.";
+      else if (taskStatus === "closed" || taskStatus === "cancelled") reason = "This task has been closed.";
+      else if (taskStatus === "in_contract") reason = "Someone has already been hired for this task.";
+      else if (deadlinePassed) reason = "The deadline for this task has passed.";
+      return (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <Clock className="h-4 w-4" />
+              {reason}
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+
     return (
       <Card>
         <CardContent className="p-4">

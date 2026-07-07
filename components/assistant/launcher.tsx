@@ -14,7 +14,7 @@
  */
 
 import * as React from "react";
-import { Sparkles, X, Send, Loader2 } from "lucide-react";
+import { X, Send, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -81,7 +81,12 @@ export function AssistantLauncher() {
         aria-label={open ? "Close HiVR assistant" : "Open HiVR assistant"}
         className="fixed bottom-24 right-4 z-50 grid h-12 w-12 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform duration-150 active:scale-90 hover:shadow-xl md:bottom-6"
       >
-        {open ? <X className="h-5 w-5" /> : <Sparkles className="h-5 w-5" />}
+        {open ? <X className="h-5 w-5" /> : (
+          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 5v14M4 12h10M20 5v14" />
+            <circle cx="20" cy="5" r="1.6" fill="currentColor" />
+          </svg>
+        )}
       </button>
 
       {mounted && (
@@ -95,14 +100,14 @@ export function AssistantLauncher() {
           aria-hidden={!open}
         >
           <header className="flex items-center gap-2 border-b bg-muted/30 px-4 py-3">
-            <div className="grid h-8 w-8 place-items-center rounded-full bg-primary text-primary-foreground">
-              <Sparkles className="h-4 w-4" />
+            <div className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-sm ring-1 ring-primary/20">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 5v14M4 12h10M20 5v14" />
+                <circle cx="20" cy="5" r="1.6" fill="currentColor" />
+              </svg>
             </div>
             <div>
               <div className="text-sm font-semibold">Ask HiVR</div>
-              <div className="text-[10px] text-muted-foreground">
-                Grounded on HiVR docs · no LLM required
-              </div>
             </div>
           </header>
           <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-3 text-sm">

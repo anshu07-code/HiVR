@@ -21,6 +21,7 @@ import { RealtimeActivityPanel, type Activity } from "@/components/dashboard/rea
 import { MonthlyStatsPanel } from "@/components/dashboard/monthly-stats-panel";
 
 import { ModeSwitcher } from "./mode-switcher";
+import { AvailabilitySwitcher } from "./availability-switcher";
 
 import { AnonymousRequestButton } from "@/components/dashboard/anonymous-request-button";
 
@@ -105,6 +106,18 @@ export default async function DashboardHome() {
     { data: allEscrowReleases },
 
     { data: workspaces },
+
+    { data: education },
+
+    { data: experience },
+
+    { data: projects },
+
+    { data: certifications },
+
+    { data: resumeRow },
+
+    { data: socialLinks },
 
   ] = await Promise.all([
 
@@ -214,6 +227,18 @@ export default async function DashboardHome() {
 
       .or(`buyer_id.eq.${user.id},employee_id.eq.${user.id}`),
 
+    sb.from("employee_education").select("id").eq("user_id", user.id),
+
+    sb.from("employee_experience").select("id").eq("user_id", user.id),
+
+    sb.from("employee_projects").select("id").eq("user_id", user.id),
+
+    sb.from("employee_certifications").select("id").eq("user_id", user.id),
+
+    sb.from("employee_resume").select("id").eq("user_id", user.id).maybeSingle(),
+
+    sb.from("employee_social_links").select("id").eq("user_id", user.id),
+
   ]);
 
   const roles: string[] = (me?.roles as string[]) ?? [];
@@ -254,17 +279,31 @@ export default async function DashboardHome() {
 
     if ((me as any)?.full_name) profileCompleteness += 5;
 
-    if (ep?.bio && (ep as any).bio.length > 20) profileCompleteness += 15;
+    if ((me as any)?.avatar_url) profileCompleteness += 5;
 
     if (ep?.headline) profileCompleteness += 5;
 
+    if (ep?.bio && (ep as any).bio.length > 20) profileCompleteness += 10;
+
     if ((ep as any)?.location) profileCompleteness += 5;
 
-    if ((ep as any)?.hourly_rate_paise) profileCompleteness += 5;
+    if ((ep as any)?.availability_hours) profileCompleteness += 5;
 
     if ((skills ?? []).length >= 1) profileCompleteness += 15;
 
     if ((skills ?? []).length >= 3) profileCompleteness += 5;
+
+    if ((education ?? []).length > 0) profileCompleteness += 10;
+
+    if ((experience ?? []).length > 0) profileCompleteness += 10;
+
+    if ((projects ?? []).length > 0) profileCompleteness += 10;
+
+    if ((certifications ?? []).length > 0) profileCompleteness += 5;
+
+    if (resumeRow) profileCompleteness += 5;
+
+    if ((socialLinks ?? []).length > 0) profileCompleteness += 5;
 
     profileCompleteness = Math.min(100, profileCompleteness);
 
@@ -374,18 +413,19 @@ export default async function DashboardHome() {
 
     <div className="container max-w-6xl space-y-4 overflow-x-hidden px-3 sm:px-4 md:space-y-6 md:px-6 py-4 md:py-8">
 
-      <div data-tour="mode-switcher" className="flex flex-col items-start gap-2 md:flex-row md:items-center md:ml-auto">
+      <div data-tour="dashboard-header" className="flex flex-col items-start gap-2 md:flex-row md:items-center md:ml-auto">
 
           {(mode === "employee" || mode === "both") && (
-
-            <AnonymousRequestButton
-
-              status={(anonymousProfile as any)?.status ?? "none"}
-
-              displayId={(anonymousProfile as any)?.display_id}
-
-            />
-
+            <>
+              <AnonymousRequestButton
+                status={(anonymousProfile as any)?.status ?? "none"}
+                displayId={(anonymousProfile as any)?.display_id}
+              />
+              <AvailabilitySwitcher
+                userId={user.id}
+                current={(ep as any)?.availability_status ?? "offline"}
+              />
+            </>
           )}
 
           <ModeSwitcher roles={roles} currentMode={me?.current_mode} />

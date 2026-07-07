@@ -316,6 +316,54 @@
   border-radius: 0.25rem;
 }
 
+/* Print styles — contract document output */
+@media print {
+  html, body {
+    color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /* Override any framer-motion opacity/transform that could reset during print */
+  [style*="opacity"] {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  [style*="overflow: hidden"] {
+    overflow: visible !important;
+  }
+
+  .overflow-hidden {
+    overflow: visible !important;
+  }
+
+  /* Ensure sidebar/nav don't print */
+  nav, aside, [data-tour="sidebar"], [data-tour="sidebar"] * {
+    display: none !important;
+  }
+
+  /* Force container to take full width for print */
+  .container {
+    max-width: 100% !important;
+  }
+}
+
 /* Reduce motion respect */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

@@ -13,7 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Sparkles, Camera, Plus, X, Save, Loader2, GraduationCap, Briefcase,
   FolderGit2, Award, Globe, Upload, FileText, Trash2, Star,
-  CheckCircle2, AlertCircle, Video as VideoIcon, Zap,
+  CheckCircle2, AlertCircle, Video as VideoIcon, BadgeCheck, XCircle, Clock,
 } from "lucide-react";
 import {
   updateProfileBasicsAction, updateAvatarUrlAction, updateEmployeeSkillsAction,
@@ -21,16 +21,21 @@ import {
   addExperienceAction, deleteExperienceAction,
   addProjectAction, deleteProjectAction,
   addCertificationAction, deleteCertificationAction,
+  addAchievementAction, deleteAchievementAction,
   setSocialLinkAction, deleteSocialLinkAction,
 } from "./actions";
 import { VideoGrid } from "@/components/profile/video-grid";
+import { INDIAN_CITIES, INDIAN_COLLEGES } from "@/lib/cities";
 import { ProfileGuide } from "@/components/dashboard/profile-guide";
 import { SaveIndicator } from "@/components/dashboard/save-indicator";
 import { ToastProvider, useToast } from "@/components/ui/toast";
-import { InstantHireSection } from "./instant-hire-section";
+import { hasContactInfo } from "@/lib/go";
 import { ResumeUploader } from "./resume-uploader";
 import { ImageCropModal } from "@/components/profile/image-crop-modal";
-
+import { ProfilePreviewDialog } from "@/components/profile/profile-preview-dialog";
+import {
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
+} from "@/components/ui/select";
 
 type Cat = { id: string; name: string; slug: string; icon: string; tier: string; status: string; parent_category_id: string | null };
 
@@ -39,7 +44,7 @@ type Initial = {
   headline: string; bio: string; location: string; languages: string[]; experienceType: string;
   hourlyRatePaise: number | null; availabilityHours: number | null; timezone: string;
   skills: { category_id: string; name?: string; slug?: string; icon?: string; tier?: string; is_primary?: boolean; years_experience?: number; rate_per_hour_paise?: number | null; rate_per_task_paise?: number | null; rate_per_day_paise?: number | null; rate_per_week_paise?: number | null }[];
-  education: any[]; experience: any[]; projects: any[]; certifications: any[]; resume: any;
+  education: any[]; experience: any[]; projects: any[]; certifications: any[]; achievements: any[]; resume: any; resumeParsed: any;
   socialLinks: any[];
   avgRating: number;
   totalReviews: number;
@@ -89,7 +94,7 @@ function ProfileBuilderInner({
 }) {
   const router = useRouter();
   const { toast } = useToast();
-  const [tab, setTab] = React.useState<"basics" | "skills" | "videos" | "instant" | "education" | "experience" | "projects" | "certs" | "links" | "resume">(typeof window !== "undefined" ? (sessionStorage.getItem("pb_tab") as any) ?? "basics" : "basics");
+  const [tab, setTab] = React.useState<"basics" | "skills" | "videos" | "education" | "experience" | "projects" | "certs" | "achievements" | "links" | "resume">(typeof window !== "undefined" ? (sessionStorage.getItem("pb_tab") as any) ?? "basics" : "basics");
   const [completeness, setCompleteness] = React.useState(initialCompleteness);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -140,7 +145,6 @@ function ProfileBuilderInner({
       setAvatarVersion(Date.now());
       setSaved(`Photo updated`);
       setTimeout(() => setSaved(null), 3000);
-      recompute();
     } else {
       setError(data.error ?? "Upload failed");
     }
@@ -242,6 +246,7 @@ function ProfileBuilderInner({
     }))
   );
   const [skillSearch, setSkillSearch] = React.useState("");
+  const [selectedParent, setSelectedParent] = React.useState("");
   const [skillsDirty, setSkillsDirty] = React.useState(false);
 
   async function saveSkills() {
@@ -329,15 +334,20 @@ function ProfileBuilderInner({
   }
 
   // ----- Education -----
-  const [eduForm, setEduForm] = React.useState<{ institution: string; degree: string; field: string; start: string; end: string; current: boolean }>({ institution: "", degree: "", field: "", start: "", end: "", current: false });
+  const [eduForm, setEduForm] = React.useState<{ institution: string; degree: string; field: string; start: string; end: string; current: boolean; education_type: string; field_custom: string }>({ institution: "", degree: "", field: "", start: "", end: "", current: false, education_type: "higher_studies", field_custom: "" });
   async function addEducation() {
     if (!eduForm.institution.trim()) { setError("Institution is required"); return; }
+    if (eduForm.education_type === "higher_studies" && !eduForm.degree) { setError("Degree is required"); return; }
+    if (eduForm.education_type === "senior_secondary" && !eduForm.degree) { setError("Stream is required"); return; }
     setBusy("edu"); setError(null); setSaveStatus("saving");
+    const fieldValue = eduForm.field === "other_field" ? eduForm.field_custom : eduForm.field;
+    const degreeValue = eduForm.degree === "other_degree" ? eduForm.field_custom : eduForm.degree;
     const r = await addEducationAction({
-      institution: eduForm.institution, degree: eduForm.degree, field_of_study: eduForm.field,
+      institution: eduForm.institution, degree: degreeValue, field_of_study: fieldValue,
       start_year: eduForm.start ? Number(eduForm.start) : undefined,
       end_year: eduForm.end ? Number(eduForm.end) : undefined,
       is_current: eduForm.current, description: undefined,
+      education_type: eduForm.education_type as any,
     });
     setBusy(null);
     if (!r.ok) {
@@ -345,7 +355,7 @@ function ProfileBuilderInner({
       toast({ type: "error", title: "Could not save education", description: r.reason });
     }
     else {
-      setEduForm({ institution: "", degree: "", field: "", start: "", end: "", current: false });
+      setEduForm({ institution: "", degree: "", field: "", start: "", end: "", current: false, education_type: "higher_studies", field_custom: "" });
       setSaved("Education added."); setHasUnsavedChanges(false); setSaveStatus("saved");
       toast({ type: "success", title: "Education added", description: r.completeness !== undefined ? `Profile is now ${r.completeness}% complete` : undefined });
       if (typeof r.completeness === "number") setCompleteness(r.completeness);
@@ -382,6 +392,7 @@ function ProfileBuilderInner({
   const [projForm, setProjForm] = React.useState<{ title: string; description: string; url: string; role: string; tech: string; featured: boolean }>({ title: "", description: "", url: "", role: "", tech: "", featured: false });
   async function addProject() {
     if (!projForm.title.trim() || !projForm.description.trim()) { setError("Title and description are required"); return; }
+    if (projForm.url && hasContactInfo(projForm.url)) { setError("URL contains contact info and cannot be shown on your public profile"); return; }
     setBusy("proj"); setError(null); setSaveStatus("saving");
     const tech = projForm.tech.split(",").map(t => t.trim()).filter(Boolean);
     const r = await addProjectAction({
@@ -406,6 +417,7 @@ function ProfileBuilderInner({
   const [certForm, setCertForm] = React.useState<{ name: string; issuer: string; issued: string; expires: string; url: string; cid: string }>({ name: "", issuer: "", issued: "", expires: "", url: "", cid: "" });
   async function addCert() {
     if (!certForm.name.trim() || !certForm.issuer.trim()) { setError("Name and issuer are required"); return; }
+    if (certForm.url && hasContactInfo(certForm.url)) { setError("URL contains contact info and cannot be shown on your public profile"); return; }
     setBusy("cert"); setError(null); setSaveStatus("saving");
     const r = await addCertificationAction({
       name: certForm.name, issuer: certForm.issuer,
@@ -418,6 +430,30 @@ function ProfileBuilderInner({
       setCertForm({ name: "", issuer: "", issued: "", expires: "", url: "", cid: "" });
       setSaved("Certification added."); setHasUnsavedChanges(false); setSaveStatus("saved");
       toast({ type: "success", title: "Certification added", description: r.completeness !== undefined ? `Profile is now ${r.completeness}% complete` : undefined });
+      if (typeof r.completeness === "number") setCompleteness(r.completeness);
+      else recompute();
+      setTimeout(() => setSaveStatus("idle"), 2500);
+      router.refresh();
+    }
+  }
+
+  // ----- Achievements -----
+  const [achForm, setAchForm] = React.useState<{ title: string; description: string; icon_name: string; achieved_at: string; category: string }>({ title: "", description: "", icon_name: "", achieved_at: "", category: "" });
+  async function addAchievement() {
+    if (!achForm.title.trim()) { setError("Title is required"); return; }
+    setBusy("ach"); setError(null); setSaveStatus("saving");
+    const r = await addAchievementAction({
+      title: achForm.title, description: achForm.description || undefined,
+      icon_name: achForm.icon_name || undefined,
+      achieved_at: achForm.achieved_at || undefined,
+      category: achForm.category || undefined,
+    });
+    setBusy(null);
+    if (!r.ok) { setError(r.reason ?? "Failed"); setSaveStatus("failed"); toast({ type: "error", title: "Could not save achievement", description: r.reason }); }
+    else {
+      setAchForm({ title: "", description: "", icon_name: "", achieved_at: "", category: "" });
+      setSaved("Achievement added."); setHasUnsavedChanges(false); setSaveStatus("saved");
+      toast({ type: "success", title: "Achievement added", description: r.completeness !== undefined ? `Profile is now ${r.completeness}% complete` : undefined });
       if (typeof r.completeness === "number") setCompleteness(r.completeness);
       else recompute();
       setTimeout(() => setSaveStatus("idle"), 2500);
@@ -462,6 +498,14 @@ function ProfileBuilderInner({
     setCompleteness(Math.min(100, s));
   }
 
+  // Recompute when avatarUrl actually updates (after React processes setState)
+  const avatarRecomputeRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!avatarRecomputeRef.current) { avatarRecomputeRef.current = true; return; }
+    recompute();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [avatarUrl]);
+
   const flatSkills = Object.values(childrenByParent).flat();
   const filteredSkills = skillSearch
     ? flatSkills.filter(s => s.name.toLowerCase().includes(skillSearch.toLowerCase()))
@@ -482,7 +526,7 @@ function ProfileBuilderInner({
       <Card className="overflow-hidden">
         <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center">
           <div className="relative shrink-0">
-            <Avatar className="h-20 w-20 ring-1 ring-border">
+            <Avatar key={avatarVersion} className="h-20 w-20 ring-1 ring-border">
               <AvatarImage src={avatarUrl ?? undefined} className="object-cover" />
               <AvatarFallback className="text-lg">{(initial.fullName || "?").split(" ").map(w => w[0]).slice(0,2).join("").toUpperCase()}</AvatarFallback>
             </Avatar>
@@ -505,6 +549,21 @@ function ProfileBuilderInner({
         </CardContent>
       </Card>
 
+      <ProfilePreviewDialog
+        userId={userId}
+        fullName={basics.full_name}
+        avatarUrl={avatarUrl}
+        headline={basics.headline}
+        bio={basics.bio}
+        location={basics.location}
+        skills={(initial.skills ?? []).map((s) => ({ category_id: s.category_id, name: s.name ?? "" }))}
+        education={(initial.education ?? []) as any[]}
+        experience={(initial.experience ?? []) as any[]}
+        certifications={(initial.certifications ?? []) as any[]}
+        achievements={(initial.achievements ?? []) as any[]}
+        languages={basics.languages}
+      />
+
       {error && <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div>}
       {saved && <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm text-emerald-700">{saved}</div>}
 
@@ -522,6 +581,11 @@ function ProfileBuilderInner({
           timezone: basics.timezone,
           skills: selectedSkills,
           socialLinks: initial.socialLinks,
+          educationCount: (initial.education ?? []).length,
+          experienceCount: (initial.experience ?? []).length,
+          projectsCount: (initial.projects ?? []).length,
+          certificationsCount: (initial.certifications ?? []).length,
+          hasResume: !!(initial.resume || initial.resumeParsed),
         }}
         currentTab={tab}
         setTab={setTab}
@@ -533,18 +597,11 @@ function ProfileBuilderInner({
         <TabBtn tabId="basics" active={tab === "basics"} onClick={() => setTab("basics")} Icon={Sparkles} label="Basics" dirty={dirtyBasics} />
         <TabBtn tabId="skills" active={tab === "skills"} onClick={() => setTab("skills")} Icon={Award} label="Skills" count={selectedSkills.length} dirty={skillsDirty} />
         <TabBtn tabId="videos" active={tab === "videos"} onClick={() => setTab("videos")} Icon={VideoIcon} label="Videos" />
-        <TabBtn
-          tabId="instant"
-          active={tab === "instant"}
-          onClick={() => setTab("instant")}
-          Icon={Zap}
-          label="Instant"
-          badge={initial.instantProfile?.enabled ? "On" : undefined}
-        />
         <TabBtn tabId="education" active={tab === "education"} onClick={() => setTab("education")} Icon={GraduationCap} label="Education" count={initial.education.length} />
         <TabBtn tabId="experience" active={tab === "experience"} onClick={() => setTab("experience")} Icon={Briefcase} label="Experience" count={initial.experience.length} />
         <TabBtn tabId="projects" active={tab === "projects"} onClick={() => setTab("projects")} Icon={FolderGit2} label="Projects" count={initial.projects.length} />
         <TabBtn tabId="certs" active={tab === "certs"} onClick={() => setTab("certs")} Icon={Award} label="Certifications" count={initial.certifications.length} />
+        <TabBtn tabId="achievements" active={tab === "achievements"} onClick={() => setTab("achievements")} Icon={Star} label="Achievements" />
         <TabBtn tabId="links" active={tab === "links"} onClick={() => setTab("links")} Icon={Globe} label="Links" count={initial.socialLinks.length} />
         <TabBtn tabId="resume" active={tab === "resume"} onClick={() => setTab("resume")} Icon={FileText} label="Resume" />
       </div>
@@ -569,21 +626,79 @@ function ProfileBuilderInner({
             </Field>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Location">
-                <Input value={basics.location} onChange={(e) => { setBasics({ ...basics, location: e.target.value }); markBasicsDirty(); }} onBlur={() => { if (dirtyBasics) saveBasics(); }} placeholder="Bangalore, India" />
+                <div className="relative">
+                  <Input
+                    value={basics.location}
+                    onChange={(e) => { setBasics({ ...basics, location: e.target.value }); markBasicsDirty(); }}
+                    onBlur={() => { if (dirtyBasics) saveBasics(); }}
+                    placeholder="Bangalore, India"
+                    className="[&::-webkit-calendar-picker-indicator]:hidden"
+                  />
+                  {basics.location.length > 0 && (
+                    <div className="absolute z-10 mt-0.5 max-h-48 w-full overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
+                      {INDIAN_CITIES.filter(c => c.toLowerCase().includes(basics.location.toLowerCase()))
+                        .slice(0, 20).map(c => (
+                          <button
+                            key={c}
+                            type="button"
+                            onMouseDown={(e) => { e.preventDefault(); setBasics({ ...basics, location: c }); markBasicsDirty(); if (dirtyBasics) saveBasics(); }}
+                            className="flex w-full items-center rounded-sm px-2 py-1.5 text-xs hover:bg-accent"
+                          >{c}</button>
+                        ))}
+                      {INDIAN_CITIES.filter(c => c.toLowerCase().includes(basics.location.toLowerCase())).length === 0 && (
+                        <span className="flex items-center px-2 py-1.5 text-xs text-muted-foreground">No results</span>
+                      )}
+                    </div>
+                  )}
+                </div>
               </Field>
               <Field label="Experience">
-                <select
-                  className="flex h-10 w-full rounded-md border bg-background px-3 text-sm"
+                <Select
                   value={basics.experience_type}
-                  onChange={(e) => { setBasics({ ...basics, experience_type: e.target.value }); markBasicsDirty(); }}
-                  onBlur={() => { if (dirtyBasics) saveBasics(); }}
+                  onValueChange={(v) => { setBasics({ ...basics, experience_type: v }); markBasicsDirty(); if (dirtyBasics) saveBasics(); }}
                 >
-                  <option value="fresher">Student / fresher</option>
-                  <option value="experienced">Have work experience</option>
-                </select>
+                  <SelectTrigger className="h-10">
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="fresher">Student / fresher</SelectItem>
+                    <SelectItem value="experienced">Have work experience</SelectItem>
+                  </SelectContent>
+                </Select>
               </Field>
-              <Field label="Languages" hint="Comma-separated (e.g. English, Hindi, Tamil)">
-                <Input value={basics.languages.join(", ")} onChange={(e) => { setBasics({ ...basics, languages: e.target.value.split(",").map(s => s.trim()).filter(Boolean) }); markBasicsDirty(); }} onBlur={() => { if (dirtyBasics) saveBasics(); }} placeholder="English, Hindi" />
+              <Field label="Languages" hint="Type a language and press Enter or comma to add">
+                <div className="flex flex-wrap items-center gap-1.5 rounded-md border bg-background px-2 py-1.5 text-sm">
+                  {basics.languages.map((lang, i) => (
+                    <span key={i} className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                      {lang}
+                      <button type="button" onClick={() => { const next = basics.languages.filter((_, j) => j !== i); setBasics({ ...basics, languages: next }); markBasicsDirty(); }} className="text-primary/60 hover:text-primary">&times;</button>
+                    </span>
+                  ))}
+                  <input
+                    className="min-w-[120px] flex-1 border-0 bg-transparent p-0 text-sm outline-none placeholder:text-muted-foreground"
+                    placeholder={basics.languages.length === 0 ? "English, Hindi, Tamil" : "Add more..."}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === ",") {
+                        e.preventDefault();
+                        const val = (e.target as HTMLInputElement).value.trim();
+                        if (val && !basics.languages.includes(val)) {
+                          setBasics({ ...basics, languages: [...basics.languages, val] });
+                          markBasicsDirty();
+                        }
+                        (e.target as HTMLInputElement).value = "";
+                      }
+                    }}
+                    onBlur={(e) => {
+                      const val = e.target.value.trim();
+                      if (val && !basics.languages.includes(val)) {
+                        setBasics({ ...basics, languages: [...basics.languages, val] });
+                        markBasicsDirty();
+                      }
+                      e.target.value = "";
+                      if (dirtyBasics) saveBasics();
+                    }}
+                  />
+                </div>
               </Field>
               <Field label="Hours / week available">
                 <Input type="number" min={1} max={168} value={basics.availability_hours ?? ""} onChange={(e) => { setBasics({ ...basics, availability_hours: e.target.value ? Number(e.target.value) : null }); markBasicsDirty(); }} onBlur={() => { if (dirtyBasics) saveBasics(); }} placeholder="20" />
@@ -607,15 +722,34 @@ function ProfileBuilderInner({
             <CardDescription>Search and tag the skills you can offer. Buyers filter by skill when looking for help. Changes auto-save.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Input
-              placeholder="Search skills (e.g. React, Excel, Figma, SQL)"
-              value={skillSearch}
-              onChange={(e) => setSkillSearch(e.target.value)}
-            />
-            <div className="max-h-72 overflow-y-auto rounded-md border p-2">
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <Input
+                  placeholder="Search skills (e.g. React, Excel, Figma, SQL)"
+                  value={skillSearch}
+                  onChange={(e) => setSkillSearch(e.target.value)}
+                />
+              </div>
+              <Select
+                value={selectedParent}
+                onValueChange={setSelectedParent}
+              >
+                <SelectTrigger className="h-10 w-48">
+                  <SelectValue placeholder="All categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All categories</SelectItem>
+                  {categories.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="max-h-72 overflow-y-auto scrollbar-thin rounded-md border p-2">
               {Object.entries(childrenByParent).map(([parentId, kids]) => {
                 const parent = categories.find(c => c.id === parentId);
                 if (!parent || kids.length === 0) return null;
+                if (selectedParent && parent.id !== selectedParent) return null;
                 const filtered = kids.filter(k => !skillSearch || k.name.toLowerCase().includes(skillSearch.toLowerCase()));
                 if (filtered.length === 0) return null;
                 return (
@@ -724,27 +858,13 @@ function ProfileBuilderInner({
               isOwner
               showAdd
               showCallout
-              categories={Object.values(childrenByParent).flat().map((c: any) => ({ id: c.id, name: c.name }))}
+              categories={(() => {
+                const skillIds = new Set(initial.skills.map(s => s.category_id));
+                return Object.values(childrenByParent).flat().filter((c: any) => skillIds.has(c.id)).map((c: any) => ({ id: c.id, name: c.name }));
+              })()}
             />
           </CardContent>
         </Card>
-      )}
-
-      {tab === "instant" && (
-        <InstantHireSection
-          userId={userId}
-          initial={{
-            avgRating: initial.avgRating,
-            totalReviews: initial.totalReviews,
-            completionRate: initial.completionRate,
-            trustTier: initial.trustTier,
-            instantProfile: initial.instantProfile,
-            availability: initial.availability,
-            standingRates: initial.standingRates,
-          }}
-          skills={initial.skills}
-          categories={categories}
-        />
       )}
 
       {tab === "education" && (
@@ -755,9 +875,150 @@ function ProfileBuilderInner({
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="grid gap-2 sm:grid-cols-2">
-              <Field label="Institution" required><Input value={eduForm.institution} onChange={(e) => setEduForm({ ...eduForm, institution: e.target.value })} placeholder="IIT Bombay" /></Field>
-              <Field label="Degree"><Input value={eduForm.degree} onChange={(e) => setEduForm({ ...eduForm, degree: e.target.value })} placeholder="B.Tech" /></Field>
-              <Field label="Field of study"><Input value={eduForm.field} onChange={(e) => setEduForm({ ...eduForm, field: e.target.value })} placeholder="Computer Science" /></Field>
+              <Field label="Type" required>
+                <Select value={eduForm.education_type} onValueChange={(v) => setEduForm({ ...eduForm, education_type: v })}>
+                  <SelectTrigger className="h-10">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="secondary">Secondary (10th)</SelectItem>
+                    <SelectItem value="senior_secondary">Senior Secondary (12th)</SelectItem>
+                    <SelectItem value="higher_studies">Higher Studies</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Institution" required>
+                <div className="relative">
+                  <Input
+                    value={eduForm.institution}
+                    onChange={(e) => setEduForm({ ...eduForm, institution: e.target.value })}
+                    placeholder="e.g. BIT Mesra"
+                    className="[&::-webkit-calendar-picker-indicator]:hidden"
+                  />
+                  {eduForm.institution.length > 0 && (
+                    <div className="absolute z-10 mt-0.5 max-h-48 w-full overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
+                      {INDIAN_COLLEGES.filter(c => c.toLowerCase().includes(eduForm.institution.toLowerCase())).slice(0, 20).map(c => (
+                        <button key={c} type="button" onMouseDown={(e) => { e.preventDefault(); setEduForm({ ...eduForm, institution: c }); }} className="flex w-full items-center rounded-sm px-2 py-1.5 text-xs hover:bg-accent">{c}</button>
+                      ))}
+                      {INDIAN_COLLEGES.filter(c => c.toLowerCase().includes(eduForm.institution.toLowerCase())).length === 0 && (
+                        <span className="flex items-center px-2 py-1.5 text-xs text-muted-foreground">Press Tab to keep typed value</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </Field>
+              {eduForm.education_type === "secondary" ? (
+                <Field label="Degree"><Input value="10th / Matriculation" disabled className="opacity-60" /></Field>
+              ) : eduForm.education_type === "senior_secondary" ? (
+                <>
+                  <Field label="Stream" required>
+                    <Select value={eduForm.degree} onValueChange={(v) => setEduForm({ ...eduForm, degree: v })}>
+                      <SelectTrigger className="h-10">
+                        <SelectValue placeholder="Select stream" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Science">Science</SelectItem>
+                        <SelectItem value="Commerce">Commerce</SelectItem>
+                        <SelectItem value="Arts / Humanities">Arts / Humanities</SelectItem>
+                        <SelectItem value="Vocational">Vocational</SelectItem>
+                        <SelectItem value="other_stream">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  {eduForm.degree === "other_stream" && (
+                    <Field label="Specify stream"><Input value={eduForm.field} onChange={(e) => setEduForm({ ...eduForm, field: e.target.value })} placeholder="e.g. Computer Science (Vocational)" /></Field>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Field label="Degree" required>
+                    <Select value={eduForm.degree} onValueChange={(v) => setEduForm({ ...eduForm, degree: v })}>
+                      <SelectTrigger className="h-10">
+                        <SelectValue placeholder="Select degree" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Associate's">Associate's</SelectItem>
+                        <SelectItem value="BA">Bachelor of Arts (BA)</SelectItem>
+                        <SelectItem value="BSc">Bachelor of Science (BSc)</SelectItem>
+                        <SelectItem value="BCom">Bachelor of Commerce (BCom)</SelectItem>
+                        <SelectItem value="BE / BTech">Bachelor of Engineering (BE/BTech)</SelectItem>
+                        <SelectItem value="BBA">Bachelor of Business Administration (BBA)</SelectItem>
+                        <SelectItem value="BFA">Bachelor of Fine Arts (BFA)</SelectItem>
+                        <SelectItem value="BCA">Bachelor of Computer Applications (BCA)</SelectItem>
+                        <SelectItem value="LLB">Bachelor of Laws (LLB)</SelectItem>
+                        <SelectItem value="MA">Master of Arts (MA)</SelectItem>
+                        <SelectItem value="MSc">Master of Science (MSc)</SelectItem>
+                        <SelectItem value="MCom">Master of Commerce (MCom)</SelectItem>
+                        <SelectItem value="ME / MTech">Master of Engineering (ME/MTech)</SelectItem>
+                        <SelectItem value="MBA">Master of Business Administration (MBA)</SelectItem>
+                        <SelectItem value="MFA">Master of Fine Arts (MFA)</SelectItem>
+                        <SelectItem value="MCA">Master of Computer Applications (MCA)</SelectItem>
+                        <SelectItem value="LLM">Master of Laws (LLM)</SelectItem>
+                        <SelectItem value="PhD">Doctor of Philosophy (PhD)</SelectItem>
+                        <SelectItem value="MD">Doctor of Medicine (MD)</SelectItem>
+                        <SelectItem value="Diploma">Diploma</SelectItem>
+                        <SelectItem value="Certificate">Certificate</SelectItem>
+                        <SelectItem value="other_degree">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  {eduForm.degree === "other_degree" && (
+                    <Field label="Specify degree"><Input value={eduForm.field} onChange={(e) => setEduForm({ ...eduForm, field: e.target.value })} placeholder="e.g. PG Diploma in Data Science" /></Field>
+                  )}
+                  <Field label={eduForm.degree === "BE / BTech" ? "Branch" : "Field of study"}>
+                    <Select value={eduForm.field} onValueChange={(v) => setEduForm({ ...eduForm, field: v })}>
+                      <SelectTrigger className="h-10">
+                        <SelectValue placeholder={eduForm.degree === "BE / BTech" ? "Select branch" : "Select field"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {eduForm.degree === "BE / BTech" ? (
+                          <>
+                            <SelectItem value="Computer Science">Computer Science</SelectItem>
+                            <SelectItem value="Information Technology">Information Technology</SelectItem>
+                            <SelectItem value="Electronics & Communication">Electronics & Communication</SelectItem>
+                            <SelectItem value="Electrical">Electrical</SelectItem>
+                            <SelectItem value="Mechanical">Mechanical</SelectItem>
+                            <SelectItem value="Civil">Civil</SelectItem>
+                            <SelectItem value="Chemical">Chemical</SelectItem>
+                            <SelectItem value="Aerospace">Aerospace</SelectItem>
+                            <SelectItem value="Biotechnology">Biotechnology</SelectItem>
+                            <SelectItem value="other_field">Other</SelectItem>
+                          </>
+                        ) : (
+                          <>
+                            <SelectItem value="Computer Science">Computer Science</SelectItem>
+                            <SelectItem value="Information Technology">Information Technology</SelectItem>
+                            <SelectItem value="Business Administration">Business Administration</SelectItem>
+                            <SelectItem value="Finance">Finance</SelectItem>
+                            <SelectItem value="Accounting">Accounting</SelectItem>
+                            <SelectItem value="Marketing">Marketing</SelectItem>
+                            <SelectItem value="Economics">Economics</SelectItem>
+                            <SelectItem value="Psychology">Psychology</SelectItem>
+                            <SelectItem value="Law">Law</SelectItem>
+                            <SelectItem value="Medicine">Medicine</SelectItem>
+                            <SelectItem value="Nursing">Nursing</SelectItem>
+                            <SelectItem value="Engineering">Engineering</SelectItem>
+                            <SelectItem value="Architecture">Architecture</SelectItem>
+                            <SelectItem value="Design">Design</SelectItem>
+                            <SelectItem value="Fine Arts">Fine Arts</SelectItem>
+                            <SelectItem value="Communication">Communication</SelectItem>
+                            <SelectItem value="Mathematics">Mathematics</SelectItem>
+                            <SelectItem value="Physics">Physics</SelectItem>
+                            <SelectItem value="Chemistry">Chemistry</SelectItem>
+                            <SelectItem value="Biology">Biology</SelectItem>
+                            <SelectItem value="Data Science">Data Science</SelectItem>
+                            <SelectItem value="Artificial Intelligence">Artificial Intelligence</SelectItem>
+                            <SelectItem value="other_field">Other</SelectItem>
+                          </>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  {eduForm.field === "other_field" && (
+                    <Field label="Specify field"><Input value={eduForm.field_custom ?? ""} onChange={(e) => setEduForm({ ...eduForm, field_custom: e.target.value })} placeholder="e.g. Environmental Science" /></Field>
+                  )}
+                </>
+              )}
               <div className="grid grid-cols-2 gap-2">
                 <Field label="Start year"><Input type="number" min={1950} max={2100} value={eduForm.start} onChange={(e) => setEduForm({ ...eduForm, start: e.target.value })} placeholder="2020" /></Field>
                 <Field label="End year"><Input type="number" min={1950} max={2100} value={eduForm.end} onChange={(e) => setEduForm({ ...eduForm, end: e.target.value })} placeholder="2024" disabled={eduForm.current} /></Field>
@@ -774,19 +1035,31 @@ function ProfileBuilderInner({
               </Button>
             </div>
             {initial.education.length > 0 && (
-              <ul className="mt-3 space-y-2">
-                {initial.education.map((e: any) => (
-                  <li key={e.id} className="flex items-center justify-between rounded-md border p-3">
-                    <div>
-                      <p className="text-sm font-semibold">{e.institution}</p>
-                      <p className="text-xs text-muted-foreground">{[e.degree, e.field_of_study].filter(Boolean).join(" · ")} · {e.start_year ?? "—"}{e.end_year ? `–${e.end_year}` : e.is_current ? "–present" : ""}</p>
+              <div className="mt-3 space-y-4">
+                {(["higher_studies", "senior_secondary", "secondary"] as const).map((type) => {
+                  const items = initial.education.filter((e: any) => (e.education_type ?? "higher_studies") === type);
+                  if (items.length === 0) return null;
+                  const label = type === "secondary" ? "Secondary (10th)" : type === "senior_secondary" ? "Senior Secondary (12th)" : "Higher Studies";
+                  return (
+                    <div key={type}>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{label}</p>
+                      <ul className="space-y-2">
+                        {items.map((e: any) => (
+                          <li key={e.id} className="flex items-center justify-between rounded-md border p-3">
+                            <div>
+                              <p className="text-sm font-semibold">{e.institution}</p>
+                              <p className="text-xs text-muted-foreground">{[e.degree, e.field_of_study].filter(Boolean).join(" · ") || ""}{e.start_year ? ` · ${e.start_year}${e.end_year ? `–${e.end_year}` : e.is_current ? "–present" : ""}` : ""}</p>
+                            </div>
+                            <Button size="sm" variant="ghost" onClick={async () => { await deleteEducationAction(e.id); router.refresh(); }}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
-                    <Button size="sm" variant="ghost" onClick={async () => { await deleteEducationAction(e.id); router.refresh(); }}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </li>
-                ))}
-              </ul>
+                  );
+                })}
+              </div>
             )}
           </CardContent>
         </Card>
@@ -803,14 +1076,19 @@ function ProfileBuilderInner({
               <Field label="Company" required><Input value={expForm.company} onChange={(e) => setExpForm({ ...expForm, company: e.target.value })} placeholder="Acme Corp" /></Field>
               <Field label="Role" required><Input value={expForm.role} onChange={(e) => setExpForm({ ...expForm, role: e.target.value })} placeholder="Software Engineer Intern" /></Field>
               <Field label="Employment type">
-                <select className="flex h-10 w-full rounded-md border bg-background px-3 text-sm" value={expForm.type} onChange={(e) => setExpForm({ ...expForm, type: e.target.value })}>
-                  <option value="full_time">Full-time</option>
-                  <option value="part_time">Part-time</option>
-                  <option value="contract">Contract</option>
-                  <option value="freelance">Freelance</option>
-                  <option value="internship">Internship</option>
-                  <option value="self_employed">Self-employed</option>
-                </select>
+                <Select value={expForm.type} onValueChange={(v) => setExpForm({ ...expForm, type: v })}>
+                  <SelectTrigger className="h-10">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="full_time">Full-time</SelectItem>
+                    <SelectItem value="part_time">Part-time</SelectItem>
+                    <SelectItem value="contract">Contract</SelectItem>
+                    <SelectItem value="freelance">Freelance</SelectItem>
+                    <SelectItem value="internship">Internship</SelectItem>
+                    <SelectItem value="self_employed">Self-employed</SelectItem>
+                  </SelectContent>
+                </Select>
               </Field>
               <Field label="Location"><Input value={expForm.location} onChange={(e) => setExpForm({ ...expForm, location: e.target.value })} placeholder="Remote / Bangalore" /></Field>
               <Field label="Start date" required><Input type="date" value={expForm.start} onChange={(e) => setExpForm({ ...expForm, start: e.target.value })} /></Field>
@@ -860,6 +1138,12 @@ function ProfileBuilderInner({
               <Field label="Title" required><Input value={projForm.title} onChange={(e) => setProjForm({ ...projForm, title: e.target.value })} placeholder="Portfolio site" /></Field>
               <Field label="Your role"><Input value={projForm.role} onChange={(e) => setProjForm({ ...projForm, role: e.target.value })} placeholder="Lead developer" /></Field>
               <Field label="URL" full><Input value={projForm.url} onChange={(e) => setProjForm({ ...projForm, url: e.target.value })} placeholder="https://github.com/..." /></Field>
+              {projForm.url?.trim() && (
+                <p className="-mt-1 flex items-center gap-1 text-[11px] text-amber-600 sm:col-span-2">
+                  <AlertCircle className="h-3 w-3 shrink-0" />
+                  Projects with URLs are submitted for verification. Fraudulent projects will be flagged on your public profile.
+                </p>
+              )}
               <Field label="Tech stack" full hint="Comma-separated"><Input value={projForm.tech} onChange={(e) => setProjForm({ ...projForm, tech: e.target.value })} placeholder="React, TypeScript, TailwindCSS" /></Field>
               <Field label="Description" required full>
                 <Textarea rows={3} value={projForm.description} onChange={(e) => setProjForm({ ...projForm, description: e.target.value })} placeholder="What does it do? What problem does it solve?" />
@@ -883,7 +1167,10 @@ function ProfileBuilderInner({
                       <div>
                         <p className="text-sm font-semibold">{p.title}{p.is_featured && <Star className="ml-1 inline h-3 w-3 text-amber-500" />}</p>
                         {p.role && <p className="text-xs text-muted-foreground">{p.role}</p>}
-                        {p.url && <p className="mt-0.5 inline-flex items-center gap-0.5 text-xs text-muted-foreground"><Globe className="h-2.5 w-2.5" />{new URL(p.url).hostname}{p.url.includes("github.com") || p.url.includes("linkedin.com") || p.url.includes("gitlab.com") || p.url.includes("bitbucket.org") || p.url.includes("stackoverflow.com") ? "" : " · link shown on your public profile"}</p>}
+                        {p.url && <p className="mt-0.5 inline-flex items-center gap-0.5 text-xs text-muted-foreground"><Globe className="h-2.5 w-2.5" />{new URL(p.url.startsWith("http") ? p.url : `https://${p.url}`).hostname}</p>}
+                        {p.verification_status === "approved" && <span className="mt-0.5 inline-flex items-center gap-0.5 text-xs text-emerald-600"><BadgeCheck className="h-3 w-3" />Verified</span>}
+                        {p.verification_status === "rejected" && <span className="mt-0.5 inline-flex items-center gap-0.5 text-xs text-rose-600"><XCircle className="h-3 w-3" />Flagged</span>}
+                        {p.verification_status === "pending" && <span className="mt-0.5 inline-flex items-center gap-0.5 text-xs text-amber-600"><Clock className="h-3 w-3" />Verification pending</span>}
                       </div>
                       <Button size="sm" variant="ghost" onClick={async () => { await deleteProjectAction(p.id); router.refresh(); }}>
                         <Trash2 className="h-3.5 w-3.5" />
@@ -897,6 +1184,46 @@ function ProfileBuilderInner({
                         ))}
                       </div>
                     )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {tab === "achievements" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Achievements</CardTitle>
+            <CardDescription>Notable accomplishments, awards, or milestones.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Field label="Title" required><Input value={achForm.title} onChange={(e) => setAchForm({ ...achForm, title: e.target.value })} placeholder="e.g. Top Rated Freelancer" /></Field>
+              <Field label="Category"><Input value={achForm.category} onChange={(e) => setAchForm({ ...achForm, category: e.target.value })} placeholder="e.g. Performance" /></Field>
+              <Field label="Description"><Input value={achForm.description} onChange={(e) => setAchForm({ ...achForm, description: e.target.value })} placeholder="Brief description of the achievement" /></Field>
+              <Field label="Date achieved"><Input type="date" value={achForm.achieved_at} onChange={(e) => setAchForm({ ...achForm, achieved_at: e.target.value })} /></Field>
+              <Field label="Icon name (optional)"><Input value={achForm.icon_name} onChange={(e) => setAchForm({ ...achForm, icon_name: e.target.value })} placeholder="e.g. Trophy, Star, Award" /></Field>
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={addAchievement} disabled={busy === "ach"}>
+                {busy === "ach" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                Add achievement
+              </Button>
+            </div>
+            {initial.achievements.length > 0 && (
+              <ul className="mt-3 space-y-2">
+                {initial.achievements.map((a: any) => (
+                  <li key={a.id} className="flex items-center justify-between rounded-md border p-3">
+                    <div>
+                      <p className="text-sm font-semibold">{a.title}</p>
+                      <p className="text-xs text-muted-foreground">{[a.category, a.achieved_at ? new Date(a.achieved_at).toLocaleDateString("en-IN", { month: "short", year: "numeric" }) : ""].filter(Boolean).join(" · ")}</p>
+                      {a.description && <p className="mt-0.5 text-xs text-muted-foreground">{a.description}</p>}
+                    </div>
+                    <Button size="sm" variant="ghost" onClick={async () => { await deleteAchievementAction(a.id); router.refresh(); }}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
                   </li>
                 ))}
               </ul>

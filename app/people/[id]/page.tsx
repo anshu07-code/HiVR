@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   ArrowLeft, MapPin, Briefcase, GraduationCap, FolderGit2, Award,
   FileText, Star, ExternalLink, ShieldCheck, Calendar, Clock,
-  Download, IndianRupee,
+  Download, IndianRupee, BadgeCheck, XCircle,
 } from "lucide-react";
 import { formatPaise, timeAgo } from "@/lib/utils";
 import { VideoGrid } from "@/components/profile/video-grid";
@@ -42,8 +42,9 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
     { data: verifs },
     { data: resume },
     { data: standingRates },
+    { data: resumeParse },
   ] = await Promise.all([
-    sb.from("users").select("id, full_name, avatar_url, current_mode, created_at").eq("id", userId).maybeSingle(),
+    sb.from("users").select("id, full_name, avatar_url, last_active, current_mode, created_at").eq("id", userId).maybeSingle(),
     sb.from("employee_profiles").select("*").eq("user_id", userId).maybeSingle(),
     sb.from("employee_skills").select("id, category_id, is_primary, years_experience, verification_status, current_wage_band_min, current_wage_band_max, rate_per_task_paise, category:skill_categories(name, slug, icon, tier)").eq("employee_id", userId).order("is_primary", { ascending: false }),
     sb.from("employee_education").select("*").eq("user_id", userId).order("end_year", { ascending: false, nullsFirst: false }).order("start_year", { ascending: false }),
@@ -53,7 +54,9 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
     sb.from("verifications").select("doc_type, status, purpose, metadata, verified_at").eq("user_id", userId).eq("status", "verified"),
     sb.from("employee_resume").select("filename, uploaded_at").eq("user_id", userId).maybeSingle(),
     sb.from("employee_standing_rates").select("rate_per_task_paise, rate_per_hour_paise, standing_rate").eq("user_id", userId).maybeSingle(),
+    sb.from("resumes").select("parsed_skills").eq("user_id", userId).maybeSingle(),
   ]);
+  const parsedTechs: string[] = (resumeParse as any)?.parsed_skills ?? [];
 
   if (!u) notFound();
 
@@ -101,7 +104,7 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
         <Card>
           <CardContent className="flex flex-col gap-6 p-6 sm:flex-row sm:items-start">
             <Avatar className="h-28 w-28 shrink-0">
-              <AvatarImage src={(u as any)?.avatar_url ?? undefined} />
+              <AvatarImage src={(u as any)?.avatar_url ? `${(u as any).avatar_url}?v=${(u as any)?.last_active ?? ''}` : undefined} />
               <AvatarFallback className="text-2xl">{initials}</AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
@@ -135,7 +138,7 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
                   <PreHireChat
                     employeeId={userId}
                     employeeName={(u as any)?.full_name ?? "HiVR member"}
-                    employeeAvatar={(u as any)?.avatar_url ?? null}
+                    employeeAvatar={(u as any)?.avatar_url ? `${(u as any).avatar_url}?v=${(u as any)?.last_active ?? ''}` : null}
                     responseTimeMinutes={(ep as any)?.response_time_avg_minutes ?? 60}
                   />
                 )}
@@ -143,7 +146,7 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
                   <HirePanel
                     employeeId={userId}
                     employeeName={(u as any)?.full_name ?? "HiVR member"}
-                    employeeAvatar={(u as any)?.avatar_url ?? null}
+                    employeeAvatar={(u as any)?.avatar_url ? `${(u as any).avatar_url}?v=${(u as any)?.last_active ?? ''}` : null}
                     ratePerTaskPaise={hireRatePaise}
                     employeeSkills={(skills ?? []).map((s: any) => ({
                       id: s.id,
@@ -209,12 +212,13 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
                 <CardContent>
                   <div className="grid gap-3 sm:grid-cols-2">
                     {(projects ?? []).map((p: any) => (
-                      <a key={p.id} href={p.url || "#"} target="_blank" rel="noreferrer" className="block rounded-lg border p-3 transition-colors hover:border-primary/40">
+                      <div key={p.id} className="block rounded-lg border p-3">
                         {p.image_url && <div className="mb-2 h-24 w-full overflow-hidden rounded-md bg-muted">{/* eslint-disable-next-line @next/next/no-img-element */}<img src={p.image_url} alt={p.title} className="h-full w-full object-cover" /></div>}
                         <p className="text-sm font-semibold flex items-center gap-1">
                           {p.title}
                           {p.is_featured && <Star className="h-3 w-3 text-amber-500" />}
-                          {p.url && <ExternalLink className="ml-auto h-3 w-3 text-muted-foreground" />}
+                          {p.verification_status === "approved" && <BadgeCheck className="ml-auto h-3.5 w-3.5 text-emerald-500" />}
+                          {p.verification_status === "rejected" && <XCircle className="ml-auto h-3.5 w-3.5 text-rose-500" />}
                         </p>
                         {p.role && <p className="text-[10px] text-muted-foreground">{p.role}</p>}
                         <p className="mt-1 line-clamp-3 text-xs text-muted-foreground">{p.description}</p>
@@ -225,7 +229,7 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
                             ))}
                           </div>
                         )}
-                      </a>
+                      </div>
                     ))}
                   </div>
                 </CardContent>
@@ -266,7 +270,13 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
                       <div>
                         <p className="text-sm font-semibold">{c.name}</p>
                         <p className="text-xs text-muted-foreground">{c.issuer} · {c.issued_at ? new Date(c.issued_at).toLocaleDateString("en-IN", { month: "short", year: "numeric" }) : "—"}</p>
-                        {c.url && <a href={c.url} target="_blank" rel="noreferrer" className="text-[10px] text-primary hover:underline">Verify <ExternalLink className="inline h-2.5 w-2.5" /></a>}
+                        {c.url && (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                            <ExternalLink className="h-2.5 w-2.5" />
+                            {c.verification_status === "approved" && <BadgeCheck className="h-3 w-3 text-emerald-500" />}
+                            {c.verification_status === "rejected" && <XCircle className="h-3 w-3 text-rose-500" />}
+                          </span>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -286,30 +296,53 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
           {/* Right rail */}
           <aside className="space-y-4">
             {/* Skills */}
-            {(skills ?? []).length > 0 && (
+            {((skills ?? []).length > 0 || parsedTechs.length > 0) && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-sm">Skills</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(skills ?? []).slice(0, 2).map((s: any) => (
-                      <span
-                        key={s.id}
-                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${s.verification_status === "verified" || s.verification_status === "experienced" || s.verification_status === "top_rated" ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-700" : "bg-muted/30"}`}
-                        title={s.verification_status}
-                      >
-                        {s.category?.name ?? "Skill"}
-                        {s.is_primary && <Star className="h-2.5 w-2.5 text-amber-500" />}
-                        {(s.verification_status === "verified" || s.verification_status === "experienced" || s.verification_status === "top_rated") && <ShieldCheck className="h-2.5 w-2.5" />}
-                      </span>
-                    ))}
-                    {(skills ?? []).length > 2 && (
-                      <span className="inline-flex items-center rounded-full border border-dashed px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                        +{(skills ?? []).length - 2} more
-                      </span>
-                    )}
-                  </div>
+                <CardContent className="space-y-3">
+                  {(skills ?? []).length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {(skills ?? []).slice(0, 4).map((s: any) => (
+                        <Link
+                          key={s.id}
+                          href={`/categories/${s.category?.slug ?? ""}?employee=${userId}`}
+                          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors hover:border-primary/50 hover:bg-primary/5 ${s.verification_status === "verified" || s.verification_status === "experienced" || s.verification_status === "top_rated" ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-700" : "bg-muted/30"}`}
+                          title={s.verification_status}
+                        >
+                          {s.category?.name ?? "Skill"}
+                          {s.is_primary && <Star className="h-2.5 w-2.5 text-amber-500" />}
+                          {(s.verification_status === "verified" || s.verification_status === "experienced" || s.verification_status === "top_rated") && <ShieldCheck className="h-2.5 w-2.5" />}
+                        </Link>
+                      ))}
+                      {(skills ?? []).length > 4 && (
+                        <span className="inline-flex items-center rounded-full border border-dashed px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                          +{(skills ?? []).length - 4} more
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {parsedTechs.length > 0 && (
+                    <div>
+                      <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Technologies</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {parsedTechs.slice(0, 8).map((t: string, i: number) => (
+                          <span
+                            key={i}
+                            className="inline-flex cursor-default items-center gap-1 rounded-full border border-dashed bg-muted/20 px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+                          >
+                            {t}
+                          </span>
+                        ))}
+                        {parsedTechs.length > 8 && (
+                          <span className="inline-flex items-center rounded-full border border-dashed px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                            +{parsedTechs.length - 8} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}

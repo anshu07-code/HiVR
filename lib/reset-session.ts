@@ -7,7 +7,8 @@
  */
 import crypto from "crypto";
 
-const SESSION_SECRET = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "fallback-dev-secret-do-not-use-in-prod";
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error("SUPABASE_SERVICE_ROLE_KEY required for reset session signing");
+const SESSION_SECRET = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const TTL_MIN = 15;
 
 export function signResetSessionToken(payload: { user_id: string }): string {

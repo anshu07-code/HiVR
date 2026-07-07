@@ -49,11 +49,12 @@ export async function POST(req: NextRequest) {
     if (uploadErr) return NextResponse.json({ error: uploadErr.message }, { status: 500 });
 
     const { data: { publicUrl } } = sb.storage.from("avatars").getPublicUrl(path);
+    const versionedUrl = publicUrl + "?v=" + Date.now();
 
-    const { error: updateErr } = await sb.from("users").update({ cover_url: publicUrl }).eq("id", user.id);
+    const { error: updateErr } = await sb.from("users").update({ cover_url: versionedUrl }).eq("id", user.id);
     if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
 
-    return NextResponse.json({ ok: true, url: publicUrl });
+    return NextResponse.json({ ok: true, url: versionedUrl });
   } catch (e) {
     if (e instanceof SecurityError) {
       return NextResponse.json({ error: e.message }, { status: e.status });

@@ -184,6 +184,7 @@ export async function updateEmployeeSkillsAction(skills: {
 export async function addEducationAction(input: {
   institution: string; degree?: string; field_of_study?: string;
   start_year?: number; end_year?: number; is_current?: boolean; description?: string;
+  education_type?: "secondary" | "senior_secondary" | "higher_studies";
 }) {
   const { sb, user } = await requireUser();
   const { error } = await sb.from("employee_education").insert({
@@ -248,6 +249,7 @@ export async function addProjectAction(input: {
   const { sb, user } = await requireUser();
   const { error } = await sb.from("employee_projects").insert({
     user_id: user.id, ...input,
+    verification_status: input.url?.trim() ? 'pending' : null,
     sort_order: Math.floor(Date.now() / 1000),
   });
   if (error) return { ok: false, reason: error.message };
@@ -319,6 +321,36 @@ export async function deleteSocialLinkAction(platform: string) {
   const { error } = await sb.from("employee_social_links").delete().eq("user_id", user.id).eq("platform", platform);
   if (error) return { ok: false, reason: error.message };
   revalidatePath("/dashboard/profile");
+  return { ok: true };
+}
+
+/* ========================================================================
+ * Achievements (CRUD)
+ * ====================================================================== */
+
+export async function addAchievementAction(input: {
+  title: string; description?: string; icon_name?: string;
+  achieved_at?: string; category?: string;
+}) {
+  const { sb, user } = await requireUser();
+  const { error } = await sb.from("employee_achievements").insert({
+    user_id: user.id, ...input,
+    sort_order: Math.floor(Date.now() / 1000),
+  });
+  if (error) return { ok: false, reason: error.message };
+  revalidatePath("/dashboard/profile");
+  revalidatePath(`/people/${user.id}`);
+  revalidatePath("/dashboard");
+  const completeness = await computeCompleteness(sb, user.id);
+  return { ok: true, completeness };
+}
+
+export async function deleteAchievementAction(id: string) {
+  const { sb, user } = await requireUser();
+  const { error } = await sb.from("employee_achievements").delete().eq("id", id).eq("user_id", user.id);
+  if (error) return { ok: false, reason: error.message };
+  revalidatePath("/dashboard/profile");
+  revalidatePath(`/people/${user.id}`);
   return { ok: true };
 }
 

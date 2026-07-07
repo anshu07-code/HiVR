@@ -2,8 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ShieldAlert, MessageSquare, Database, Activity, AlertTriangle, Briefcase, Eye } from "lucide-react";
+import { ShieldAlert, MessageSquare, Database, Activity, AlertTriangle, Briefcase, Eye, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { timeAgo } from "@/lib/utils";
 import { LiveMonitoringPanel } from "@/components/admin/live-monitoring-panel";
 import { VaultMonitorPanel } from "@/components/admin/vault-monitor-panel";
@@ -41,6 +42,21 @@ export default async function TechAdminHome() {
   // Pre-hiring chat & Q&A stats
   const { count: preHiringCount } = await sb.from("task_messages").select("id", { count: "exact", head: true });
   const { count: queryCount } = await sb.from("task_queries").select("id", { count: "exact", head: true });
+
+  // Waitlist stats — how many people waiting per coming-soon category
+  const { data: waitlistStats } = await sb
+    .from("skill_categories")
+    .select("id, slug, name, status")
+    .is("parent_category_id", null)
+    .order("sort_order");
+  const waitlistCounts: Record<string, number> = {};
+  for (const wcat of waitlistStats ?? []) {
+    const { count } = await sb
+      .from("category_waitlist")
+      .select("id", { count: "exact", head: true })
+      .eq("category_id", wcat.id);
+    if (count && count > 0) waitlistCounts[wcat.slug] = count;
+  }
 
   // Recent pre-hiring chats
   const { data: recentPreHiring } = await sb
@@ -150,6 +166,31 @@ export default async function TechAdminHome() {
               <p className="mt-0.5 truncate text-muted-foreground">{q.body}</p>
             </Link>
           ))}
+        </CardContent>
+      </Card>
+
+      {/* Waitlist monitoring */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-amber-600">
+            <Users className="h-4 w-4" />Category waitlist
+          </CardTitle>
+          <CardDescription>Users waiting for coming-soon categories to go live.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {(waitlistStats ?? []).filter(c => c.status !== "active").map(c => (
+              <div key={c.id} className="flex items-center justify-between rounded-lg border p-3 text-sm">
+                <span>{c.name}</span>
+                <Badge variant="outline" className="text-xs">{waitlistCounts[c.slug] ?? 0} waiting</Badge>
+              </div>
+            ))}
+            {(waitlistStats ?? []).filter(c => c.status !== "active").length === 0 && (
+              <p className="col-span-full py-4 text-center text-sm text-muted-foreground">
+                No coming-soon categories.
+              </p>
+            )}
+          </div>
         </CardContent>
       </Card>
 

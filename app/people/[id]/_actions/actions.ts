@@ -114,6 +114,7 @@ export async function hireDirectlyAction(formData: FormData) {
   const description = formData.get("description") as string;
   const selectedCategoryId = formData.get("categoryId") as string | null;
   const clientRatePaise = formData.get("ratePaise") ? Number(formData.get("ratePaise")) : null;
+  const expectedDays = formData.get("expectedDays") ? Number(formData.get("expectedDays")) : null;
 
   if (!employeeId || !title || !description) {
     return { ok: false, error: "Missing required fields" };
@@ -129,24 +130,26 @@ export async function hireDirectlyAction(formData: FormData) {
     if (res1.ok === false) return res1;
     const { categoryId, ratePaise } = res1;
 
-    const created: any = await createTaskPost(admin, user.id, categoryId, title, description, ratePaise, "in_contract", true);
-    if (created.ok === false) return created;
-    const { taskId } = created;
-
-    // Create a direct-hire offer for the employee to accept/decline
-    const { error: offerErr } = await admin
-      .from("negotiation_offers")
+    // Create a direct-hire offer for the employee (no task_post needed).
+    // Use regular `sb` — RLS allows insert because buyer_id = current user.
+    const { data: offer, error: offerErr } = await (sb
+      .from("negotiation_offers") as any)
       .insert({
-        task_post_id: taskId,
+        task_post_id: null,
+        gig_id: null,
         employee_id: employeeId,
         buyer_id: user.id,
         offer_type: "instant_hire_pushback",
+        offer_type_new: "gig_direct",
         round_number: 1,
         proposed_price: ratePaise,
-        comment: `Direct hire: ${title}`,
+        comment: title,
+        gig_requirements: description,
         status: "pending",
         created_by: user.id,
-      } as any);
+      })
+      .select("id")
+      .single();
 
     if (offerErr) return { ok: false, error: offerErr.message };
 
@@ -156,15 +159,15 @@ export async function hireDirectlyAction(formData: FormData) {
       p_type: "hire_offer",
       p_title: "Direct hire offer",
       p_body: `You've been offered a direct hire for "${title}" at ₹${(ratePaise / 100).toLocaleString("en-IN")}. Accept or decline in Job Offers.`,
-      p_link: `/dashboard/job-offers`,
+      p_link: "/dashboard/job-offers",
     });
 
     revalidatePath(`/people/${employeeId}`);
     return {
       ok: true,
-      taskId,
+      offerId: (offer as any).id,
       ratePaise,
-      message: `${title.split(" ")[0]} offered at their standing rate! Awaiting acceptance.`,
+      message: `Offer sent to ${title.split(" ")[0]}! They'll review it on Job Offers.`,
     };
   } catch (e) {
     return { ok: false, error: (e as Error).message };
@@ -185,6 +188,7 @@ export async function startNegotiationAction(formData: FormData) {
   const description = formData.get("description") as string;
   const selectedCategoryId = formData.get("categoryId") as string | null;
   const clientRatePaise = formData.get("ratePaise") ? Number(formData.get("ratePaise")) : null;
+  const expectedDays = formData.get("expectedDays") ? Number(formData.get("expectedDays")) : null;
 
   if (!employeeId || !title || !description) {
     return { ok: false, error: "Missing required fields" };
@@ -200,61 +204,54 @@ export async function startNegotiationAction(formData: FormData) {
     if (res1.ok === false) return res1;
     const { categoryId, ratePaise } = res1;
 
-    const created: any = await createTaskPost(admin, user.id, categoryId, title, description, ratePaise, "in_contract", true);
-    if (created.ok === false) return created;
-    const { taskId } = created;
+    // Create negotiation offer directly (no task_post needed).
+    // Use regular `sb` — RLS allows insert because buyer_id = current user.
+    const { data: offer, error: offerErr } = await (sb
+      .from("negotiation_offers") as any)
+      .insert({
+        task_post_id: null,
+        gig_id: null,
+        employee_id: employeeId,
+        buyer_id: user.id,
+        offer_type: "instant_hire_pushback",
+        offer_type_new: "gig_negotiation",
+        round_number: 1,
+        proposed_price: ratePaise,
+        comment: title,
+        gig_requirements: description,
+        status: "pending",
+        created_by: user.id,
+      })
+      .select("id")
+      .single();
 
-    // Try the private-negotiation RPC (exists after migration 0135).
-    // If it's not deployed yet, fall back to direct admin insert.
-    let negId: string | null = null;
-    try {
-      const { data: rpcResult, error: rpcErr } = await (sb.rpc as any)(
-        "create_private_negotiation_offer",
-        { p_task_post_id: taskId, p_employee_id: employeeId, p_comment: `Negotiation: ${title}` },
-      );
-      if (!rpcErr && rpcResult?.ok) {
-        negId = rpcResult.negotiation_offer_id;
-      }
-    } catch { /* RPC not deployed — fall through */ }
+    if (offerErr) return { ok: false, error: offerErr.message };
 
-    if (!negId) {
-      // Fallback: insert directly via admin (bypasses RLS)
-      const { data: directOffer, error: directErr } = await admin
-        .from("negotiation_offers")
-        .insert({
-          task_post_id: taskId,
-          employee_id: employeeId,
-          buyer_id: user.id,
-          offer_type: "instant_hire_pushback",
-          round_number: 1,
-          proposed_price: ratePaise,
-          comment: `Negotiation: ${title}`,
-          status: "pending",
-          created_by: user.id,
-        } as any)
-        .select("id")
-        .single();
+    // Create first negotiation round (RLS allows buyer to insert)
+    await (sb.from("negotiation_rounds") as any).insert({
+      negotiation_id: (offer as any).id,
+      round_number: 1,
+      proposed_by: "buyer",
+      proposed_price: ratePaise,
+      comment: expectedDays ? JSON.stringify({ text: "Initial offer", expected_days: expectedDays }) : "Initial offer",
+    });
 
-      if (directErr) return { ok: false, error: directErr.message };
-      negId = (directOffer as any).id;
-
-      // Notify the employee (RPC handles this when deployed)
-      await (admin.rpc as any)("create_notification", {
-        p_user_id: employeeId,
-        p_type: "hire_offer",
-        p_title: "Negotiation request",
-        p_body: `A buyer wants to negotiate for "${title}" (rate: ₹${(ratePaise / 100).toLocaleString("en-IN")}).`,
-        p_link: "/dashboard/job-offers",
-      });
-    }
+    // Notify the employee
+    await (admin.rpc as any)("create_notification", {
+      p_user_id: employeeId,
+      p_type: "hire_offer",
+      p_title: "Negotiation request",
+      p_body: `A buyer wants to negotiate for "${title}" (rate: ₹${(ratePaise / 100).toLocaleString("en-IN")}).`,
+      p_link: "/dashboard/job-offers",
+    });
 
     revalidatePath(`/people/${employeeId}`);
     return {
       ok: true,
-      taskId,
+      offerId: (offer as any).id,
       ratePaise,
       standingRate: ratePaise,
-      message: "Negotiation started! The employee can counter, accept, or decline.",
+      message: "Negotiation started! Check Job Offers for updates.",
     };
   } catch (e) {
     return { ok: false, error: (e as Error).message };

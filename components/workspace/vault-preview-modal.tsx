@@ -40,11 +40,16 @@ export function VaultPreviewModal({
   const ext = (item.name.split(".").pop() ?? "").toLowerCase();
   const mime = (item.mime_type ?? "").toLowerCase();
 
-  const isImage = item.file_type === "image";
-  const isVideo = item.file_type === "video";
-  const isAudio = item.file_type === "audio";
-  const isPdf = item.file_type === "pdf" || mime === "application/pdf";
-  const isCode = item.file_type === "code";
+  const IMAGE_EXTS = new Set(["jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif", "tiff", "tif", "ico", "svg"]);
+  const VIDEO_EXTS = new Set(["mp4", "mov", "webm", "avi", "mkv", "flv", "wmv", "m4v", "3gp"]);
+  const AUDIO_EXTS = new Set(["mp3", "wav", "m4a", "ogg", "flac", "aac", "wma", "opus"]);
+  const CODE_EXTS = new Set(["js", "ts", "jsx", "tsx", "py", "rb", "go", "rs", "java", "kt", "swift", "c", "cpp", "h", "hpp", "cs", "php", "sh", "yaml", "yml", "toml", "html", "css", "scss", "sql", "svelte", "vue"]);
+
+  const isImage = item.file_type === "image" || IMAGE_EXTS.has(ext);
+  const isVideo = item.file_type === "video" || VIDEO_EXTS.has(ext);
+  const isAudio = item.file_type === "audio" || AUDIO_EXTS.has(ext);
+  const isPdf = item.file_type === "pdf" || mime === "application/pdf" || ext === "pdf";
+  const isCode = item.file_type === "code" || CODE_EXTS.has(ext);
   const isCsv = item.file_type === "csv" || CSV_MIMES.includes(mime) || ext === "csv";
   const isExcel = (item.file_type === "document" || item.file_type === "spreadsheet") && (EXCEL_MIMES.includes(mime) || ext === "xlsx" || ext === "xls");
   const isOfficeXml = OFFICE_XML_MIMES.includes(mime) || ["docx", "pptx"].includes(ext);

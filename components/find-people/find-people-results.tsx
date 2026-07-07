@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Search, X } from "lucide-react";
 import { PersonCard } from "./person-card";
 
+type Cat = { id: string; slug: string; name: string; icon?: string; parent_category_id?: string | null };
+
 type Props = {
   searchParams: {
     q?: string;
@@ -21,6 +23,7 @@ type Props = {
   availFilter: string;
   minRating: string;
   totalRegistered: number;
+  allCategories: Cat[];
 };
 
 type Person = {
@@ -33,7 +36,7 @@ type Person = {
 };
 
 export async function FindPeopleResults({
-  tab, q, skillFilter, tierFilter, availFilter, minRating,
+  tab, q, skillFilter, tierFilter, availFilter, minRating, allCategories,
 }: Props) {
   const sb = createClient();
 
@@ -45,7 +48,7 @@ export async function FindPeopleResults({
       employee_profile:employee_profiles(
         headline, bio, location, experience_type, overall_trust_tier,
         hourly_rate_paise, availability_hours, lifetime_earnings,
-        completion_rate, avg_rating, total_reviews
+        completion_rate, avg_rating, total_reviews, availability_status
       ),
       skills:employee_skills(
         id, category_id, verification_status,
@@ -63,7 +66,11 @@ export async function FindPeopleResults({
 
   // Skill filter
   if (skillFilter) {
-    list = list.filter(u => (u.skills ?? []).some((s: any) => s.category?.slug === skillFilter));
+    const parent = allCategories.find(c => c.slug === skillFilter && !c.parent_category_id);
+    const matchSlugs = parent
+      ? allCategories.filter(c => c.parent_category_id === parent.id).map(c => c.slug)
+      : [skillFilter];
+    list = list.filter(u => (u.skills ?? []).some((s: any) => matchSlugs.includes(s.category?.slug)));
   }
   // Tier filter (tier_a / tier_b from URL)
   if (tierFilter) {
@@ -76,6 +83,9 @@ export async function FindPeopleResults({
   // Availability
   if (availFilter === "1" || tab === "available") {
     list = list.filter(u => (u.employee_profile?.availability_hours ?? 0) > 0);
+  }
+  if (["online", "offline", "away", "busy"].includes(availFilter)) {
+    list = list.filter(u => u.employee_profile?.availability_status === availFilter);
   }
   // Min rating
   if (minRating) {
@@ -168,8 +178,8 @@ export async function FindPeopleResults({
               experience_type={ep?.experience_type}
               hourly_rate_paise={ep?.hourly_rate_paise}
               availability_hours={ep?.availability_hours}
+              availability_status={ep?.availability_status}
               is_top={isTop}
-              is_available={isAvailable}
               is_verified={isVerified}
               skills={u.skills}
             />

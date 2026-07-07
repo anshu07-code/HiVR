@@ -106,18 +106,6 @@ export function ComingSoonZone({
           })}
         </div>
 
-        {/* Bottom CTA */}
-        <div className="mt-12 text-center">
-          <p className="text-sm text-muted-foreground">
-            Want something else?{" "}
-            <Link
-              href="/categories"
-              className="font-medium text-primary underline underline-offset-4 transition-colors hover:text-primary/80"
-            >
-              Suggest a category
-            </Link>
-          </p>
-        </div>
       </div>
     </section>
   );

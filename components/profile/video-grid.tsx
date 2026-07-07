@@ -3,7 +3,7 @@ import { Video as VideoIcon, Plus, Trash2, Loader2, Sparkles } from "lucide-reac
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { createClient } from "@/lib/supabase/client";
 import { VideoUploader } from "./video-uploader";
 import { revalidatePath } from "next/cache";
@@ -87,27 +87,27 @@ export async function VideoGrid({
             No videos yet{isOwner ? ". Click 'Add video' to record or upload one." : "."}
           </p>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+          <div className="grid gap-5 sm:grid-cols-2 md:grid-cols-3">
             {videos.map((v) => {
               const url = getPublicVideoUrl(v.storage_bucket, v.storage_path);
               return (
-                <div key={v.id} className="group space-y-1.5">
-                  <div className="relative overflow-hidden rounded-lg border bg-zinc-950">
+                <div key={v.id} className="group overflow-hidden rounded-xl border bg-card shadow-sm transition-shadow hover:shadow-md">
+                  <div className="relative aspect-video w-full overflow-hidden bg-zinc-950">
                     <video
                       src={url}
                       controls
                       preload="metadata"
                       playsInline
-                      className="aspect-video w-full object-cover"
+                      className="h-full w-full object-cover"
                     />
                     {isOwner && (
-                      <DeleteVideoButton videoId={v.id} storagePath={v.storage_path} className="absolute right-1 top-1" />
+                      <DeleteVideoButton videoId={v.id} storagePath={v.storage_path} className="absolute right-1.5 top-1.5" />
                     )}
                   </div>
-                  <div className="flex items-start gap-2">
-                    <p className="flex-1 text-xs text-foreground line-clamp-2">{v.caption}</p>
+                  <div className="space-y-1.5 p-3">
+                    <p className="text-xs leading-relaxed text-foreground line-clamp-2">{v.caption}</p>
                     {v.skill?.name && (
-                      <Badge variant="outline" className="shrink-0 text-[9px]">{v.skill.name}</Badge>
+                      <Badge variant="secondary" className="text-[10px] font-normal">{v.skill.name}</Badge>
                     )}
                   </div>
                 </div>
@@ -123,12 +123,12 @@ export async function VideoGrid({
 function AddVideoButton({ categories }: { categories: SkillCategory[] }) {
   return (
     <Dialog>
-      <Button asChild size="sm" variant="gradient">
-        <span className="inline-flex cursor-pointer items-center gap-1.5">
+      <DialogTrigger asChild>
+        <Button size="sm" variant="gradient">
           <Plus className="h-3.5 w-3.5" />Add video
-        </span>
-      </Button>
-      <DialogContent className="max-w-2xl">
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogTitle className="sr-only">Add a video</DialogTitle>
         <AddVideoForm categories={categories} />
       </DialogContent>

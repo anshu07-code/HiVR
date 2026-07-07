@@ -187,7 +187,13 @@ export function VoiceSearch({
       {value && (
         <button
           type="button"
-          onClick={() => { setValue(""); onChange?.(""); }}
+          onClick={() => {
+            setValue("");
+            onChange?.("");
+            const url = new URL(window.location.href);
+            url.searchParams.delete("q");
+            window.location.href = url.toString();
+          }}
           aria-label="Clear search"
           className="absolute right-[5.5rem] top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-md text-muted-foreground hover:bg-muted"
         >

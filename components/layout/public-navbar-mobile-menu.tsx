@@ -103,10 +103,13 @@ export function PublicNavbarMobileMenu({ signedIn, email, profile }: Props) {
               href={n.href}
               prefetch
               onClick={() => setOpen(false)}
-              className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-accent"
+              className={cn("flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-accent", n.label === "Instant" && "text-orange-500")}
             >
               <n.Icon className="h-4 w-4" />
               {n.label}
+              {n.label === "Instant" && (
+                <span className="ml-auto rounded-full bg-orange-100 dark:bg-orange-900/30 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-orange-600 dark:text-orange-400">Soon</span>
+              )}
             </Link>
           ))}
         </nav>

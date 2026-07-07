@@ -14,7 +14,13 @@ begin
     '/browse/' || NEW.id
   from public.employee_skills es
   where es.category_id = NEW.category_id
-    and es.employee_id != NEW.buyer_id;
+    and es.employee_id != NEW.buyer_id
+    and not exists (
+      select 1 from public.notifications n
+      where n.user_id = es.employee_id
+        and n.type = 'task_recommendation'
+        and n.link = '/browse/' || NEW.id
+    );
   return NEW;
 end;
 $$;

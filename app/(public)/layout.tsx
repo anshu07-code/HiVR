@@ -1,6 +1,8 @@
 import * as React from "react";
 import { PublicNavbar } from "@/components/layout/public-navbar";
 import { SiteFooter } from "@/components/layout/footer";
+import { NotificationToast } from "@/components/notifications/toast";
+import { FeedbackButton } from "@/components/feedback/feedback-button";
 
 /**
  * Layout for all public marketing/auth routes. Wraps the page with the
@@ -13,7 +15,7 @@ import { SiteFooter } from "@/components/layout/footer";
  * shake that was previously visible on every nav click.
  *
  * Dashboard and admin routes live outside this group, so they get their
- * own layouts (with the DashboardSidebar) and don't include this navbar.
+ * own layouts (with the DashboardSidebar) and don't include this layout.
  */
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -21,6 +23,8 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
       <PublicNavbar />
       {children}
       <SiteFooter />
+      <FeedbackButton />
+      <NotificationToast />
     </>
   );
 }

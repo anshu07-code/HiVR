@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
 
     let fmt;
     try {
-      fmt = await validateUploadedFile(file, "vault", MAX_BYTES);
+      fmt = await validateUploadedFile(file, "all", MAX_BYTES);
     } catch (e) {
       if (e instanceof SecurityError) {
         return NextResponse.json({ error: e.message }, { status: e.status });

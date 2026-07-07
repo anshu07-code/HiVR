@@ -117,6 +117,27 @@ const CAT_COLORS: Record<string, { bg: string; icon: string }> = {
   consulting:                { bg:"linear-gradient(135deg,#3A5A6A,#4A6A7A 45%,#6A8A9A 75%)", icon:"#C084FC" },
 };
 
+const CAT_IMAGES: Record<string, string> = {
+  "programming-tech":           "/Tech.jpeg",
+  "data-analytics":             "/Data_analytics.jpeg",
+  "graphic-design-creative":    "/Graphic design.jpeg",
+  "writing-translation":        "/Writing.jpeg",
+  "business-support-admin":     "/Business_services.jpeg",
+  "music-audio":                "/Music .jpeg",
+  "ai-services":                "/AI_img.jpeg",
+  "digital-marketing":          "/Digital_marketing.jpeg",
+  "finance-accounting":         "/finance_and_accounting.jpeg",
+  "photography":                "/Photography.jpeg",
+  "qa-testing":                 "/QA.jpeg",
+  "sales-customer-support":     "/sales.jpeg",
+  "video-animation":            "/video_editing.jpeg",
+  "sap-erp":                    "/SAP_and_ERP.jpeg",
+  "architecture-engineering":   "/Architecture_and_engineering.jpeg",
+  "legal-services":             "/Legal.jpeg",
+  "education-coaching":         "/Education_and_coaching.jpeg",
+  "product-design-manufacturing": "/Product_Designing_and_manufacturing.jpeg",
+};
+
 export function catTheme(s: string) { return CAT_COLORS[s] ?? CAT_COLORS["consulting"]; }
 
 /* ══════════════════════════════════════════════════════════════
@@ -258,30 +279,38 @@ export function BrickWallGallery({ activeParents, childrenByParent, openTaskCoun
               const subs = childrenByParent[cat.id] ?? [];
               const taskCount = openTaskCounts?.[cat.id] ?? 0;
               const rotate = rotations[i % rotations.length];
-              const t = catTheme(cat.slug);
 
               return (
-                <div key={cat.id}>
+                  <div key={cat.id}>
                   <Link href={cat.status === "active" ? `/categories/${cat.slug}` : `/categories/${cat.slug}?waitlist=1`}
-                    className={cn("group/frame block rounded-xl border border-border/50 bg-card md:rounded-2xl md:border-2 dark:border-zinc-700/50 hover:z-10 brick-card")}
+                    className={cn("group/frame block rounded-xl border border-border/50 bg-card md:rounded-2xl md:border-2 dark:border-zinc-700/50 hover:z-10 brick-card overflow-hidden")}
                     style={{ '--r': `${rotate}deg` } as React.CSSProperties}>
-                    <div className="relative h-32 overflow-hidden rounded-t-xl md:h-52 bg-card">
-                      <div className="absolute inset-0 dark:opacity-100 opacity-[0.45] transition-opacity" style={{ background:t.bg }} />
-                      <div className="absolute inset-0 opacity-[0.06] dark:opacity-[0.04]"
-                        style={{ backgroundImage:"radial-gradient(circle at 30% 25%, rgba(255,255,255,0.18) 0%, transparent 50%)" }} />
-                      <div className="pointer-events-none absolute inset-0 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_4px_20px_rgba(0,0,0,0.2)]" />
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="grid h-12 w-12 place-items-center rounded-xl border border-white/20 bg-black/20 shadow-lg backdrop-blur-sm transition-all duration-300 group-hover/frame:scale-110 md:h-16 md:w-16 md:rounded-2xl"
-                          style={{ boxShadow:`0 0 20px ${t.icon}60, 0 0 50px ${t.icon}30` }}>
-                          <span style={{ color: t.icon }}><CategoryIcon name={cat.icon} className="h-6 w-6 drop-shadow-md md:h-8 md:w-8" /></span>
+                    <div className="relative h-32 md:h-52">
+                      <img
+                        src={CAT_IMAGES[cat.slug] ?? "/Tech.jpeg"}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover/frame:scale-110"
+                        loading="lazy"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-black/10" />
+                      <div className="pointer-events-none absolute inset-0 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_4px_20px_rgba(0,0,0,0.4)]" />
+                      <div className="absolute bottom-0 left-0 right-0 p-4">
+                        <div className="flex items-center gap-2">
+                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/20 text-white backdrop-blur-sm ring-1 ring-white/30">
+                            <CategoryIcon name={cat.icon} className="h-4 w-4 drop-shadow" />
+                          </span>
+                          <h3 className="font-display text-base font-semibold text-white drop-shadow-sm md:text-lg">
+                            {cat.name}
+                          </h3>
                         </div>
                       </div>
-                      <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-black/25 to-transparent" />
                     </div>
                     <div className="flex items-center justify-between gap-2 p-3 md:p-4">
                       <div className="min-w-0 flex-1">
-                        <h3 className="font-display text-sm font-semibold text-foreground md:text-base">{cat.name}</h3>
-                        <p className="mt-0.5 text-[10px] text-muted-foreground md:text-xs">{cat.tier==="role_engagement"?"Role engagement":"Micro-tasks"}{taskCount>0&&` · ${taskCount} open`}</p>
+                        <p className="text-[10px] text-muted-foreground md:text-xs">
+                          Micro tasks + Macro tasks (Tier B)
+                          {taskCount>0 && <>{` · ${taskCount} open`}</>}
+                        </p>
                       </div>
                       <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground/70 transition-transform group-hover/frame:translate-x-0.5 md:h-5 md:w-5" />
                     </div>

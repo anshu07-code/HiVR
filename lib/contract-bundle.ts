@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 export type ContractViewData = {
   contract: any | null;
   task: any | null;
+  contractCategory: any | null;
   workspace: any | null;
   checklist: any[];
   buyer: any | null;
@@ -20,24 +21,35 @@ export type ContractViewData = {
 export async function loadContractBundle(contractId: string): Promise<ContractViewData> {
   const sb = createClient();
   const { data: { user } } = await sb.auth.getUser();
-  if (!user) return { contract: null, task: null, workspace: null, checklist: [], buyer: null, employee: null, buyerContract: null, employeeContract: null, error: "Not signed in" };
+  if (!user) return { contract: null, task: null, contractCategory: null, workspace: null, checklist: [], buyer: null, employee: null, buyerContract: null, employeeContract: null, error: "Not signed in" };
 
   const { data: c } = await sb
     .from("contracts")
     .select("*, buyer:users!contracts_buyer_id_fkey(id, full_name, avatar_url, email), employee:users!contracts_employee_id_fkey(id, full_name, avatar_url, email)")
     .eq("id", contractId)
     .single();
-  if (!c) return { contract: null, task: null, workspace: null, checklist: [], buyer: null, employee: null, buyerContract: null, employeeContract: null, error: "Contract not found" };
+  if (!c) return { contract: null, task: null, contractCategory: null, workspace: null, checklist: [], buyer: null, employee: null, buyerContract: null, employeeContract: null, error: "Contract not found" };
 
   const isBuyer = user.id === (c as any).buyer_id;
   const isEmployee = user.id === (c as any).employee_id;
-  if (!isBuyer && !isEmployee) return { contract: null, task: null, workspace: null, checklist: [], buyer: null, employee: null, buyerContract: null, employeeContract: null, error: "Not a party to this contract" };
+  if (!isBuyer && !isEmployee) return { contract: null, task: null, contractCategory: null, workspace: null, checklist: [], buyer: null, employee: null, buyerContract: null, employeeContract: null, error: "Not a party to this contract" };
 
   const { data: task } = await sb
     .from("task_posts")
     .select("id, title, description, pricing_model, budget_min, budget_max, estimated_hours, incentive_condition_type, incentive_threshold, incentive_amount_paise, brief, created_at, category_id, category:skill_categories(slug, name, icon, tier)")
     .eq("id", (c as any).task_post_id)
     .maybeSingle();
+
+  // For contracts without a task (e.g. gig-based), look up the category directly
+  let contractCategory: any = null;
+  if (!task && (c as any).category_id) {
+    const { data: cat } = await sb
+      .from("skill_categories")
+      .select("id, name, slug, icon, tier")
+      .eq("id", (c as any).category_id)
+      .maybeSingle();
+    contractCategory = cat;
+  }
 
   let workspace: any = null;
   const { data: workspaceData } = await sb
@@ -96,6 +108,7 @@ export async function loadContractBundle(contractId: string): Promise<ContractVi
   return {
     contract: c,
     task,
+    contractCategory,
     workspace,
     checklist: (checklist ?? []) as any[],
     buyer: (c as any).buyer ?? null,

@@ -119,7 +119,7 @@ export const TaskPostSchema = z.object({
   ),
   estimated_hours: z.preprocess(
     nanToUndefined,
-    z.number().int().positive().max(720).optional(),
+    z.number().positive().max(720).optional(),
   ),
   scheduled_publish_at: z.string().optional(),
   show_in_upcoming: z.boolean().default(true),

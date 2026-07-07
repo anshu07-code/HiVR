@@ -102,6 +102,12 @@ export function WorkspaceVault({
   const [deletePreview, setDeletePreview] = React.useState<DeletePreview | null>(null);
   const [deleteLoading, setDeleteLoading] = React.useState(false);
 
+  const [pendingUpload, setPendingUpload] = React.useState<{
+    files: File[];
+    items: { file: File; relativePath: string }[];
+    source: "dir" | "drop";
+  } | null>(null);
+
   const [previewItem, setPreviewItem] = React.useState<PreviewItem | null>(null);
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -425,6 +431,7 @@ export function WorkspaceVault({
         try { d = text ? JSON.parse(text) : {}; } catch { d = { error: text }; }
         if (!r.ok || d.ok === false) { setError(d?.error ?? "Upload failed"); }
       }
+      load();
     } finally {
       setBusy(false);
     }
@@ -454,6 +461,7 @@ export function WorkspaceVault({
           if (!f.path.includes("/")) setExpanded((p) => new Set(p).add(f.id));
         }
       }
+      load();
     } finally {
       setBusy(false);
     }
@@ -478,6 +486,7 @@ export function WorkspaceVault({
       let d: any = {};
       try { d = text ? JSON.parse(text) : {}; } catch { d = { error: text }; }
       if (!r.ok || !d.ok) { setError(d?.error ?? "Upload failed"); return; }
+      load();
     } finally {
       setBusy(false);
     }
@@ -496,13 +505,11 @@ export function WorkspaceVault({
     if (!list) return;
     const arr = Array.from(list);
     e.target.value = "";
-    // KEEP the top-level folder name so the vault tree shows the
-    // actual folder the user dropped.
     const withPaths = arr.map((f) => ({
       file: f,
       relativePath: (f as any).webkitRelativePath || f.name,
     }));
-    await uploadFilesWithPaths(withPaths);
+    setPendingUpload({ files: arr, items: withPaths, source: "dir" });
   };
 
   // ---- Drag and drop ----
@@ -534,7 +541,7 @@ export function WorkspaceVault({
           const base = entry.fullPath || "/";
           await walkFileSystemEntry(entry, base, out);
         }
-        await uploadFilesWithPaths(out);
+        setPendingUpload({ files: out.map((i) => i.file), items: out, source: "drop" });
         return;
       }
       const files: File[] = [];
@@ -593,6 +600,7 @@ export function WorkspaceVault({
       }
       setDeleteTarget(null);
       setDeletePreview(null);
+      load();
     } catch (e) {
       setError((e as Error).message);
     }
@@ -1216,6 +1224,64 @@ export function WorkspaceVault({
         preview={deletePreview}
         previewLoading={deleteLoading}
       />
+
+      {pendingUpload && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4"
+          onClick={() => setPendingUpload(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-lg border bg-card p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-amber-100 text-amber-600">
+                <Upload className="h-5 w-5" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-display text-lg font-semibold">
+                  {pendingUpload.source === "dir" ? "Upload folder contents?" : "Upload files?"}
+                </h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {pendingUpload.items.length} file{pendingUpload.items.length === 1 ? "" : "s"} will be uploaded to{" "}
+                  <strong className="text-foreground">{currentFolder ? folders.find((f) => f.id === currentFolder)?.name ?? "current folder" : "root"}</strong>.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 max-h-40 overflow-y-auto rounded-md border bg-muted/20 p-2 text-[11px]">
+              {pendingUpload.items.map((i, idx) => (
+                <div key={idx} className="flex items-center gap-1.5 py-0.5">
+                  <FileText className="h-3 w-3 shrink-0 text-muted-foreground" />
+                  <span className="truncate text-foreground">{i.relativePath}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setPendingUpload(null)}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                disabled={busy}
+                onClick={async () => {
+                  const { items, source } = pendingUpload;
+                  setPendingUpload(null);
+                  if (source === "dir") {
+                    await uploadFilesWithPaths(items);
+                  } else {
+                    await uploadFilesWithPaths(items);
+                  }
+                }}
+              >
+                {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                Upload {pendingUpload.items.length} file{pendingUpload.items.length === 1 ? "" : "s"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {previewItem && (
         <VaultPreviewModal

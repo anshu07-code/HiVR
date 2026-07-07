@@ -6,6 +6,8 @@ const SECTIONS: { title: string; links: { label: string; href: string }[] }[] = 
     title: "Product",
     links: [
       { label: "Browse tasks",     href: "/browse" },
+      { label: "Instant hire",     href: "/instant-hire" },
+      { label: "Find people",      href: "/find-people" },
       { label: "Categories",       href: "/categories" },
       { label: "How it works",     href: "/how-it-works" },
       { label: "Pricing",          href: "/pricing" },
@@ -17,7 +19,6 @@ const SECTIONS: { title: string; links: { label: string; href: string }[] }[] = 
       { label: "Trust & Safety",   href: "/trust" },
       { label: "How escrow works", href: "/trust/escrow" },
       { label: "Fee structure",    href: "/pricing#fees" },
-      { label: "Help center",      href: "/support" },
     ],
   },
   {
@@ -30,10 +31,18 @@ const SECTIONS: { title: string; links: { label: string; href: string }[] }[] = 
     ],
   },
   {
+    title: "Support",
+    links: [
+      { label: "Help center",      href: "/support" },
+      { label: "Contact us",       href: "/contact" },
+      { label: "Report an issue",  href: "/support" },
+    ],
+  },
+  {
     title: "Legal",
     links: [
-      { label: "Terms",            href: "/legal/terms" },
-      { label: "Privacy",          href: "/legal/privacy" },
+      { label: "Terms of service", href: "/legal/terms" },
+      { label: "Privacy policy",   href: "/legal/privacy" },
       { label: "Grievance Officer", href: "/legal/grievance" },
     ],
   },
@@ -42,8 +51,8 @@ const SECTIONS: { title: string; links: { label: string; href: string }[] }[] = 
 export function SiteFooter() {
   return (
     <footer className="mt-16 border-t bg-card">
-      <div className="container grid gap-8 py-12 md:grid-cols-5">
-        <div className="md:col-span-1">
+      <div className="container grid gap-8 py-12 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+        <div className="sm:col-span-2 md:col-span-3 lg:col-span-1">
           <Logo />
           <p className="mt-3 text-sm text-muted-foreground">Small jobs, verified people.</p>
         </div>

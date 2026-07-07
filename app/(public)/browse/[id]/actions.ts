@@ -53,14 +53,17 @@ export async function applyToTaskAction(
     };
   }
 
-  // Task must be open (not upcoming, closed, cancelled, or in_contract)
+  // Task must be open and not past deadline
   const { data: taskStatus } = await sb
     .from("task_posts")
-    .select("status")
+    .select("status, deadline")
     .eq("id", taskId)
     .single();
   if (taskStatus?.status !== "open") {
     return { error: "This task is not accepting applications right now." };
+  }
+  if (taskStatus?.deadline && new Date(taskStatus.deadline) <= new Date()) {
+    return { error: "This task's deadline has passed and is no longer accepting applications." };
   }
 
   // Pause / rate-limit check.

@@ -51,8 +51,9 @@ export function BuyerProfileBuilder({ userId, avatarUrl: initialAvatar, coverUrl
     const data = await res.json().catch(() => ({}));
     setUploading(false);
     if (data.ok && data.url) {
-      if (field === "avatar") setAvatarUrl(data.url);
-      else setCoverUrl(data.url);
+      const url = data.url + (data.url.includes("?") ? "&" : "?") + "v=" + Date.now();
+      if (field === "avatar") setAvatarUrl(url);
+      else setCoverUrl(url);
       setSaved(`${field === "avatar" ? "Photo" : "Cover image"} updated`);
       setTimeout(() => setSaved(null), 3000);
     } else {
@@ -115,7 +116,7 @@ export function BuyerProfileBuilder({ userId, avatarUrl: initialAvatar, coverUrl
         </div>
         <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center">
           <div className="relative shrink-0">
-            <Avatar className="h-20 w-20">
+            <Avatar key={avatarUrl} className="h-20 w-20">
               <AvatarImage src={avatarUrl ?? undefined} className="object-cover" />
               <AvatarFallback className="text-lg">{initials}</AvatarFallback>
             </Avatar>

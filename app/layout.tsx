@@ -3,8 +3,8 @@ import { Space_Grotesk, Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme/provider";
 import { AssistantLauncher } from "@/components/assistant/launcher";
+import { FeedbackButton } from "@/components/feedback/feedback-button";
 import { TourRoot } from "@/components/onboarding/tour-root";
-import { LiveNotificationPopup } from "@/components/notifications/live-popup";
 import { cn } from "@/lib/utils";
 
 const sans = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
@@ -51,8 +51,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             {children}
           </div>
           <AssistantLauncher />
+          <FeedbackButton />
           <TourRoot />
-          <LiveNotificationPopup />
         </ThemeProvider>
         <script
           dangerouslySetInnerHTML={{

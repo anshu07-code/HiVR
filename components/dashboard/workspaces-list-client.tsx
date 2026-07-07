@@ -149,7 +149,7 @@ export function WorkspacesListClient({ initialList, currentUserId }: { initialLi
       <div>
         <div className="flex items-center gap-2">
           <FolderKanban className="h-6 w-6 text-primary" />
-          <h1 className="font-display text-3xl font-semibold tracking-tight">Workspaces</h1>
+          <h1 className="font-display text-3xl font-semibold tracking-tight" data-tour="workspaces-header">Workspaces</h1>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
           {list.length} workspace{list.length === 1 ? "" : "s"} you participate in

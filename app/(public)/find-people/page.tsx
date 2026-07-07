@@ -60,6 +60,7 @@ export default async function FindPeoplePage({
   ]);
 
   const flatCategories: Cat[] = ((categories ?? []) as Cat[]).filter(c => c.parent_category_id);
+  const parentCategories = ((categories ?? []) as Cat[]).filter(c => !c.parent_category_id);
   const counts = countsRaw as any[];
   const totalRegistered = profileCount ?? counts.length;
   const totalAvailable = counts.filter((c: any) => (c.availability_hours ?? 0) > 0).length;
@@ -91,7 +92,7 @@ export default async function FindPeoplePage({
         <div>
           <div className="flex items-center gap-2">
             <UserSearch className="h-5 w-5 text-primary" />
-            <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">Find people</h1>
+            <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl" data-tour="find-people-header">Find people</h1>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
             Search verified employees by name, skill, or trust tier. Use voice to speak your search.
@@ -158,6 +159,8 @@ export default async function FindPeoplePage({
         availFilter={availFilter}
         minRating={minRating}
         flatCategories={flatCategories}
+        parentCategories={parentCategories}
+        allCategories={categories as any[]}
       />
 
       {/* Active filter chips with X to remove individually */}
@@ -169,7 +172,7 @@ export default async function FindPeoplePage({
           {tierFilter && <FilterChip label={`Tier: ${tierFilter === "micro_task" ? "Tier A" : "Tier B"}`} removeHref={buildHref({ q, tab, skill: skillFilter, tier: undefined, avail: availFilter, min_rating: minRating })} />}
           {skillFilter && <FilterChip label={`Skill: ${selectedSkill?.name ?? skillFilter}`} removeHref={buildHref({ q, tab, skill: undefined, tier: tierFilter, avail: availFilter, min_rating: minRating })} />}
           {minRating && <FilterChip label={`Rating: ${minRating}+`} removeHref={buildHref({ q, tab, skill: skillFilter, tier: tierFilter, avail: availFilter, min_rating: undefined })} />}
-          {availFilter && <FilterChip label="Available now" removeHref={buildHref({ q, tab, skill: skillFilter, tier: tierFilter, avail: undefined, min_rating: minRating })} />}
+          {availFilter && <FilterChip label={["online","offline","away","busy"].includes(availFilter) ? `Status: ${availFilter}` : "Available now"} removeHref={buildHref({ q, tab, skill: skillFilter, tier: tierFilter, avail: undefined, min_rating: minRating })} />}
           <Link href="/find-people" className="text-xs text-muted-foreground underline hover:text-foreground">
             Clear all
           </Link>
@@ -185,6 +188,7 @@ export default async function FindPeoplePage({
         availFilter={availFilter}
         minRating={minRating}
         totalRegistered={totalRegistered}
+        allCategories={categories as any[]}
       />
     </div>
   );

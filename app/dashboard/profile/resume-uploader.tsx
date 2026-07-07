@@ -41,7 +41,7 @@ async function readPdf(file: File): Promise<string> {
   let pdfjs: any;
   try {
     pdfjs = await import("pdfjs-dist");
-    pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+    pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.js";
   } catch {
     throw new Error("PDF parser failed to load. Try again or paste the text manually.");
   }
@@ -171,6 +171,8 @@ export function ResumeUploader() {
     setSubmitting(false);
     if (res?.error) {
       setResult({ error: res.error });
+    } else if (res?.parseError) {
+      setResult({ error: `AI parse: ${res.parseError}` });
     } else {
       setResult({ ok: true, parsed: res.parsed });
       router.refresh();
