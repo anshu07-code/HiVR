@@ -18,7 +18,8 @@ import {
 } from "lucide-react";
 import { ShareButton } from "./share-button";
 import { TimeAgo } from "@/components/time-ago";
-import { SquirrelPanelMatch } from "./squirrel-wrapper";
+import { SquirrelMascot } from "@/components/marketing/squirrel-mascot";
+import { DeadlineDisplay } from "./deadline-display";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -31,7 +32,7 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
   // Fetch task + current user in parallel.
   const [{ data: task }, { data: { user } }] = await Promise.all([
     sb.from("task_posts")
-      .select("id, title, description, pricing_model, budget_min, budget_max, status, created_at, deadline, estimated_hours, buyer_id, category_id, openings, skills_required, category:skill_categories(slug, name, icon, tier)")
+      .select("id, title, description, pricing_model, budget_min, budget_max, status, created_at, deadline, estimated_hours, buyer_id, category_id, openings, skills_required, deliverables, category:skill_categories(slug, name, icon, tier)")
       .eq("id", taskId)
       .maybeSingle(),
     sb.auth.getUser(),
@@ -326,29 +327,6 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
                 <StatPill Icon={Briefcase} label="Openings" value={String((task as any).openings ?? 1)} hint={String((task as any).openings ?? 1) === "1" ? undefined : `${(task as any).openings ?? 1} hires`} />
               </div>
 
-              {/* Squirrel — left column only, below stats */}
-              <div className="mt-4">
-                <SquirrelPanelMatch
-                  mood={squirrelMood}
-                  message={squirrelNote}
-                  task={{
-                    id: task.id,
-                    title: task.title,
-                    description: task.description,
-                    pricing_model: task.pricing_model,
-                    budget_min: task.budget_min,
-                    budget_max: task.budget_max,
-                    deadline: task.deadline ?? null,
-                    category_name: (task as any).category?.name ?? undefined,
-                    skills_required: (task as any).skills_required ?? [],
-                    status: task.status,
-                    deliverables: (task as any).deliverables ?? null,
-                    buyer_name: buyerUser?.full_name ?? undefined,
-                  }}
-                  applicantCount={appCountView}
-                  isOwnTask={isBuyer}
-                />
-              </div>
             </div>
 
             {/* APPLY CTA — right side on desktop, sticky */}
@@ -372,18 +350,7 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
 
                 {/* Deadline display */}
                 {task.deadline && (
-                  <div className="mt-3 rounded-md border bg-amber-500/5 p-2 text-xs">
-                    <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
-                      <Clock className="h-3 w-3" />
-                      <span className="font-medium">
-                        {new Date(task.deadline) > new Date() ? "Closes" : "Closed"}{" "}
-                        {timeUntil(task.deadline as any)}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-[10px] text-muted-foreground">
-                      {new Date(task.deadline).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
-                    </p>
-                  </div>
+                  <DeadlineDisplay deadline={task.deadline as any} />
                 )}
 
                 {hasInteractions ? (
@@ -445,6 +412,30 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
         </div>
       </div>
 
+      {/* ============ SQUIRREL (between hero and tabs) ============ */}
+      <div className="container py-4">
+        <SquirrelMascot
+          mood={squirrelMood}
+          message={squirrelNote}
+          task={{
+            id: task.id,
+            title: task.title,
+            description: task.description,
+            pricing_model: task.pricing_model,
+            budget_min: task.budget_min,
+            budget_max: task.budget_max,
+            deadline: task.deadline ?? null,
+            category_name: (task as any).category?.name ?? undefined,
+            skills_required: (task as any).skills_required ?? [],
+            status: task.status,
+            deliverables: (task as any).deliverables ?? null,
+            buyer_name: buyerUser?.full_name ?? undefined,
+          }}
+          applicantCount={appCountView}
+          isOwnTask={isBuyer}
+        />
+      </div>
+
       {/* ============ MAIN BODY (tabs) ============ */}
       <div className="container pb-8 pt-4">
         <TaskTabs
@@ -461,6 +452,8 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
             deadline: task.deadline ?? null,
             estimated_hours: (task as any).estimated_hours ?? null,
             category: (task as any).category ?? null,
+            deliverables: (task as any).deliverables ?? null,
+            skills_required: (task as any).skills_required ?? [],
           }}
           applications={applications}
           queries={queries}

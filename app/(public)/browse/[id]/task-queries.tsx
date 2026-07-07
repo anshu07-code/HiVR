@@ -74,11 +74,11 @@ export function TaskQueries({
               <MessageCircle className="h-4 w-4" />
               Questions & Answers
             </CardTitle>
-            <CardDescription>
-              {queries.length === 0
-                ? "No questions yet. Buyers can ask, employees can answer."
-                : `${parents.length} question${parents.length === 1 ? "" : "s"}, ${queries.length - parents.length} repl${queries.length - parents.length === 1 ? "y" : "ies"}`}
-            </CardDescription>
+              <CardDescription>
+                {queries.length === 0
+                  ? "No questions yet. Anyone can ask, the buyer will answer."
+                  : `${parents.length} question${parents.length === 1 ? "" : "s"}, ${queries.length - parents.length} repl${queries.length - parents.length === 1 ? "y" : "ies"}`}
+              </CardDescription>
           </div>
         </div>
       </CardHeader>
@@ -102,7 +102,7 @@ export function TaskQueries({
                     <QueryBubble q={q} />
                     <div className="ml-8 space-y-3 border-l-2 pl-4">
                       {repliesOf(q.id).map((r) => <QueryBubble key={r.id} q={r} />)}
-                      <ReplyForm taskId={taskId} parentId={q.id} signedIn={signedIn} />
+                      {isBuyer && <ReplyForm taskId={taskId} parentId={q.id} signedIn={signedIn} />}
                     </div>
                   </div>
                 ))}

@@ -268,7 +268,7 @@ export function OfferBanner({ userId, profile }: { userId: string; profile: { cu
   }, [load]);
 
   const dismiss = (row: OfferRow) => {
-    setDismissed(row.id, 4);
+    setDismissed(row.id, 876000);
     setOffers((prev) => prev.filter((o) => o.id !== row.id));
   };
 

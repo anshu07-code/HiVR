@@ -31,6 +31,7 @@ type TaskLite = {
   deadline: string | null;
   estimated_hours: number | null;
   skills_required: string[] | null;
+  deliverables: string[] | null;
   category: { slug: string; name: string; icon: string; tier: string } | null;
 };
 
@@ -202,6 +203,26 @@ function OverviewTab({ task }: { task: TaskLite }) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Deliverables section */}
+      {task.deliverables && task.deliverables.length > 0 && (
+        <Card>
+          <CardContent className="p-6">
+            <h2 className="font-display text-lg font-semibold flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              Deliverables
+            </h2>
+            <ul className="mt-3 space-y-2">
+              {task.deliverables.map((d, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm">
+                  <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                  <span>{d}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Sticky right rail (extra info) */}
       <aside className="space-y-4">

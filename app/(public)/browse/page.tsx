@@ -342,10 +342,9 @@ export default async function BrowsePage({ searchParams }: { searchParams: { cat
                             <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{p.description}</p>
                             {skills.length > 0 && (
                               <div className="mt-3 flex flex-wrap gap-1.5">
-                                {skills.slice(0, 4).map((s: string) => (
+                                {skills.map((s: string) => (
                                   <span key={s} className="inline-flex items-center rounded-full border bg-muted/30 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">{s}</span>
                                 ))}
-                                {skills.length > 4 && <span className="text-[10px] text-muted-foreground">+{skills.length - 4} more</span>}
                               </div>
                             )}
                             <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
