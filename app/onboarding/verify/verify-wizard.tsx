@@ -4,8 +4,8 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Camera, Upload, Calendar, Check, ChevronRight, Loader2,
-  AlertTriangle, XCircle, Clock, ArrowRight, Info, Landmark, FileText,
-  QrCode, ShieldCheck, ScanLine, User, SkipForward, Smartphone, Clipboard,
+  AlertTriangle, XCircle, Clock, ArrowRight, Info, Landmark,
+  ShieldCheck, ScanLine, User, Smartphone, Clipboard,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,24 +13,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { SelfieCapture, type SelfieResult } from "@/components/verify/selfie-capture";
+import { SelfieCaptureDidit, type DiditSelfieResult } from "@/components/verify/selfie-capture-didit";
 import { DocumentUpload, type DocumentKind, type DocumentResult } from "@/components/verify/document-upload";
 import { BankStep, type BankStepResult } from "@/components/verify/bank-step";
 import { QrScanner, type QrScanResult } from "@/components/verify/qr-scanner";
-import { perceptualHash, fuzzyNameMatch, hashSimilarity } from "@/lib/verification";
-import { verifyAadhaarQr, type AadhaarSignedData } from "@/lib/verification/aadhaar-qr";
-import { verifyPanQr, type PanQrData } from "@/lib/verification/pan-qr";
+import { fuzzyNameMatch } from "@/lib/verification";
+import type { AadhaarSignedData } from "@/lib/verification/aadhaar-qr";
 import { cn } from "@/lib/utils";
 
-type StepId = "dob" | "selfie" | "pan" | "aadhaar" | "bank" | "result";
+type StepId = "dob" | "selfie" | "aadhaar" | "bank" | "result";
 
-type SelfieState = SelfieResult & { hash: string | null };
+type SelfieState = { livenessScore: number; diditSessionId: string };
 type DocumentState = DocumentResult & { kind: DocumentKind };
 
 const STEPS: { id: StepId; label: string }[] = [
   { id: "dob",      label: "Date of birth" },
-  { id: "selfie",   label: "Liveness selfie" },
-  { id: "pan",      label: "PAN card" },
+  { id: "selfie",   label: "Identity verification" },
   { id: "aadhaar",  label: "Aadhaar card" },
   { id: "bank",     label: "Bank verification" },
   { id: "result",   label: "Done" },
@@ -40,12 +38,6 @@ export function VerifyWizard({ userFullName, userEmail }: { userFullName: string
   const router = useRouter();
   const sp = useSearchParams();
 
-  // Demo mode is for local dev only — it lets the developer skip the
-  // real OCR + liveness. In production, the wizard runs the real flow
-  // (UIDAI public key signature verify for Aadhaar QR, Tesseract OCR
-  // for uploaded images, WebCrypto HMAC for hashing).
-  // The toggle is only visible when ?demo=1 is in the URL, or when
-  // NEXT_PUBLIC_VERIFY_DEMO_MODE=true is set at build time.
   const demoModeEnabled =
     sp.get("demo") === "1" ||
     (typeof process !== "undefined" &&
@@ -54,30 +46,80 @@ export function VerifyWizard({ userFullName, userEmail }: { userFullName: string
   const [step, setStep] = React.useState<StepId>("dob");
   const [dob, setDob] = React.useState("");
   const [sandbox, setSandbox] = React.useState(false);
+  const [initialLoading, setInitialLoading] = React.useState(true);
 
-  const [panSessionId, setPanSessionId] = React.useState<string | null>(null);
-  const [aadhaarSessionId, setAadhaarSessionId] = React.useState<string | null>(null);
+  const [sessionId, setSessionId] = React.useState<string | null>(null);
   const [selfie, setSelfie] = React.useState<SelfieState | null>(null);
-  const [pan, setPan] = React.useState<DocumentState | null>(null);
   const [aadhaar, setAadhaar] = React.useState<DocumentState | null>(null);
   const [bank, setBank] = React.useState<BankStepResult | null>(null);
-  const [panSkipped, setPanSkipped] = React.useState(false);
 
   // QR paths (preferred over upload when available)
   const [aadhaarQr, setAadhaarQr] = React.useState<AadhaarSignedData | null>(null);
   const [aadhaarQrRaw, setAadhaarQrRaw] = React.useState<string | null>(null);
-  const [aadhaarQrPhotoHash, setAadhaarQrPhotoHash] = React.useState<string | null>(null);
+  const [aadhaarQrVerified, setAadhaarQrVerified] = React.useState(false);
   const [aadhaarQrPhotoBlob, setAadhaarQrPhotoBlob] = React.useState<Blob | null>(null);
   const [aadhaarMode, setAadhaarMode] = React.useState<"choose" | "qr" | "upload">("choose");
+  const [faceMatchScore, setFaceMatchScore] = React.useState<number | null>(null);
+  const [displayName, setDisplayName] = React.useState(userFullName);
+  const [nameEditOpen, setNameEditOpen] = React.useState(false);
+  const [editNameValue, setEditNameValue] = React.useState(userFullName);
+  const [savingName, setSavingName] = React.useState(false);
 
-  const [panQr, setPanQr] = React.useState<PanQrData | null>(null);
-  const [panMode, setPanMode] = React.useState<"choose" | "qr" | "upload">("choose");
+  const aadhaarName = aadhaar?.ocrName || aadhaarQr?.name || null;
+  const nameMatchInfo = React.useMemo(() => {
+    if (!aadhaarName || !displayName) return null;
+    return fuzzyNameMatch(aadhaarName, displayName);
+  }, [aadhaarName, displayName]);
 
-  const [submitStatus, setSubmitStatus] = React.useState<{ pan?: "pending" | "ok" | "err" | "skipped"; aadhaar?: "pending" | "ok" | "err" }>({});
+  const [diditSelfieScore, setDiditSelfieScore] = React.useState<number | null>(null);
+
+  const [submitStatus, setSubmitStatus] = React.useState<{ aadhaar?: "pending" | "ok" | "err" }>({});
 
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [result, setResult] = React.useState<{ status: string; confidence: number } | null>(null);
+  const [existingVerifications, setExistingVerifications] = React.useState<{
+    aadhaar?: boolean; bank?: boolean;
+    bank_upi_provider?: string | null; bank_last4?: string | null;
+  } | null>(null);
+
+  // On mount, check if user already has verifications → skip completed steps
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/verification/check-status");
+        const json = await res.json();
+        if (json.ok) {
+          setExistingVerifications(json);
+          // If everything is done, go straight to result
+          if (json.bank && json.aadhaar) {
+            setAadhaar({
+              docBlob: new Blob([]),
+              mimeType: "image/jpeg",
+              ocrName: null, ocrDob: null, docNumber: null,
+              docHash: null, docValidityScore: 100, ocrText: "",
+              docNumberValid: true, lines: [],
+              kind: "adult_aadhaar",
+            });
+            setBank({
+              upiId: "",
+              accountHolder: "",
+              ifsc: "",
+              last4: json.bank_last4 || "",
+              upiProvider: json.bank_upi_provider || "",
+            });
+            setResult({ status: "auto_approved", confidence: 95 });
+            setStep("result");
+          } else if (json.aadhaar && !json.bank) {
+            goTo("bank");
+          } else if (json.selfie && !json.aadhaar) {
+            goTo("aadhaar");
+          }
+        }
+      } catch { /* normal if first visit */ }
+      setInitialLoading(false);
+    })();
+  }, []);
 
   const dobDate = React.useMemo(() => {
     if (!dob) return null;
@@ -130,29 +172,24 @@ export function VerifyWizard({ userFullName, userEmail }: { userFullName: string
     doc: DocumentState;
     nameMatchName: string;
     aadhaarQrVerified?: boolean;
-    aadhaarQrPhotoHash?: string | null;
   }) {
-    const { sessionId, doc, nameMatchName, aadhaarQrVerified, aadhaarQrPhotoHash } = opts;
+    const { sessionId, doc, nameMatchName, aadhaarQrVerified } = opts;
     const nameMatch = doc.ocrName
       ? fuzzyNameMatch(doc.ocrName, nameMatchName)
       : { score: 0, isMatch: false };
-    // For a UIDAI-signed Aadhaar QR, the signed name + DOB + photo are
-    // authoritative. If the user scanned a real Aadhaar QR AND the
-    // signed photo's perceptual hash matches the selfie, the face_score
-    // is set to 100 — that's the strongest possible signal a real Aadhaar
-    // card was held by the same person who took the selfie.
     let faceScore = selfie?.livenessScore ?? 0;
-    if (aadhaarQrVerified && aadhaarQrPhotoHash && selfie?.hash) {
-      const sim = hashSimilarity(aadhaarQrPhotoHash, selfie.hash);
-      // Require ≥70% perceptual similarity (Hamming distance ≤ 19/64)
-      faceScore = sim >= 70 ? Math.max(faceScore, Math.min(100, sim + 5)) : Math.max(0, faceScore - 30);
+    if (diditSelfieScore != null) {
+      faceScore = Math.max(faceScore, diditSelfieScore);
+    }
+    if (faceMatchScore != null) {
+      faceScore = Math.max(faceScore, faceMatchScore);
     }
     const challenges = {
-      face_score: faceScore,
-      name_score: aadhaarQrVerified ? 100 : nameMatch.score,
-      liveness_score: selfie?.livenessScore ?? 0,
-      doc_validity: aadhaarQrVerified ? 100 : doc.docValidityScore,
-      challenges: selfie?.livenessChallenges ?? [],
+      face_score: faceScore || 0,
+      name_score: aadhaarQrVerified ? 100 : nameMatch.score || 0,
+      liveness_score: (diditSelfieScore ?? selfie?.livenessScore) || 0,
+      doc_validity: aadhaarQrVerified ? 100 : doc.docValidityScore || 0,
+      challenges: [],
       aadhaar_qr_verified: !!aadhaarQrVerified,
     };
     const res = await fetch("/api/verification/submit", {
@@ -161,10 +198,9 @@ export function VerifyWizard({ userFullName, userEmail }: { userFullName: string
       body: JSON.stringify({
         sessionId,
         ocrFullName: doc.ocrName ?? "",
-        ocrDob: doc.ocrDob ? doc.ocrDob.toISOString().slice(0, 10) : "",
+        ocrDob: doc.ocrDob && !isNaN(doc.ocrDob.getTime()) ? doc.ocrDob.toISOString().slice(0, 10) : "",
         ocrDocumentNumber: doc.docNumber ?? "",
         ocrDocumentHash: doc.docHash ?? "",
-        selfieHash: selfie?.hash ?? "",
         livenessChallenges: challenges,
         aadhaarQrVerified: !!aadhaarQrVerified,
         sandbox,
@@ -180,8 +216,8 @@ export function VerifyWizard({ userFullName, userEmail }: { userFullName: string
     setBusy(true);
     setError(null);
     try {
-      const sessionId = await startSession("adult_pan");
-      setPanSessionId(sessionId);
+      const sid = await startSession("adult_aadhaar");
+      setSessionId(sid);
       goTo("selfie");
     } catch (e) {
       setError((e as Error).message);
@@ -190,37 +226,22 @@ export function VerifyWizard({ userFullName, userEmail }: { userFullName: string
     }
   }
 
-  async function onSelfieComplete(r: SelfieResult) {
-    if (!panSessionId) {
-      setError("Session lost. Please restart.");
-      return;
-    }
+  async function onSelfieComplete(r: DiditSelfieResult) {
     setBusy(true);
     setError(null);
     try {
-      const dataUrl = await blobToDataUrl(r.selfieBlob);
-      const img = await dataUrlToImage(dataUrl);
-      const hash = await perceptualHash(img);
-      await uploadAsset(panSessionId, "selfie", r.selfieBlob, r.selfieBlob.type || "image/jpeg");
-      setSelfie({ ...r, hash });
-      goTo("pan");
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function onPanComplete(r: DocumentResult) {
-    if (!panSessionId) {
-      setError("Session lost. Please restart.");
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      await uploadAsset(panSessionId, "document", r.docBlob, r.mimeType);
-      setPan({ ...r, kind: "adult_pan" });
+      const sessionStatus = r.livenessStatus === "InReview" ? "admin_review" : "auto_approved";
+      await fetch("/api/verification/save-selfie", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          diditSessionId: r.diditSessionId,
+          livenessScore: r.livenessScore,
+          status: sessionStatus,
+        }),
+      });
+      setDiditSelfieScore(r.livenessScore);
+      setSelfie({ livenessScore: r.livenessScore, diditSessionId: r.diditSessionId });
       goTo("aadhaar");
     } catch (e) {
       setError((e as Error).message);
@@ -230,16 +251,12 @@ export function VerifyWizard({ userFullName, userEmail }: { userFullName: string
   }
 
   async function onAadhaarComplete(r: DocumentResult) {
-    if (!panSessionId) {
-      setError("Session lost. Please restart.");
-      return;
-    }
     setBusy(true);
     setError(null);
     try {
-      const aadhaarSid = await startSession("adult_aadhaar");
-      setAadhaarSessionId(aadhaarSid);
-      await uploadAsset(aadhaarSid, "document", r.docBlob, r.mimeType);
+      const sid = sessionId || await startSession("adult_aadhaar");
+      if (!sessionId) setSessionId(sid);
+      await uploadAsset(sid, "document", r.docBlob, r.mimeType);
       const aadhaarState: DocumentState = { ...r, kind: "adult_aadhaar" };
       setAadhaar(aadhaarState);
       await runSubmit(aadhaarState);
@@ -250,92 +267,35 @@ export function VerifyWizard({ userFullName, userEmail }: { userFullName: string
     }
   }
 
-  // Reusable submit — called from both the upload path (after the
-  // DocumentUpload completes) and the QR path (when the user clicks
-  // "Continue" from the verified-by-QR summary).
   async function runSubmit(aadhaarState: DocumentState) {
-    if (!panSessionId) {
+    const sid = sessionId;
+    if (!sid) {
       setError("Session lost. Please restart.");
-      return;
-    }
-    // PAN is optional — only required for payouts. If the user skipped
-    // it (and didn't scan a QR either), we just submit Aadhaar alone.
-    const panProvided = !!(pan || panQr);
-    if (!panSkipped && !panProvided) {
-      setError("PAN result missing. Please restart the flow.");
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      // Ensure we have an aadhaar session
-      let aadhaarSid = aadhaarSessionId;
-      if (!aadhaarSid) {
-        aadhaarSid = await startSession("adult_aadhaar");
-        setAadhaarSessionId(aadhaarSid);
-        if (aadhaarState.docBlob.size > 0) {
-          await uploadAsset(aadhaarSid, "document", aadhaarState.docBlob, aadhaarState.mimeType);
-        }
+      if (aadhaarState.docBlob.size > 0) {
+        await uploadAsset(sid, "document", aadhaarState.docBlob, aadhaarState.mimeType);
       }
-      const nameMatchName = userFullName || userEmail.split("@")[0] || "there";
+      const nameMatchName = displayName || userFullName || userEmail.split("@")[0] || "there";
 
-      setSubmitStatus({ pan: panSkipped ? "skipped" : "pending", aadhaar: "pending" });
-
-      // PAN submit — only if the user actually provided one. If they
-      // skipped, we just leave the in_progress PAN session to expire.
-      if (panProvided && !panSkipped) {
-        try {
-          // Prefer QR if available (it carries the signed PAN)
-          if (pan) {
-            await submitDoc({ sessionId: panSessionId, doc: pan, nameMatchName });
-          } else if (panQr) {
-            await submitDoc({ sessionId: panSessionId, doc: {
-              docBlob: new Blob([panQr.raw], { type: "text/plain" }),
-              mimeType: "text/plain",
-              ocrName: panQr.name,
-              ocrDob: panQr.dob ? new Date(panQr.dob) : null,
-              docNumber: panQr.pan,
-              docHash: null,
-              docValidityScore: 100,
-              ocrText: `[PAN QR: ${panQr.pan}]`,
-              docNumberValid: true,
-              lines: [],
-              kind: "adult_pan",
-            }, nameMatchName });
-          }
-          setSubmitStatus((s) => ({ ...s, pan: "ok" }));
-        } catch (e) {
-          setSubmitStatus((s) => ({ ...s, pan: "err" }));
-          throw e;
-        }
-      } else if (panSkipped) {
-        // Mark the PAN session as skipped in the audit log so admins
-        // can see why. The session itself stays in_progress and will
-        // auto-expire (its TTL is short).
-        try {
-          await fetch("/api/verification/pan-skip", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ sessionId: panSessionId }),
-          });
-        } catch { /* non-fatal */ }
-        setSubmitStatus((s) => ({ ...s, pan: "skipped" }));
-      }
+      setSubmitStatus({ aadhaar: "pending" });
       try {
         await submitDoc({
-          sessionId: aadhaarSid,
+          sessionId: sid,
           doc: aadhaarState,
           nameMatchName,
-          aadhaarQrVerified: !!aadhaarQr,
-          aadhaarQrPhotoHash: aadhaarQrPhotoHash,
+          aadhaarQrVerified,
         });
-        setSubmitStatus((s) => ({ ...s, aadhaar: "ok" }));
+        setSubmitStatus({ aadhaar: "ok" });
       } catch (e) {
-        setSubmitStatus((s) => ({ ...s, aadhaar: "err" }));
+        setSubmitStatus({ aadhaar: "err" });
         throw e;
       }
 
-      setResult({ status: "auto_approved", confidence: aadhaarQr ? 95 : 88 });
+      setResult({ status: "auto_approved", confidence: aadhaarQrVerified ? 95 : aadhaarQr ? 88 : 80 });
       goTo("bank");
     } catch (e) {
       setError((e as Error).message);
@@ -349,40 +309,60 @@ export function VerifyWizard({ userFullName, userEmail }: { userFullName: string
     goTo("result");
   }
 
-  // ----- Aadhaar QR scan handler -----
+  // ----- Aadhaar QR scan handler (server-side UIDAI signature verify) -----
   async function onAadhaarQrScan(r: QrScanResult) {
     setBusy(true);
     setError(null);
     try {
-      const result = await verifyAadhaarQr(r.raw);
-      if (!result.ok) {
-        throw new Error(result.error);
+      const res = await fetch("/api/verify-aadhaar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ qrData: r.raw }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        throw new Error(json.message || "Verification failed");
       }
-      // Compute perceptual hash of the signed photo for face-match with
-      // the selfie. If the photo is present, we hash it; otherwise the
-      // server gets face_score from the liveness challenges alone.
-      let photoHash: string | null = null;
+      const data = json.data as {
+        name: string;
+        dob: string;
+        gender: string | null;
+        address: string | null;
+        photoBase64: string | null;
+        aadhaarLast4: string;
+      };
       let photoBlob: Blob | null = null;
-      if (result.data.photoBase64) {
-        const img = await dataUrlToImage(result.data.photoBase64);
-        photoHash = await perceptualHash(img);
-        // Convert to blob for upload as a verification asset
-        const res = await fetch(result.data.photoBase64);
-        photoBlob = await res.blob();
+      if (data.photoBase64) {
+        const dataUrl = data.photoBase64.startsWith("data:")
+          ? data.photoBase64
+          : `data:image/jpeg;base64,${data.photoBase64}`;
+        const blobRes = await fetch(dataUrl);
+        photoBlob = await blobRes.blob();
+        // Face match via Didit session decision (session-based, free tier)
+        if (selfie?.diditSessionId && photoBlob.size > 1000) {
+          const fmRes = await fetch(`/api/didit/decision?session_id=${selfie.diditSessionId}`);
+          if (fmRes.ok) {
+            const decision = await fmRes.json();
+            const fm = decision.face_match;
+            if (fm?.status === "Approved") {
+              const fmScore = fm.score ?? 0;
+              setFaceMatchScore(fmScore);
+              setDiditSelfieScore((prev) => Math.max(prev ?? 0, fmScore));
+            }
+          }
+        }
       }
-      setAadhaarQr(result.data);
+      setAadhaarQr(data as any);
       setAadhaarQrRaw(r.raw);
-      setAadhaarQrPhotoHash(photoHash);
+      setAadhaarQrVerified(json.verified);
       setAadhaarQrPhotoBlob(photoBlob);
-      // Pre-fill the Aadhaar document state with the signed values so
-      // the user can still see what was extracted.
       setAadhaar({
         docBlob: photoBlob ?? new Blob([], { type: "image/jpeg" }),
         mimeType: "image/jpeg",
-        ocrName: result.data.name,
-        ocrDob: result.data.dob ? new Date(result.data.dob) : null,
-        docNumber: result.data.aadhaarLast4 ? `xxxx-xxxx-${result.data.aadhaarLast4}` : null,
-        docHash: photoHash,
+        ocrName: data.name,
+        ocrDob: data.dob ? new Date(data.dob) : null,
+        docNumber: data.aadhaarLast4 ? `xxxx-xxxx-${data.aadhaarLast4}` : null,
+        docHash: null,
         docValidityScore: 100,
         ocrText: "[UIDAI-signed QR]",
         docNumberValid: true,
@@ -391,7 +371,6 @@ export function VerifyWizard({ userFullName, userEmail }: { userFullName: string
       });
       setAadhaarMode("choose");
       goTo("aadhaar");
-      // The user will see a "verified by QR" summary and click Continue
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -399,62 +378,34 @@ export function VerifyWizard({ userFullName, userEmail }: { userFullName: string
     }
   }
 
-  // ----- PAN QR scan handler -----
-  async function onPanQrScan(r: QrScanResult) {
-    setBusy(true);
-    setError(null);
-    try {
-      const result = verifyPanQr(r.raw, userFullName, dob);
-      if (!result.ok) {
-        throw new Error(result.error);
-      }
-      setPanQr(result.data);
-      // Pre-fill the PAN document state with the QR data
-      setPan({
-        docBlob: new Blob([r.raw], { type: "text/plain" }),
-        mimeType: "text/plain",
-        ocrName: result.data.name,
-        ocrDob: result.data.dob ? new Date(result.data.dob) : null,
-        docNumber: result.data.pan,
-        docHash: null,
-        docValidityScore: Math.round(result.crossCheck.score * 1.0),
-        ocrText: `[PAN QR: ${result.data.pan}]`,
-        docNumberValid: true,
-        lines: [],
-        kind: "adult_pan",
-      });
-      setPanMode("choose");
-      goTo("pan");
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
+  // ----- Aadhaar QR scan handler -----
 
-  function hashSimilarityStr(a: string, b: string): string {
-    return String(hashSimilarity(a, b));
-  }
-
-  function blobToDataUrl(blob: Blob): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(typeof r.result === "string" ? r.result : "");
-      r.onerror = () => reject(r.error);
-      r.readAsDataURL(blob);
-    });
-  }
-  function dataUrlToImage(dataUrl: string): Promise<HTMLImageElement> {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error("image load failed"));
-      img.src = dataUrl;
-    });
-  }
 
   return (
     <div className="space-y-5">
+      <style>{`
+        @keyframes scanLine {
+          0%, 100% { top: 0; }
+          50% { top: calc(100% - 4px); }
+        }
+        .scanner-line {
+          position: absolute;
+          left: 0;
+          right: 0;
+          height: 4px;
+          background: linear-gradient(90deg, transparent, hsl(var(--primary)), transparent);
+          animation: scanLine 2s ease-in-out infinite;
+          opacity: 0.6;
+        }
+        @keyframes stampApproved {
+          0% { transform: scale(0) rotate(-15deg); opacity: 0; }
+          50% { transform: scale(1.2) rotate(-5deg); opacity: 1; }
+          100% { transform: scale(1) rotate(-8deg); opacity: 1; }
+        }
+        .stamp-verified {
+          animation: stampApproved 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+      `}</style>
       <div>
         <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
           <span>Step {currentStepIndex + 1} of {STEPS.length}</span>
@@ -477,7 +428,17 @@ export function VerifyWizard({ userFullName, userEmail }: { userFullName: string
       </div>
 
       <div className="flex items-center justify-between">
-        <h1 className="font-display text-2xl font-semibold tracking-tight">Verify your identity</h1>
+        <div className="flex items-center gap-3">
+          {step !== "dob" && step !== "result" && (
+            <Button variant="ghost" size="sm" onClick={() => {
+              const idx = STEPS.findIndex((s) => s.id === step);
+              if (idx > 0) goTo(STEPS[idx - 1].id as StepId);
+            }}>
+              ← Back
+            </Button>
+          )}
+          <h1 className="font-display text-2xl font-semibold tracking-tight">Verify your identity</h1>
+        </div>
         {demoModeEnabled && (
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-1 text-[10px] text-amber-700">
             <input type="checkbox" checked={sandbox} onChange={(e) => setSandbox(e.target.checked)} />
@@ -500,7 +461,7 @@ export function VerifyWizard({ userFullName, userEmail }: { userFullName: string
               <Calendar className="h-4 w-4" /> When were you born?
             </CardTitle>
             <CardDescription>
-              Used to set the verification session expiry. Everyone follows the same 5-step flow — Aadhaar, PAN, selfie, and a ₹1 UPI bank verify.
+               Used to set the verification session expiry.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -532,140 +493,18 @@ export function VerifyWizard({ userFullName, userEmail }: { userFullName: string
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Camera className="h-4 w-4" /> Liveness selfie
+              <Camera className="h-4 w-4" /> Identity verification
             </CardTitle>
-            <CardDescription>
-              3 quick challenges — blink, turn, smile. We never see a video, only the final frame.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <SelfieCapture
-              onComplete={onSelfieComplete}
-              onCancel={() => goTo("dob")}
-            />
-          </CardContent>
-        </Card>
-      )}
-
-      {step === "pan" && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-4 w-4" /> Verify your PAN
-              <Badge variant="outline" className="ml-1 text-[9px]">Optional</Badge>
-            </CardTitle>
-            <CardDescription>
-              10-character PAN. PAN is only required to receive payments above ₹30,000/year (TDS rule).
-              You can add it later from your dashboard.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {panMode === "choose" && (
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => setPanMode("qr")}
-                  className="flex w-full items-start gap-3 rounded-lg border-2 border-primary/40 bg-primary/5 p-3 text-left transition-colors hover:bg-primary/10"
-                >
-                  <QrCode className="mt-0.5 h-5 w-5 text-primary" />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-semibold">Scan PAN QR code</p>
-                      <Badge variant="success" className="text-[9px]">Recommended</Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Hold the back of your PAN card up to your camera. We extract name + DOB + PAN instantly.
-                    </p>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPanMode("upload")}
-                  className="flex w-full items-start gap-3 rounded-lg border bg-muted/20 p-3 text-left transition-colors hover:bg-muted/40"
-                >
-                  <Upload className="mt-0.5 h-5 w-5 text-muted-foreground" />
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold">Upload PAN image</p>
-                    <p className="text-xs text-muted-foreground">
-                      Fallback: we OCR the front of the card with Tesseract.js. Less accurate.
-                    </p>
-                  </div>
-                </button>
-                <div className="rounded-md border border-dashed bg-muted/20 p-3">
-                  <p className="text-xs text-muted-foreground">
-                    <strong className="text-foreground">Don&apos;t have a PAN card?</strong> Students, homemakers, and
-                    rural workers often don&apos;t have one. You can skip this and add it later from your
-                    dashboard before you receive any payment.
-                  </p>
-                </div>
-              </div>
-            )}
-            {panMode === "qr" && (
-              <QrScanner
-                title="Scan PAN card QR"
-                description="PAN QRs are JSON. We recommend pasting the raw text — it's more reliable than the camera."
-                defaultMode="manual"
-                guideSteps={[
-                  { icon: <FileText className="h-3 w-3" />, text: <>Locate the <strong>QR on the back</strong> of your PAN card.</> },
-                  { icon: <Camera className="h-3 w-3" />, text: <>Use <strong>Google Lens</strong> or any QR scanner app on your phone.</> },
-                  { icon: <Clipboard className="h-3 w-3" />, text: <>Tap <strong>&quot;Copy text&quot;</strong> in the scanner → paste here.</> },
-                ]}
-                validate={(raw) => {
-                  if (!raw.trim().startsWith("{")) return "Not a JSON QR code — point at the back of your PAN card.";
-                  try {
-                    const j = JSON.parse(raw);
-                    if (!j.PAN && !j.pan) return "QR doesn't contain a PAN field.";
-                  } catch {
-                    return "Could not read QR data.";
-                  }
-                  return null;
-                }}
-                onResult={onPanQrScan}
-                onCancel={() => setPanMode("choose")}
-              />
-            )}
-            {panMode === "upload" && (
-              <DocumentUpload
-                kind="adult_pan"
-                presetDob={dobDate}
-                onComplete={onPanComplete}
-                onCancel={() => setPanMode("choose")}
-              />
-            )}
-            {panQr && panMode === "choose" && (
-              <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3 text-xs">
-                <div className="flex items-center gap-1.5 text-emerald-700">
-                  <Check className="h-3.5 w-3.5" /> PAN QR captured — {panQr.pan}
-                </div>
-                <p className="mt-1 text-muted-foreground">Name: {panQr.name} · DOB: {panQr.dob || "—"}</p>
-              </div>
-            )}
-          </CardContent>
-          <div className="flex flex-wrap items-center justify-between gap-2 px-6 pb-4">
-            <Button variant="ghost" size="sm" onClick={() => goTo("selfie")}>
-              Back
-            </Button>
-            <div className="flex flex-wrap items-center gap-2">
-              {panMode === "choose" && !pan && !panQr && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setPanSkipped(true);
-                    goTo("aadhaar");
-                  }}
-                >
-                  <SkipForward className="h-3.5 w-3.5" />
-                  Skip for now
-                </Button>
-              )}
-              {panMode === "choose" && (pan || panQr) && (
-                <Button size="sm" variant="gradient" onClick={() => goTo("aadhaar")}>
-                  Continue <ChevronRight className="h-3.5 w-3.5" />
-                </Button>
-              )}
-            </div>
-          </div>
+             <CardDescription>
+                Verify your identity through a secure verification page. Includes liveness check, ID document scan, and face match.
+             </CardDescription>
+           </CardHeader>
+           <CardContent>
+             <SelfieCaptureDidit
+               onComplete={onSelfieComplete}
+               onCancel={() => goTo("dob")}
+             />
+           </CardContent>
         </Card>
       )}
 
@@ -713,23 +552,64 @@ export function VerifyWizard({ userFullName, userEmail }: { userFullName: string
                   </div>
                 </button>
                 {aadhaarQr && (
-                  <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3 text-xs">
-                    <div className="flex items-center gap-1.5 text-emerald-700">
-                      <ShieldCheck className="h-3.5 w-3.5" /> Aadhaar QR signature verified by UIDAI public key
+                  <div className={cn(
+                    "rounded-md border p-3 text-xs",
+                    aadhaarQrVerified
+                      ? "border-emerald-500/30 bg-emerald-500/5"
+                      : "border-amber-500/30 bg-amber-500/5",
+                  )}>
+                    <div className={cn(
+                      "flex items-center gap-1.5",
+                      aadhaarQrVerified ? "text-emerald-700" : "text-amber-700",
+                    )}>
+                      {aadhaarQrVerified
+                        ? <ShieldCheck className="h-3.5 w-3.5" />
+                        : <AlertTriangle className="h-3.5 w-3.5" />
+                      }
+                      {aadhaarQrVerified
+                        ? "Aadhaar QR signature verified by UIDAI public key"
+                        : "Aadhaar QR data decoded but signature could not be verified"
+                      }
                     </div>
                     <p className="mt-1 text-muted-foreground">
                       Name: {aadhaarQr.name} · DOB: {aadhaarQr.dob || "—"} · Aadhaar ends ••••{aadhaarQr.aadhaarLast4}
                     </p>
-                    {aadhaarQrPhotoHash && selfie?.hash && (
-                      <p className="mt-0.5 text-muted-foreground">
-                        Photo vs selfie perceptual hash: {hashSimilarityStr(aadhaarQrPhotoHash, selfie.hash)}%
-                      </p>
-                    )}
                   </div>
                 )}
-                {submitStatus.pan === "ok" && submitStatus.aadhaar === "ok" && (
+                {aadhaarName && nameMatchInfo && (
+                  <NameMatchCard
+                    aadhaarName={aadhaarName}
+                    accountName={displayName}
+                    matchInfo={nameMatchInfo}
+                    isEditing={nameEditOpen}
+                    editValue={editNameValue}
+                    saving={savingName}
+                    onEdit={() => { setNameEditOpen(true); setEditNameValue(displayName); }}
+                    onCancel={() => { setNameEditOpen(false); setEditNameValue(displayName); }}
+                    onChange={setEditNameValue}
+                    onSave={async () => {
+                      setSavingName(true);
+                      try {
+                        const res = await fetch("/api/profile/update-name", {
+                          method: "POST",
+                          headers: { "content-type": "application/json" },
+                          body: JSON.stringify({ full_name: editNameValue.trim() }),
+                        });
+                        const json = await res.json();
+                        if (!json.ok) throw new Error(json.error);
+                        setDisplayName(editNameValue.trim());
+                        setNameEditOpen(false);
+                      } catch (e) {
+                        setError((e as Error).message);
+                      } finally {
+                        setSavingName(false);
+                      }
+                    }}
+                  />
+                )}
+                {submitStatus.aadhaar === "ok" && (
                   <div className="rounded-md border bg-muted/30 p-2 text-[10px] text-emerald-700">
-                    <Check className="mr-1 inline h-3 w-3" /> Both sessions submitted.
+                    <Check className="mr-1 inline h-3 w-3" /> Aadhaar submitted.
                   </div>
                 )}
               </div>
@@ -765,17 +645,25 @@ export function VerifyWizard({ userFullName, userEmail }: { userFullName: string
               />
             )}
             {busy && aadhaarMode === "qr" && (
-              <p className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                <Loader2 className="h-3 w-3 animate-spin" /> Verifying UIDAI signature…
-              </p>
+              <div className="relative overflow-hidden rounded-lg border bg-gradient-to-br from-primary/5 via-primary/10 to-primary/5 p-8 text-center">
+                <div className="absolute inset-0">
+                  <div className="scanner-line" />
+                </div>
+                <div className="relative z-10 mx-auto mb-3 grid h-16 w-16 place-items-center rounded-full bg-primary/20 text-primary">
+                  <ScanLine className="h-8 w-8 animate-pulse" />
+                </div>
+                <p className="relative z-10 font-semibold text-primary">Scanning Aadhaar QR</p>
+                <p className="relative z-10 mt-1 text-xs text-muted-foreground">Verifying UIDAI signature &amp; matching photo to selfie…</p>
+                <div className="relative z-10 mt-4 flex items-center justify-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "0ms" }} />
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "150ms" }} />
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "300ms" }} />
+                </div>
+              </div>
             )}
-            {(submitStatus.pan || submitStatus.aadhaar) && (
+            {submitStatus.aadhaar && (
               <div className="space-y-1 rounded-md border bg-muted/20 p-2 text-[10px]">
                 <p className="font-semibold text-muted-foreground">Submitting…</p>
-                <div className="flex items-center gap-1.5">
-                  {submitStatus.pan === "ok" ? <Check className="h-3 w-3 text-emerald-600" /> : submitStatus.pan === "err" ? <XCircle className="h-3 w-3 text-destructive" /> : <Loader2 className="h-3 w-3 animate-spin" />}
-                  <span>PAN</span>
-                </div>
                 <div className="flex items-center gap-1.5">
                   {submitStatus.aadhaar === "ok" ? <Check className="h-3 w-3 text-emerald-600" /> : submitStatus.aadhaar === "err" ? <XCircle className="h-3 w-3 text-destructive" /> : <Loader2 className="h-3 w-3 animate-spin" />}
                   <span>Aadhaar</span>
@@ -787,11 +675,11 @@ export function VerifyWizard({ userFullName, userEmail }: { userFullName: string
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => goTo("pan")}
+              onClick={() => goTo("selfie")}
             >
               Back
             </Button>
-            {aadhaarMode === "choose" && aadhaar && !submitStatus.pan && (
+            {aadhaarMode === "choose" && aadhaar && (
               <Button
                 size="sm"
                 variant="gradient"
@@ -819,7 +707,7 @@ export function VerifyWizard({ userFullName, userEmail }: { userFullName: string
           </CardHeader>
           <CardContent>
             <BankStep
-              userFullName={userFullName}
+               userFullName={displayName}
               onComplete={onBankComplete}
             />
           </CardContent>
@@ -828,10 +716,10 @@ export function VerifyWizard({ userFullName, userEmail }: { userFullName: string
 
       {step === "result" && (
         <ResultStep
-          aadhaar={!!aadhaar}
-          pan={!!pan}
-          panSkipped={panSkipped}
-          bank={bank}
+          aadhaar={existingVerifications?.aadhaar ?? !!aadhaar}
+          bank_upi_provider={existingVerifications?.bank_upi_provider ?? bank?.upiProvider ?? ""}
+          bank_last4={existingVerifications?.bank_last4 ?? bank?.last4 ?? ""}
+          bank_verified={existingVerifications?.bank ?? !!bank}
           status={result?.status ?? "auto_approved"}
           confidence={result?.confidence ?? 92}
           onContinue={() => router.push(sp.get("next") || "/dashboard?verified=1")}
@@ -843,17 +731,27 @@ export function VerifyWizard({ userFullName, userEmail }: { userFullName: string
           <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />Working on it…
         </p>
       )}
+
+      {initialLoading && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground">Checking your verification status…</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function ResultStep({
-  aadhaar, pan, panSkipped, bank, status, confidence, onContinue,
+  aadhaar, bank_verified, bank_upi_provider, bank_last4,
+  status, confidence, onContinue,
 }: {
   aadhaar: boolean;
-  pan: boolean;
-  panSkipped: boolean;
-  bank: BankStepResult | null;
+  bank_verified: boolean;
+  bank_upi_provider: string;
+  bank_last4: string;
   status: string;
   confidence: number;
   onContinue: () => void;
@@ -863,7 +761,14 @@ function ResultStep({
   const isRejected = status === "rejected";
 
   return (
-    <Card>
+    <Card className="relative overflow-hidden">
+      {isApproved && (
+        <div className="stamp-verified pointer-events-none absolute right-4 top-4 z-20 rotate-[-8deg] rounded-lg border-4 border-emerald-600 px-3 py-1.5">
+          <p className="font-bold tracking-wider text-emerald-600" style={{ fontSize: "clamp(0.7rem, 2vw, 0.9rem)" }}>
+            ✓ VERIFIED
+          </p>
+        </div>
+      )}
       <CardContent className="space-y-4 p-6 text-center">
         {isApproved && (
           <>
@@ -902,26 +807,11 @@ function ResultStep({
         <ul className="mx-auto max-w-md space-y-2 text-left">
           <StatusLine label="Aadhaar" ok={aadhaar} />
           <StatusLine
-            label="PAN"
-            ok={pan}
-            pending={panSkipped}
-            pendingLabel="Skipped"
-            pendingHint="Add it later from your dashboard before you receive payments above ₹30K."
-          />
-          <StatusLine
             label="Bank"
-            ok={!!bank}
-            extra={bank ? `${bank.upiProvider} · •••• ${bank.last4}` : undefined}
+            ok={bank_verified}
+            extra={bank_verified ? `${bank_upi_provider} · •••• ${bank_last4}` : undefined}
           />
         </ul>
-
-        {panSkipped && (
-          <div className="mx-auto max-w-md rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-left text-[11px] text-amber-700">
-            <Info className="mr-1 inline h-3 w-3" />
-            You can browse and apply for jobs now. To <strong>receive payments above ₹30,000/year</strong>
-            {" "}or withdraw earnings, you&apos;ll need to verify your PAN + bank account from your dashboard.
-          </div>
-        )}
 
         <div className="mx-auto max-w-md rounded-md border bg-muted/20 p-3 text-left text-[10px] text-muted-foreground">
           <Info className="mr-1 inline h-3 w-3" />
@@ -933,6 +823,85 @@ function ResultStep({
         </Button>
       </CardContent>
     </Card>
+  );
+}
+
+function NameMatchCard({
+  aadhaarName, accountName, matchInfo,
+  isEditing, editValue, saving,
+  onEdit, onCancel, onChange, onSave,
+}: {
+  aadhaarName: string;
+  accountName: string;
+  matchInfo: { score: number; isMatch: boolean };
+  isEditing: boolean;
+  editValue: string;
+  saving: boolean;
+  onEdit: () => void;
+  onCancel: () => void;
+  onChange: (v: string) => void;
+  onSave: () => void;
+}) {
+  const isMatch = matchInfo.isMatch || matchInfo.score >= 70;
+  return (
+    <div className={cn(
+      "rounded-md border p-3 text-xs",
+      isMatch ? "border-emerald-500/30 bg-emerald-500/5" : "border-amber-500/30 bg-amber-500/5",
+    )}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          {isMatch
+            ? <Check className="h-3.5 w-3.5 text-emerald-700" />
+            : <AlertTriangle className="h-3.5 w-3.5 text-amber-700" />
+          }
+          <span className={isMatch ? "text-emerald-700 font-medium" : "text-amber-700 font-medium"}>
+            {isMatch ? "Name matches" : "Name mismatch"}
+          </span>
+        </div>
+        {!isEditing && !isMatch && (
+          <Button variant="outline" size="sm" className="h-6 text-[10px]" onClick={onEdit}>
+            Edit my name
+          </Button>
+        )}
+      </div>
+      {!isEditing ? (
+        <div className="mt-1.5 space-y-1 text-muted-foreground">
+          <p><span className="text-foreground">Aadhaar:</span> {aadhaarName}</p>
+          <p><span className="text-foreground">Account:</span> {accountName}</p>
+          <p>Match: <span className={cn("font-mono", isMatch ? "text-emerald-700" : "text-amber-700")}>{matchInfo.score}%</span></p>
+          {!isMatch && (
+            <p className="text-[10px] text-amber-600">
+              Your account name doesn&apos;t match your Aadhaar. Edit it above to proceed, or contact support if this is an error.
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="mt-2 space-y-2">
+          <div className="space-y-1">
+            <Label className="text-[10px]">Aadhaar name (read-only)</Label>
+            <Input value={aadhaarName} readOnly className="h-7 text-xs bg-muted/50" />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[10px]">Account name</Label>
+            <Input
+              value={editValue}
+              onChange={(e) => onChange(e.target.value)}
+              className="h-7 text-xs"
+              placeholder="Enter your name as per Aadhaar"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={onCancel} disabled={saving}>
+              Cancel
+            </Button>
+            <Button size="sm" variant="gradient" className="h-7 text-[10px]" onClick={onSave} disabled={saving || editValue.trim().length < 2}>
+              {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+              {saving ? "Saving..." : "Save name"}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

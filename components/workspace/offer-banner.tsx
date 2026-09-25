@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { X, Sparkles, Briefcase, IndianRupee, Clock, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { X, Sparkles, Briefcase, Clock, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { formatPaise, timeUntil } from "@/lib/utils";
@@ -26,22 +26,26 @@ type OfferRow = {
   application_id?: string;
 };
 
-const DISMISS_KEY = (id: string) => `offer-banner-dismiss:${id}`;
+const DISMISS_PREFIX = "hivr:offer-dismiss:";
+const DISMISS_DURATION_MS = 365 * 24 * 3600_000; // 1 year
+
+function getDismissKey(id: string) {
+  return DISMISS_PREFIX + id;
+}
 
 function isDismissed(id: string): boolean {
   if (typeof window === "undefined") return false;
   try {
-    const raw = localStorage.getItem(DISMISS_KEY(id));
+    const raw = localStorage.getItem(getDismissKey(id));
     if (!raw) return false;
-    const until = Number(raw);
-    return until > Date.now();
+    return Number(raw) > Date.now();
   } catch { return false; }
 }
 
-function setDismissed(id: string, hours: number) {
+function markDismissed(id: string) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(DISMISS_KEY(id), String(Date.now() + hours * 3600_000));
+    localStorage.setItem(getDismissKey(id), String(Date.now() + DISMISS_DURATION_MS));
   } catch {}
 }
 
@@ -56,13 +60,6 @@ export function OfferBanner({ userId, profile }: { userId: string; profile: { cu
   const load = React.useCallback(async () => {
     if (!sbRef.current) sbRef.current = createClient();
     const sb = sbRef.current;
-
-    const { data: settings } = await sb
-      .from("platform_settings")
-      .select("key, value")
-      .eq("key", "offer_reminder_intervals_hours")
-      .maybeSingle();
-    const intervals = (settings as any)?.value?.value ?? [2, 24, 72];
 
     if (side === "employee") {
       const [{ data: appOffers }, { data: negOffers }, { data: shortlists }, { data: allSettleRounds }] = await Promise.all([
@@ -89,55 +86,30 @@ export function OfferBanner({ userId, profile }: { userId: string; profile: { cu
       const rows: OfferRow[] = [];
 
       for (const o of (appOffers ?? []) as any[]) {
-        const createdAt = new Date(o.created_at).getTime();
-        const exp = new Date(o.expires_at).getTime();
-        const elapsedH = (Date.now() - createdAt) / 3600_000;
-        const intervalPassed = intervals.some((h: number) => elapsedH >= h - 0.1);
-        if (!intervalPassed && !isDismissed(`ao:${o.id}`)) continue;
-        if (isDismissed(`ao:${o.id}`)) {
-          const until = Number(localStorage.getItem(DISMISS_KEY(`ao:${o.id}`)) || 0);
-          if (until > Date.now()) continue;
-        }
+        if (isDismissed(`ao:${o.id}`)) continue;
         rows.push({
-          id: `ao:${o.id}`,
-          kind: "application_offer",
-          ref_id: o.id,
+          id: `ao:${o.id}`, kind: "application_offer", ref_id: o.id,
           task_id: o.applications?.task_id ?? o.applications?.task?.id,
           task_title: o.applications?.task?.title ?? "Task",
-          amount_paise: o.amount_paise,
-          expires_at: o.expires_at,
+          amount_paise: o.amount_paise, expires_at: o.expires_at,
           buyer_name: o.applications?.task?.buyer?.full_name ?? null,
-          employee_name: null,
-          message: o.message,
-          created_at: o.created_at,
-          applicant_id: userId,
-          buyer_id: o.applications?.task?.buyer?.id ?? "",
+          employee_name: null, message: o.message, created_at: o.created_at,
+          applicant_id: userId, buyer_id: o.applications?.task?.buyer?.id ?? "",
           side: "employee",
         });
       }
 
       for (const o of (negOffers ?? []) as any[]) {
         if (isDismissed(`no:${o.id}`)) continue;
-        const createdAt = new Date(o.created_at).getTime();
-        const expiresAt = new Date(createdAt + 24 * 3600_000).toISOString();
-        if (new Date(expiresAt).getTime() < Date.now()) continue;
-        const elapsedH = (Date.now() - createdAt) / 3600_000;
-        const intervalPassed = intervals.some((h: number) => elapsedH >= h - 0.1);
-        if (!intervalPassed) continue;
+        const expiresAt = new Date(new Date(o.created_at).getTime() + 24 * 3600_000);
+        if (expiresAt.getTime() < Date.now()) continue;
         rows.push({
-          id: `no:${o.id}`,
-          kind: "negotiation_offer",
-          ref_id: o.id,
-          task_id: o.task_post_id,
-          task_title: o.task?.title ?? "Task",
-          amount_paise: o.proposed_price,
-          expires_at: expiresAt,
-          buyer_name: o.task?.buyer?.full_name ?? null,
-          employee_name: null,
-          message: o.comment,
-          created_at: o.created_at,
-          applicant_id: userId,
-          buyer_id: o.task?.buyer?.id ?? "",
+          id: `no:${o.id}`, kind: "negotiation_offer", ref_id: o.id,
+          task_id: o.task_post_id, task_title: o.task?.title ?? "Task",
+          amount_paise: o.proposed_price, expires_at: expiresAt.toISOString(),
+          buyer_name: o.task?.buyer?.full_name ?? null, employee_name: null,
+          message: o.comment, created_at: o.created_at,
+          applicant_id: userId, buyer_id: o.task?.buyer?.id ?? "",
           side: "employee",
         });
       }
@@ -146,19 +118,13 @@ export function OfferBanner({ userId, profile }: { userId: string; profile: { cu
         if (settleAppIds.has(a.id)) continue;
         if (isDismissed(`sl:${a.id}`)) continue;
         rows.push({
-          id: `sl:${a.id}`,
-          kind: "shortlist",
-          ref_id: a.id,
+          id: `sl:${a.id}`, kind: "shortlist", ref_id: a.id,
           task_id: a.task_id ?? a.task?.id,
           task_title: a.task?.title ?? "Task",
-          amount_paise: null,
-          expires_at: null,
-          buyer_name: a.task?.buyer?.full_name ?? null,
-          employee_name: null,
-          message: null,
-          created_at: a.updated_at ?? a.created_at,
-          applicant_id: userId,
-          buyer_id: a.task?.buyer?.id ?? "",
+          amount_paise: null, expires_at: null,
+          buyer_name: a.task?.buyer?.full_name ?? null, employee_name: null,
+          message: null, created_at: a.updated_at ?? a.created_at,
+          applicant_id: userId, buyer_id: a.task?.buyer?.id ?? "",
           side: "employee",
         });
       }
@@ -166,22 +132,14 @@ export function OfferBanner({ userId, profile }: { userId: string; profile: { cu
       for (const r of (settleRounds ?? []) as any[]) {
         if (isDismissed(`st:${r.id}`)) continue;
         rows.push({
-          id: `st:${r.id}`,
-          kind: "settlement",
-          ref_id: r.id,
+          id: `st:${r.id}`, kind: "settlement", ref_id: r.id,
           task_id: r.application?.task_id ?? r.application?.task?.id,
           task_title: r.application?.task?.title ?? "Task",
-          amount_paise: r.amount_paise,
-          expires_at: null,
-          buyer_name: r.application?.task?.buyer?.full_name ?? null,
-          employee_name: null,
-          message: `Round ${r.round_number} counter`,
-          created_at: r.created_at,
-          applicant_id: userId,
-          buyer_id: r.application?.task?.buyer?.id ?? "",
-          side: "employee",
-          round_number: r.round_number,
-          application_id: r.application_id,
+          amount_paise: r.amount_paise, expires_at: null,
+          buyer_name: r.application?.task?.buyer?.full_name ?? null, employee_name: null,
+          message: `Round ${r.round_number} counter`, created_at: r.created_at,
+          applicant_id: userId, buyer_id: r.application?.task?.buyer?.id ?? "",
+          side: "employee", round_number: r.round_number, application_id: r.application_id,
         });
       }
 
@@ -209,42 +167,27 @@ export function OfferBanner({ userId, profile }: { userId: string; profile: { cu
         if (settleAppIds.has(a.id)) continue;
         if (isDismissed(`ba:${a.id}`)) continue;
         rows.push({
-          id: `ba:${a.id}`,
-          kind: "application_offer",
-          ref_id: a.id,
+          id: `ba:${a.id}`, kind: "application_offer", ref_id: a.id,
           task_id: a.task_id ?? a.task?.id,
           task_title: a.task?.title ?? "Task",
-          amount_paise: null,
-          expires_at: null,
-          buyer_name: null,
-          employee_name: a.employee?.full_name ?? null,
-          message: null,
-          created_at: a.updated_at ?? a.created_at,
-          applicant_id: a.employee_id,
-          buyer_id: userId,
-          side: "buyer",
+          amount_paise: null, expires_at: null,
+          buyer_name: null, employee_name: a.employee?.full_name ?? null,
+          message: null, created_at: a.updated_at ?? a.created_at,
+          applicant_id: a.employee_id, buyer_id: userId, side: "buyer",
         });
       }
 
       for (const r of (settleRounds ?? []) as any[]) {
         if (isDismissed(`st:${r.id}`)) continue;
         rows.push({
-          id: `st:${r.id}`,
-          kind: "settlement",
-          ref_id: r.id,
+          id: `st:${r.id}`, kind: "settlement", ref_id: r.id,
           task_id: r.application?.task_id ?? r.application?.task?.id,
           task_title: r.application?.task?.title ?? "Task",
-          amount_paise: r.amount_paise,
-          expires_at: null,
-          buyer_name: null,
-          employee_name: r.application?.employee?.full_name ?? null,
-          message: `Round ${r.round_number} counter`,
-          created_at: r.created_at,
-          applicant_id: r.application?.employee_id ?? "",
-          buyer_id: userId,
-          side: "buyer",
-          round_number: r.round_number,
-          application_id: r.application_id,
+          amount_paise: r.amount_paise, expires_at: null,
+          buyer_name: null, employee_name: r.application?.employee?.full_name ?? null,
+          message: `Round ${r.round_number} counter`, created_at: r.created_at,
+          applicant_id: r.application?.employee_id ?? "", buyer_id: userId,
+          side: "buyer", round_number: r.round_number, application_id: r.application_id,
         });
       }
 
@@ -268,7 +211,7 @@ export function OfferBanner({ userId, profile }: { userId: string; profile: { cu
   }, [load]);
 
   const dismiss = (row: OfferRow) => {
-    setDismissed(row.id, 876000);
+    markDismissed(row.id);
     setOffers((prev) => prev.filter((o) => o.id !== row.id));
   };
 
@@ -287,6 +230,7 @@ export function OfferBanner({ userId, profile }: { userId: string; profile: { cu
           return;
         }
         setOffers((prev) => prev.filter((o) => o.id !== row.id));
+        markDismissed(row.id);
       } else if (row.kind === "negotiation_offer") {
         const r = await fetch(`/api/negotiation/respond`, {
           method: "POST", headers: { "content-type": "application/json" },
@@ -294,6 +238,7 @@ export function OfferBanner({ userId, profile }: { userId: string; profile: { cu
         });
         if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d?.error ?? "Failed"); return; }
         setOffers((prev) => prev.filter((o) => o.id !== row.id));
+        markDismissed(row.id);
       } else {
         window.location.href = "/dashboard/applications";
       }
@@ -309,7 +254,7 @@ export function OfferBanner({ userId, profile }: { userId: string; profile: { cu
   if (visible.length === 0) return null;
 
   return (
-    <div className="sticky top-0 z-50 w-full border-b border-amber-300/40 bg-gradient-to-r from-amber-50 via-amber-100 to-amber-50 text-amber-900 shadow-sm">
+    <div className="sticky top-[60px] z-30 w-full border-b border-amber-300/40 bg-gradient-to-r from-amber-50 via-amber-100 to-amber-50 text-amber-900 shadow-sm print:hidden">
       <div className="mx-auto flex max-w-7xl flex-col gap-2 px-3 py-2 text-xs sm:text-sm">
         {visible.slice(0, 2).map((o) => {
           const isEmployee = o.side === "employee";

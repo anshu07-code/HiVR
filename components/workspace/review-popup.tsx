@@ -28,6 +28,9 @@ export function ReviewPopup({
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [rating, setRating] = React.useState(0);
+  const [commRating, setCommRating] = React.useState(0);
+  const [qualRating, setQualRating] = React.useState(0);
+  const [valRating, setValRating] = React.useState(0);
   const [hover, setHover] = React.useState(0);
   const [comment, setComment] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
@@ -64,7 +67,14 @@ export function ReviewPopup({
       const r = await fetch("/api/reviews/upsert", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ contractId, rating, comment: comment.trim() || null }),
+        body: JSON.stringify({
+          contractId,
+          rating,
+          communication_rating: commRating || rating,
+          quality_rating: qualRating || rating,
+          value_rating: valRating || rating,
+          comment: comment.trim() || null,
+        }),
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok || !d.ok) {
@@ -131,6 +141,26 @@ export function ReviewPopup({
                   {rating === 5 ? "Excellent!" : rating === 4 ? "Good" : rating === 3 ? "OK" : rating === 2 ? "Poor" : "Terrible"}
                 </span>
               )}
+            </div>
+            <div className="mt-2 flex gap-3">
+              {(["Communication", "Quality", "Value"] as const).map((label) => {
+                const val = label === "Communication" ? commRating : label === "Quality" ? qualRating : valRating;
+                const setVal = label === "Communication" ? setCommRating : label === "Quality" ? setQualRating : setValRating;
+                return (
+                  <div key={label} className="flex-1">
+                    <p className="text-[9px] text-muted-foreground mb-0.5">{label}</p>
+                    <div className="flex gap-0.5">
+                      {[1,2,3,4,5].map((n) => (
+                        <button key={n} type="button" disabled={submitting} onClick={() => setVal(n)}
+                          className="rounded p-0 transition-transform hover:scale-110"
+                        >
+                          <Star className={`h-3 w-3 ${n <= val ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30"}`} />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
             <Textarea
               value={comment}

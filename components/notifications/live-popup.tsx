@@ -1,27 +1,35 @@
 "use client";
 
 import * as React from "react";
-import { X, Bell, CheckCircle2, Users, Handshake, Zap, Sparkles, ShieldCheck } from "lucide-react";
+import { X, Bell, CheckCircle2, Users, Handshake, Zap, Sparkles, ShieldCheck, Mail, XCircle, Star } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 const TYPE_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
   new_application: Users,
   hired: CheckCircle2,
-  hire_offer: Handshake,
-  instant_hire_offer: Handshake,
-  hiring_stage: Sparkles,
   kyc_verified: ShieldCheck,
+  hiring_stage: Sparkles,
+  new_message: Mail,
+  offer: Handshake,
+  offer_declined: XCircle,
+  hire_offer: Handshake,
+  instant_hire_offer: Zap,
+  task_recommendation: Star,
   default: Bell,
 };
 
 const TYPE_COLOR: Record<string, string> = {
   new_application: "text-blue-600 bg-blue-500/10",
   hired: "text-emerald-600 bg-emerald-500/10",
+  kyc_verified: "text-emerald-600 bg-emerald-500/10",
+  hiring_stage: "text-violet-600 bg-violet-500/10",
+  new_message: "text-sky-600 bg-sky-500/10",
+  offer: "text-amber-600 bg-amber-500/10",
+  offer_declined: "text-rose-600 bg-rose-500/10",
   hire_offer: "text-amber-600 bg-amber-500/10",
   instant_hire_offer: "text-amber-600 bg-amber-500/10",
-  hiring_stage: "text-violet-600 bg-violet-500/10",
-  kyc_verified: "text-emerald-600 bg-emerald-500/10",
+  task_recommendation: "text-indigo-600 bg-indigo-500/10",
   default: "text-muted-foreground bg-muted",
 };
 

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyWebhookSignature, isSandbox } from "@/lib/escrow";
+import { normaliseRefCode } from "@/lib/razorpay-upi";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -171,8 +172,14 @@ export async function processRazorpayEvent(admin: Admin, payload: any) {
       if (refund?.payment_id) await handleRefundFailed(admin, refund);
       break;
     }
+    case "payment_link.paid": {
+      const pl = payload.payload?.payment_link?.entity;
+      const pmt = payload.payload?.payment?.entity;
+      if (pl?.id && pmt?.id) await handleBankVerificationPaid(admin, pl.id, pmt.id, pmt);
+      break;
+    }
     default:
-      // Logged but not handled (e.g. payment_link.paid, qr_code.paid, virtual_account.credited)
+      // Logged but not handled (e.g. qr_code.paid, virtual_account.credited)
       break;
   }
 }
@@ -230,46 +237,46 @@ async function handleOrderPaid(admin: Admin, order: any) {
 }
 
 async function handlePaymentCaptured(admin: Admin, payment: any) {
-  // payment.id is the pay_XXX id. We saved that to payments.razorpay_payment_id.
+  // Check payments table first (contracts flow)
   const razorpayPaymentId = payment.id;
   const { data: row } = await admin
     .from("payments")
     .select("id, contract_id, status")
     .eq("razorpay_payment_id", razorpayPaymentId)
     .maybeSingle();
-  if (!row) return;
 
-  // 1) Transition payment status (in_escrow, idempotent)
-  if (row.status !== "in_escrow" && row.status !== "released" && row.status !== "refunded") {
-    await transitionPayment(admin, row.id, row.status, "in_escrow", razorpayPaymentId, "razorpay_captured");
-  }
-
-  // 2) Flip contract to active, but only if it hasn't moved on
-  const { data: contract } = await admin
-    .from("contracts")
-    .select("id, status, buyer_id, employee_id")
-    .eq("id", row.contract_id)
-    .maybeSingle();
-  if (contract && (!contract.status || contract.status === "created")) {
-    await admin
+  if (row) {
+    // Contract payment flow
+    if (row.status !== "in_escrow" && row.status !== "released" && row.status !== "refunded") {
+      await transitionPayment(admin, row.id, row.status, "in_escrow", razorpayPaymentId, "razorpay_captured");
+    }
+    const { data: contract } = await admin
       .from("contracts")
-      .update({ status: "active" })
-      .eq("id", row.contract_id);
+      .select("id, status, buyer_id, employee_id")
+      .eq("id", row.contract_id)
+      .maybeSingle();
+    if (contract && (!contract.status || contract.status === "created")) {
+      await admin.from("contracts").update({ status: "active" }).eq("id", row.contract_id);
+    }
+    if (contract) {
+      await notify(admin, contract.buyer_id, {
+        type: "payment",
+        title: "Payment received — contract is live",
+        body: `Your payment is in escrow. The contract is now active.`,
+        link: `/dashboard/contracts/${row.contract_id}`,
+      });
+      await notify(admin, contract.employee_id, {
+        type: "payment",
+        title: "New active contract",
+        body: `A buyer has funded the escrow. You can start work now.`,
+        link: `/dashboard/contracts/${row.contract_id}`,
+      });
+    }
+    return;
   }
-  if (contract) {
-    await notify(admin, contract.buyer_id, {
-      type: "payment",
-      title: "Payment received — contract is live",
-      body: `Your payment is in escrow. The contract is now active.`,
-      link: `/dashboard/contracts/${row.contract_id}`,
-    });
-    await notify(admin, contract.employee_id, {
-      type: "payment",
-      title: "New active contract",
-      body: `A buyer has funded the escrow. You can start work now.`,
-      link: `/dashboard/contracts/${row.contract_id}`,
-    });
-  }
+
+  // Fallback: check bank_verifications (notes may carry hivr_ref_code)
+  await handleBankVerificationPaid(admin, null, razorpayPaymentId, payment);
 }
 
 async function handlePaymentAuthorized(admin: Admin, payment: any) {
@@ -503,6 +510,66 @@ async function handleRefundFailed(admin: Admin, refund: any) {
     title: "Refund couldn't be processed",
     body: `We couldn't refund this payment. Admin will reach out to resolve.`,
     link: `/dashboard/contracts/${row.contract_id}`,
+  });
+}
+
+/* ================ Bank verification handler ================ */
+
+/**
+ * Handle a Razorpay payment that was made for bank verification.
+ * Looks up the bank_verifications record by payment_link_id (if available)
+ * or by matching the note ref_code against sandbox_code.
+ * Updates the record with the real payment_id so confirm_bank_verification
+ * can proceed.
+ */
+async function handleBankVerificationPaid(
+  admin: Admin,
+  paymentLinkId: string | null,
+  paymentId: string,
+  payment: any,
+) {
+  let bvId: string | null = null;
+
+  // Strategy A: match by payment_link_id
+  if (paymentLinkId) {
+    const { data: bv } = await admin
+      .from("bank_verifications")
+      .select("id, status")
+      .eq("payment_link_id", paymentLinkId)
+      .maybeSingle();
+    if (bv) bvId = bv.id;
+  }
+
+  // Strategy B: match by sandbox_code (ref code from payment notes)
+  if (!bvId) {
+    const refCode = payment?.notes?.hivr_ref_code
+      ?? payment?.notes?.description
+      ?? null;
+    if (refCode) {
+      const cleaned = normaliseRefCode(refCode);
+      if (cleaned) {
+        const { data: bv } = await admin
+          .from("bank_verifications")
+          .select("id, status")
+          .eq("sandbox_code", cleaned)
+          .maybeSingle();
+        if (bv) bvId = bv.id;
+      }
+    }
+  }
+
+  if (!bvId) return; // not a bank verification payment, or record not found
+
+  // Store the real payment_id on the bank_verification record
+  await admin
+    .from("bank_verifications")
+    .update({ payment_id: paymentId })
+    .eq("id", bvId);
+
+  await admin.from("bank_verification_audit").insert({
+    bank_id: bvId,
+    event: "razorpay_webhook_received",
+    metadata: { payment_id: paymentId },
   });
 }
 

@@ -1312,7 +1312,7 @@ function buildPremiumDashboardData(input: BuildPDInput) {
 
     { label: "Active contracts",  value: String(activeContractCount),         hint: `${completedContractCount} completed`, icon: "Briefcase",   accent: "primary" as const },
 
-    { label: "Active workspaces", value: String((workspaces ?? []).filter((w: any) => w.employee_id === userId && !["completed", "cancelled"].includes(w.status)).length), hint: "in flight", icon: "Hammer", accent: "emerald" as const },
+    { label: "Active workspaces", value: String((workspaces ?? []).filter((w: any) => w.employee_id === userId && !["completed", "cancelled", "delivered"].includes(w.status)).length), hint: "in flight", icon: "Hammer", accent: "emerald" as const },
 
     { label: "Earnings",          value: formatPaise(lifetime),                hint: "lifetime after fees", icon: "IndianRupee", accent: "sky" as const },
 

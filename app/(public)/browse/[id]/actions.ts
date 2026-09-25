@@ -116,6 +116,7 @@ export async function likeTaskAction(taskId: string): Promise<ApplyState> {
     );
   if (error) return { error: error.message };
   revalidatePath(`/browse/${taskId}`);
+  revalidatePath("/dashboard/saved");
   return { ok: true };
 }
 
@@ -130,6 +131,7 @@ export async function unlikeTaskAction(taskId: string): Promise<ApplyState> {
     .eq("user_id", user.id);
   if (error) return { error: error.message };
   revalidatePath(`/browse/${taskId}`);
+  revalidatePath("/dashboard/saved");
   return { ok: true };
 }
 

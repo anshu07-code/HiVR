@@ -93,27 +93,32 @@ grant select, insert on public.bank_verification_audit to authenticated;
 insert into public.platform_settings(key, value) values
   ('bank_verify_fee_paise',        '100'::jsonb),
   ('bank_verify_expiry_minutes',   '30'::jsonb),
-  ('bank_verify_sandbox_code',     '123456'::jsonb)
+  ('bank_verify_sandbox_code',       '123456'::jsonb),
+  ('bank_verify_sandbox_enabled',    'false'::jsonb)
 on conflict (key) do nothing;
 
 -- =====================================================================
 -- 6) RPCs
 -- =====================================================================
 
--- 6.1 start_bank_verification — creates a payment link (or sandbox code)
+-- 6.1 start_bank_verification — creates a ₹1 UPI collect (Razorpay) or sandbox code
+-- Production: pass p_ref_code + p_payment_link_id from a Razorpay payment link
+-- Sandbox: omit the last two params to get a fake code
 create or replace function public.start_bank_verification(
-  p_upi_id         text,
-  p_account_holder text,
-  p_ifsc           text
+  p_upi_id           text,
+  p_account_holder   text,
+  p_ifsc             text,
+  p_ref_code         text default null,
+  p_payment_link_id  text default null
 ) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
   v_uid uuid := auth.uid();
-  v_bypass boolean := (current_setting('app.sandbox', true) = '1')
-                       or coalesce((public.platform_setting('bank_verify_sandbox_enabled')::text)::boolean, false);
+  v_sandbox boolean := p_ref_code is null or p_payment_link_id is null;
   v_id uuid;
   v_code text;
   v_link_id text;
+  v_provider text;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'Not signed in'); end if;
   if p_upi_id is null or length(trim(p_upi_id)) = 0 then
@@ -125,24 +130,27 @@ begin
   if p_ifsc is null or upper(p_ifsc) !~ '^[A-Z]{4}0[A-Z0-9]{6}$' then
     return jsonb_build_object('ok', false, 'error', 'IFSC looks wrong. Format: HDFC0001234.');
   end if;
-  -- IFSC + UPI handle: strip whitespace + uppercase the IFSC
   p_ifsc := upper(regexp_replace(p_ifsc, '\s+', '', 'g'));
   p_upi_id := lower(regexp_replace(p_upi_id, '\s+', '', 'g'));
 
-  -- rate limit: 3 attempts per day
   if (select count(*) from public.bank_verifications
       where user_id = v_uid and created_at > current_date) >= 3 then
     return jsonb_build_object('ok', false, 'error', 'Daily bank verification limit reached');
   end if;
 
-  -- cancel any prior pending/awaiting rows
   update public.bank_verifications
   set status = 'expired', resolved_at = now()
   where user_id = v_uid and status in ('pending','awaiting_payment');
 
-  -- in real life, hit Razorpay here. In sandbox, generate a fake code.
-  v_code := upper(substring(md5(random()::text) from 1 for 6));
-  v_link_id := 'plink_bv_' || gen_random_uuid()::text;
+  if v_sandbox then
+    v_code   := upper(substring(md5(random()::text) from 1 for 6));
+    v_link_id := 'plink_bv_' || gen_random_uuid()::text;
+    v_provider := 'manual_sandbox';
+  else
+    v_code   := p_ref_code;
+    v_link_id := p_payment_link_id;
+    v_provider := 'razorpay';
+  end if;
 
   insert into public.bank_verifications(
     user_id, amount_paise, upi_id, upi_provider, account_holder, ifsc,
@@ -152,26 +160,42 @@ begin
     (public.platform_setting('bank_verify_fee_paise')::text)::bigint,
     p_upi_id, split_part(p_upi_id, '@', 2),
     trim(p_account_holder), p_ifsc,
-    'awaiting_payment', 'manual_sandbox', v_link_id, v_code
+    'awaiting_payment', v_provider, v_link_id, v_code
   ) returning id into v_id;
 
   insert into public.bank_verification_audit(user_id, bank_id, event, metadata)
-  values (v_uid, v_id, 'started', jsonb_build_object('upi', p_upi_id, 'ifsc', p_ifsc));
+  values (v_uid, v_id, 'started', jsonb_build_object('upi', p_upi_id, 'ifsc', p_ifsc, 'provider', v_provider));
 
-  return jsonb_build_object(
-    'ok', true,
-    'bank_verification_id', v_id,
-    'sandbox_code', v_code,
-    'amount_paise', (public.platform_setting('bank_verify_fee_paise')::text)::bigint,
-    'expires_at', (now() + ((public.platform_setting('bank_verify_expiry_minutes')::text) || ' minutes')::interval)::text
-  );
+  if v_sandbox then
+    return jsonb_build_object(
+      'ok', true,
+      'bank_verification_id', v_id,
+      'sandbox_code', v_code,
+      'amount_paise', (public.platform_setting('bank_verify_fee_paise')::text)::bigint,
+      'expires_at', (now() + ((public.platform_setting('bank_verify_expiry_minutes')::text) || ' minutes')::interval)::text,
+      'provider', 'manual_sandbox'
+    );
+  else
+    return jsonb_build_object(
+      'ok', true,
+      'bank_verification_id', v_id,
+      'sandbox_code', v_code,
+      'amount_paise', (public.platform_setting('bank_verify_fee_paise')::text)::bigint,
+      'expires_at', (now() + ((public.platform_setting('bank_verify_expiry_minutes')::text) || ' minutes')::interval)::text,
+      'provider', 'razorpay',
+      'payment_link_id', v_link_id
+    );
+  end if;
 end $$;
-grant execute on function public.start_bank_verification(text, text, text) to authenticated;
+grant execute on function public.start_bank_verification(text, text, text, text, text) to authenticated;
 
 -- 6.2 confirm_bank_verification — user types the 6-digit code from UPI app
+-- Production (Razorpay): pass p_payment_id from the Razorpay webhook
+-- Sandbox: omit p_payment_id to generate a fake one
 create or replace function public.confirm_bank_verification(
   p_bank_verification_id uuid,
-  p_code                 text
+  p_code                 text,
+  p_payment_id           text default null
 ) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
@@ -180,6 +204,7 @@ declare
   v_user record;
   v_last4 text;
   v_provider text;
+  v_paid boolean;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'Not signed in'); end if;
   select * into v_bv from public.bank_verifications where id = p_bank_verification_id and user_id = v_uid;
@@ -198,20 +223,22 @@ begin
     return jsonb_build_object('ok', false, 'error', 'Wrong code. Check the UPI app for the 6-character note.');
   end if;
 
-  -- Accept the code. Mark as paid.
+  -- Razorpay flow: require a real payment_id (set by webhook)
+  if v_bv.payment_provider = 'razorpay' and (p_payment_id is null) then
+    return jsonb_build_object('ok', false, 'error', 'Payment not yet received. Please wait a moment and try again.');
+  end if;
+
   update public.bank_verifications
   set status = 'paid',
       paid_at = now(),
       resolved_at = now(),
-      payment_id = 'bv_' || gen_random_uuid()::text
+      payment_id = coalesce(p_payment_id, 'bv_' || gen_random_uuid()::text)
   where id = p_bank_verification_id;
 
-  -- Derive last 4 from UPI handle (sandbox; real would use the actual bank)
   v_last4 := right(regexp_replace(v_bv.upi_id, '[^0-9]', '', 'g'), 4);
   if length(v_last4) < 4 then v_last4 := '0000'; end if;
   v_provider := coalesce(nullif(upper(v_bv.upi_provider), ''), 'UPI');
 
-  -- Update users (bank verified)
   update public.users
   set
     upi_id = v_bv.upi_id,
@@ -224,15 +251,26 @@ begin
     bank_verified_at = now()
   where id = v_uid;
 
-  -- Insert into public.verifications (so the KYC gate picks it up)
-  insert into public.verifications(user_id, doc_type, purpose, status, provider, verified_at, metadata)
-  values (v_uid, 'bank', 'buyer', 'verified', 'hivr_bank', now(),
-          jsonb_build_object('upi_id', v_bv.upi_id, 'ifsc', v_bv.ifsc,
-                              'account_holder', v_bv.account_holder,
-                              'amount_paise', v_bv.amount_paise,
-                              'payment_id', v_bv.payment_id))
-  on conflict (user_id, doc_type, purpose) do update set
-    status = 'verified', verified_at = now(), metadata = excluded.metadata, provider = excluded.provider;
+  if not exists (
+    select 1 from public.verifications
+    where user_id = v_uid and doc_type = 'bank' and purpose = 'buyer'
+  ) then
+    insert into public.verifications(user_id, doc_type, purpose, status, provider, verified_at, metadata)
+    values (v_uid, 'bank', 'buyer', 'verified', 'hivr_bank', now(),
+            jsonb_build_object('upi_id', v_bv.upi_id, 'ifsc', v_bv.ifsc,
+                                'account_holder', v_bv.account_holder,
+                                'amount_paise', v_bv.amount_paise,
+                                'payment_id', v_bv.payment_id));
+  else
+    update public.verifications
+    set status = 'verified', verified_at = now(),
+        metadata = jsonb_build_object('upi_id', v_bv.upi_id, 'ifsc', v_bv.ifsc,
+                                       'account_holder', v_bv.account_holder,
+                                       'amount_paise', v_bv.amount_paise,
+                                       'payment_id', v_bv.payment_id),
+        provider = 'hivr_bank'
+    where user_id = v_uid and doc_type = 'bank' and purpose = 'buyer';
+  end if;
 
   insert into public.bank_verification_audit(user_id, bank_id, event, metadata)
   values (v_uid, p_bank_verification_id, 'paid', jsonb_build_object('payment_id', v_bv.payment_id));
@@ -246,7 +284,7 @@ begin
     'upi_provider', v_provider
   );
 end $$;
-grant execute on function public.confirm_bank_verification(uuid, text) to authenticated;
+grant execute on function public.confirm_bank_verification(uuid, text, text) to authenticated;
 
 -- 6.3 get_active_bank_verification — for the wizard to detect if a code is in flight
 create or replace function public.get_active_bank_verification()

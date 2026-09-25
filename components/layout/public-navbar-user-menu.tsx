@@ -16,6 +16,7 @@ import Link from "next/link";
 import {
   Home, Briefcase, Hammer, Settings, LogOut, Menu,
 } from "lucide-react";
+import { NotificationBell } from "@/components/notifications/bell";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { createClient } from "@/lib/supabase/client";
 import { toggleRoleAction } from "@/app/(public)/landing-actions";
+import { usePathname } from "next/navigation";
 
 type Profile = {
   full_name?: string | null;
@@ -33,14 +35,21 @@ type Profile = {
 } | null;
 
 type Props = {
+  userId: string;
   email: string;
   profile: Profile;
+  notifUnread: number;
+  notifRecent: any[];
 };
 
 export function PublicNavbarUserMenu({
+  userId,
   email,
   profile,
+  notifUnread,
+  notifRecent,
 }: Props) {
+  const pathname = usePathname();
   const initials = ((profile?.full_name ?? email ?? "U")
     .split(" ")
     .map((w) => w[0])
@@ -56,6 +65,11 @@ export function PublicNavbarUserMenu({
 
   return (
     <>
+      <NotificationBell
+        userId={userId}
+        initialUnread={notifUnread}
+        initialRecent={notifRecent}
+      />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -102,6 +116,7 @@ export function PublicNavbarUserMenu({
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <form action={toggleRoleAction} className="w-full">
+              <input type="hidden" name="next" value={pathname} />
               <button type="submit" className="flex w-full items-center gap-2 px-2 py-1.5 text-sm">
                 <Hammer className="h-4 w-4" />Switch role
               </button>

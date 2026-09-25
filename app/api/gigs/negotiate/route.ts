@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { formatPaise } from "@/lib/utils";
 
 export async function POST(req: NextRequest) {
   try {
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest) {
       const minPrice = Math.round(listedPrice * 0.8);
       if (price > listedPrice || price < minPrice) {
         return NextResponse.json({
-          error: `Price must be between ₹${minPrice.toLocaleString("en-IN")} and ₹${listedPrice.toLocaleString("en-IN")}`,
+          error: `Price must be between ${formatPaise(minPrice)} and ${formatPaise(listedPrice)}`,
         }, { status: 400 });
       }
     }
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
         buyer_id: user.id,
         offer_type: "instant_hire_pushback",
         offer_type_new: "gig_direct",
-        proposed_price: Math.round(price * 100),
+        proposed_price: price,
         comment: (gig as any).title,
         created_by: user.id,
         status: "pending",
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
         p_user_id: body.employee_id,
         p_type: "offer",
         p_title: "New direct hire offer!",
-        p_body: `${userName} wants to hire you for "${(gig as any).title}" — ₹${Number(price).toLocaleString("en-IN")}`,
+        p_body: `${userName} wants to hire you for "${(gig as any).title}" — ${formatPaise(price)}`,
         p_link: "/dashboard/job-offers",
       });
 
@@ -96,7 +97,7 @@ export async function POST(req: NextRequest) {
         buyer_id: user.id,
         offer_type: "custom_scope_negotiation",
         offer_type_new: "gig_negotiation",
-        proposed_price: Math.round(price * 100),
+        proposed_price: price,
         comment: (gig as any).title,
         created_by: user.id,
         status: "pending",
@@ -108,7 +109,7 @@ export async function POST(req: NextRequest) {
         negotiation_id: (offer as any).id,
         round_number: 1,
         proposed_by: "buyer",
-        proposed_price: Math.round(price * 100),
+        proposed_price: price,
         comment: roundComment,
       } as any);
 

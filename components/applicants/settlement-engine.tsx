@@ -60,7 +60,7 @@ export function SettlementEngine({
   const fetchRounds = React.useCallback(async () => {
     if (!applicationId) return;
     try {
-      const r = await fetch(`/api/applications/settlement?application_id=${applicationId}`);
+      const r = await fetch(`/api/applications/settlement?application_id=${applicationId}&t=${Date.now()}`);
       const data = await r.json();
       if (data.rounds) {
         setRounds(data.rounds);

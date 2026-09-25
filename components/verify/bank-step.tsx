@@ -2,13 +2,12 @@
 
 import * as React from "react";
 import {
-  Landmark, Copy, Check, AlertTriangle, Loader2, ExternalLink, IndianRupee, Shield,
+  Landmark, Check, AlertTriangle, Loader2, ExternalLink, IndianRupee, Shield,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
 
 export type BankStepResult = {
   upiId: string;
@@ -42,16 +41,18 @@ export function BankStep({
   const [sandboxCode, setSandboxCode] = React.useState<string | null>(null);
   const [expiresAt, setExpiresAt] = React.useState<string | null>(null);
   const [amountPaise, setAmountPaise] = React.useState<number>(100);
+  const [paymentLinkUrl, setPaymentLinkUrl] = React.useState<string | null>(null);
+  const [paymentNote, setPaymentNote] = React.useState<string | null>(null);
+  const [provider, setProvider] = React.useState<string>("manual_sandbox");
 
   const [code, setCode] = React.useState("");
   const [verifiedLast4, setVerifiedLast4] = React.useState<string | null>(null);
   const [verifiedProvider, setVerifiedProvider] = React.useState<string | null>(null);
-  const [copied, setCopied] = React.useState(false);
-
   const upiValid = UPI_REGEX.test(upiId.trim());
   const ifscValid = IFSC_REGEX.test(ifsc.trim().toUpperCase());
   const holderValid = accountHolder.trim().length >= 2;
   const formValid = upiValid && ifscValid && holderValid;
+  const isRazorpay = provider === "razorpay";
 
   async function onStart() {
     if (!formValid) {
@@ -76,6 +77,9 @@ export function BankStep({
       setSandboxCode(json.sandbox_code ?? null);
       setExpiresAt(json.expires_at ?? null);
       setAmountPaise(json.amount_paise ?? 100);
+      setPaymentLinkUrl(json.payment_link_url ?? null);
+      setPaymentNote(json.note ?? null);
+      setProvider(json.provider ?? "manual_sandbox");
       setPhase("awaiting_payment");
     } catch (e) {
       setError((e as Error).message);
@@ -129,8 +133,6 @@ export function BankStep({
     setError(null);
   }
 
-  const upiLink = `upi://pay?pa=hivr@hdfcbank&am=${(amountPaise / 100).toFixed(2)}&tn=HiVR+verify+${(sandboxCode ?? "").slice(0, 6)}&cu=INR`;
-
   return (
     <div className="space-y-4">
       <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
@@ -138,7 +140,7 @@ export function BankStep({
         <div className="flex-1">
           <p className="font-semibold text-amber-700">₹1 verification fee</p>
           <p className="mt-0.5 text-xs text-amber-700/80">
-            Non-refundable, used to confirm your bank account via UPI collect. HiVR keeps the rupee as the verification fee.
+            Non-refundable, used to confirm your bank account via UPI. HiVR keeps the rupee as the verification fee.
           </p>
         </div>
         <Shield className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
@@ -230,43 +232,33 @@ export function BankStep({
               <Landmark className="h-4 w-4" /> Pay ₹1 from your UPI app
             </CardTitle>
             <CardDescription>
-              Open your UPI app and pay ₹1 to <span className="font-mono font-semibold">hivr@hdfcbank</span>. The 6-character note is your code.
+              {isRazorpay
+                ? "Click the button below to pay ₹1 via Razorpay. After completing the payment, enter the 6-character code from the transaction note."
+                : "Open your UPI app and pay ₹1 to hivr@hdfcbank. The 6-character note is your code."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button asChild variant="gradient">
-                <a href={upiLink}>
-                  <ExternalLink className="h-4 w-4" /> Open UPI app
-                </a>
-              </Button>
-              <div className="flex items-center gap-1 rounded-md border bg-muted/30 px-2 py-1.5 text-[10px] text-muted-foreground">
-                <span>Pay to</span>
-                <code className="font-mono font-semibold text-foreground">hivr@hdfcbank</code>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText("hivr@hdfcbank");
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 1500);
-                    } catch { /* ignore */ }
-                  }}
-                  className="text-primary hover:underline"
-                >
-                  {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                </button>
+              {isRazorpay && paymentLinkUrl ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button asChild variant="gradient">
+                  <a href={paymentLinkUrl}>
+                    <ExternalLink className="h-4 w-4" /> Pay ₹1 via Razorpay
+                  </a>
+                </Button>
               </div>
-            </div>
+            ) : null}
 
             <div className="space-y-2 rounded-lg border bg-muted/20 p-4">
               <Label htmlFor="code" className="text-sm font-semibold">I paid — enter the code</Label>
+              <p className="text-[10px] text-muted-foreground">
+                The 6-character code appears in your UPI transaction note.
+              </p>
               <div className="flex items-center gap-2">
                 <Input
                   id="code"
                   value={code}
                   onChange={(e) => setCode(e.target.value.toUpperCase().replace(/\s+/g, ""))}
-                  placeholder="6-character note"
+                  placeholder="e.g. ABCD12"
                   autoComplete="off"
                   maxLength={8}
                   className="font-mono text-lg tracking-widest"
@@ -278,15 +270,22 @@ export function BankStep({
               </div>
               {expiresAt && (
                 <p className="text-[10px] text-muted-foreground">
-                  Link expires at {new Date(expiresAt).toLocaleTimeString()}.
+                  Link expires at {new Date(expiresAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "short", timeStyle: "medium" })} IST
                 </p>
               )}
             </div>
 
-            {sandboxCode && (
+            {sandboxCode && !isRazorpay && (
               <p className="rounded-md border border-dashed bg-muted/30 px-2 py-1 text-center text-[10px] text-muted-foreground">
                 Sandbox: type <span className="font-mono font-semibold text-foreground">{sandboxCode}</span> here
               </p>
+            )}
+
+            {paymentNote && (
+              <div className="rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                <p className="font-medium">Your verification code: <span className="font-mono font-semibold text-foreground">{sandboxCode}</span></p>
+                <p className="mt-0.5">Look for this code in the UPI transaction note after paying.</p>
+              </div>
             )}
 
             {error && (
@@ -299,9 +298,6 @@ export function BankStep({
               <Button variant="ghost" size="sm" onClick={reset} disabled={verifyBusy}>
                 Back
               </Button>
-              <p className="text-[10px] text-muted-foreground">
-                Code is the 6 characters in the payment note, not the amount.
-              </p>
             </div>
           </CardContent>
         </Card>

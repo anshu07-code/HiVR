@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Bell, CheckCircle2, Users, ShieldCheck, Sparkles, Mail } from "lucide-react";
+import { Bell, CheckCircle2, Users, ShieldCheck, Sparkles, Mail, Handshake, XCircle, Zap, Star } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,11 @@ const TYPE_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
   kyc_verified: ShieldCheck,
   hiring_stage: Sparkles,
   new_message: Mail,
+  offer: Handshake,
+  offer_declined: XCircle,
+  hire_offer: Handshake,
+  instant_hire_offer: Zap,
+  task_recommendation: Star,
   default: Bell,
 };
 
@@ -34,6 +39,11 @@ const TYPE_TONE: Record<string, string> = {
   kyc_verified: "text-emerald-600",
   hiring_stage: "text-amber-600",
   new_message: "text-blue-600",
+  offer: "text-amber-600",
+  offer_declined: "text-rose-600",
+  hire_offer: "text-amber-600",
+  instant_hire_offer: "text-amber-600",
+  task_recommendation: "text-indigo-600",
   default: "text-muted-foreground",
 };
 
@@ -120,7 +130,7 @@ export function NotificationBell({ userId, initialUnread, initialRecent }: { use
           // Find the contract created by this settlement
           const { data: app } = await sb
             .from("task_applications")
-            .select("task_id")
+            .select("task_id, employee_id")
             .eq("id", settleAppId)
             .maybeSingle();
           if (app) {
@@ -128,7 +138,7 @@ export function NotificationBell({ userId, initialUnread, initialRecent }: { use
               .from("contracts")
               .select("id")
               .eq("task_post_id", (app as any).task_id)
-              .eq("employee_id", userId)
+              .eq("employee_id", (app as any).employee_id)
               .order("created_at", { ascending: false })
               .limit(1)
               .maybeSingle();

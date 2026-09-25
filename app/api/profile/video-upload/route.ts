@@ -87,9 +87,10 @@ export async function POST(req: Request) {
       .select("id, storage_path, caption, duration_seconds")
       .single();
     if (insErr) {
+      console.error("[video-upload] insert error:", insErr);
       // best-effort: roll back the storage upload
       await admin.storage.from("profile-videos").remove([path]).catch(() => undefined);
-      return NextResponse.json({ ok: false, error: insErr.message }, { status: 500 });
+      return NextResponse.json({ ok: false, error: insErr.message, details: insErr.details ?? null, hint: insErr.hint ?? null }, { status: 500 });
     }
 
     return NextResponse.json({ ok: true, id: (row as any).id, storagePath: (row as any).storage_path });

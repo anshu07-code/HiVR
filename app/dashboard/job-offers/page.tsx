@@ -9,6 +9,7 @@ import { Handshake, Clock, ExternalLink, Briefcase } from "lucide-react";
 import { timeAgo } from "@/lib/utils";
 import { NegotiationDialog } from "./negotiation-dialog";
 import { GigRibbon } from "@/components/contract/gig-ribbon";
+import { MarkOffersSeen } from "./mark-seen";
 
 export const dynamic = "force-dynamic";
 
@@ -128,7 +129,9 @@ export default async function JobOffersPage() {
   const processedOffers = (negOffers ?? []).filter((o: any) => !activeStatuses.includes(o.status)) as any[];
 
   return (
-    <div className="space-y-6">
+    <>
+      <MarkOffersSeen />
+      <div className="space-y-6">
       {/* Pending offers — accept/decline/negotiate actions */}
       {pendingOffers.length > 0 && (
         <Card>
@@ -278,5 +281,6 @@ export default async function JobOffersPage() {
         </div>
       )}
     </div>
+    </>
   );
 }

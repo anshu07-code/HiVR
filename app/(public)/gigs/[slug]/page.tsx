@@ -1431,12 +1431,11 @@ export default function GigDetailPage() {
                     <Input
                       type="number"
                       min={1}
-                      value={proposedPrice}
+                      value={proposedPrice > 0 ? Math.round(proposedPrice / 100) : ""}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                        const val = Number(e.target.value);
+                        const valPaise = Number(e.target.value) * 100;
                         const listed = Number(isPackage ? getPackagePrice(selectedPackage) : gig.price);
-                        const minVal = Math.round(listed * 0.8);
-                        setProposedPrice(Math.min(val, listed));
+                        setProposedPrice(Math.min(valPaise, listed));
                       }}
                       onWheel={(e) => (e.target as HTMLInputElement).blur()}
                     />

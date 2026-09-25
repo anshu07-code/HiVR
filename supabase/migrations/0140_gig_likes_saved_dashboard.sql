@@ -34,4 +34,15 @@ grant select, insert, delete on table public.gig_likes to anon, authenticated;
 grant all on table public.gig_likes to service_role;
 
 -- Add to realtime publication so saved_count can update live
-alter publication supabase_realtime add table public.gig_likes;
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+    and schemaname = 'public'
+    and tablename = 'gig_likes'
+  ) then
+    alter publication supabase_realtime add table public.gig_likes;
+  end if;
+end;
+$$;

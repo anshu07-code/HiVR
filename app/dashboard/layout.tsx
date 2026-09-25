@@ -6,6 +6,7 @@ import { MobileBottomTabs } from "@/components/layout/mobile-bottom-tabs";
 import { DashboardClientWrapper } from "@/components/dashboard/dashboard-client-wrapper";
 import { PageTransition } from "@/components/layout/page-transition";
 import { NotificationToast } from "@/components/notifications/toast";
+import { LiveNotificationPopup } from "@/components/notifications/live-popup";
 import { requireUser } from "@/lib/auth-context";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -34,6 +35,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         )}
       </div>
       <NotificationToast />
+      <LiveNotificationPopup />
       <MobileBottomTabs mode={mode} />
     </DashboardClientWrapper>
   );

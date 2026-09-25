@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { MessagesInbox } from "@/components/messages/messages-inbox";
 import type { DirectMsg } from "@/components/messages/messages-inbox";
+import { MarkMessagesRead } from "./mark-read";
 
 export const dynamic = "force-dynamic";
 
@@ -69,12 +70,15 @@ export default async function MessagesPage() {
   ]);
 
   return (
-    <MessagesInbox
-      userId={user.id}
-      initialContractMsgs={(contractMsgs ?? []) as any}
-      initialWorkspaceMsgs={(workspaceMsgs ?? []) as any}
-      initialSupportMsgs={(supportMsgs ?? []) as any}
-      initialDirectMsgs={(directMsgs ?? []) as any}
-    />
+    <>
+      <MarkMessagesRead />
+      <MessagesInbox
+        userId={user.id}
+        initialContractMsgs={(contractMsgs ?? []) as any}
+        initialWorkspaceMsgs={(workspaceMsgs ?? []) as any}
+        initialSupportMsgs={(supportMsgs ?? []) as any}
+        initialDirectMsgs={(directMsgs ?? []) as any}
+      />
+    </>
   );
 }

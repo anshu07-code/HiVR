@@ -22,24 +22,34 @@ export async function toggleRoleAction(formData: FormData) {
   const hasBuyer = roles.includes("buyer");
   const isAdmin = roles.includes("admin");
 
+  // Determine the target mode: the opposite of current
+  const wantBuyer = currentMode !== "buyer";
+
   if (isAdmin) {
-    await sb.from("users").update({ current_mode: currentMode === "employee" ? "buyer" : "employee" }).eq("id", user.id);
+    await sb.from("users").update({ current_mode: wantBuyer ? "buyer" : "employee" }).eq("id", user.id);
     revalidatePath("/", "layout");
     redirect(next);
   }
 
-  if (!hasEmployee) {
-    redirect(`/onboarding/employee?next=${encodeURIComponent(next)}&reason=switch_to_employee`);
-  }
-
-  if (currentMode === "employee" && hasBuyer) {
-    await sb.from("users").update({ current_mode: "buyer" }).eq("id", user.id);
-  } else if (hasEmployee) {
+  if (wantBuyer) {
+    // Switching to buyer
+    if (!hasBuyer) {
+      await sb.from("users").update({
+        roles: Array.from(new Set([...roles, "buyer"])),
+        current_mode: "buyer",
+      }).eq("id", user.id);
+    } else {
+      await sb.from("users").update({ current_mode: "buyer" }).eq("id", user.id);
+    }
+  } else {
+    // Switching to employee
+    if (!hasEmployee) {
+      redirect(`/onboarding/employee?next=${encodeURIComponent(next)}&reason=switch_to_employee`);
+    }
     await sb.from("users").update({ current_mode: "employee" }).eq("id", user.id);
-  } else if (!hasBuyer) {
-    await sb.from("users").update({ roles: Array.from(new Set([...roles, "buyer"])), current_mode: "buyer" }).eq("id", user.id);
   }
 
   revalidatePath("/", "layout");
+  revalidatePath("/dashboard", "layout");
   redirect(next);
 }

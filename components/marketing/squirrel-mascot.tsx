@@ -3,7 +3,7 @@
 import * as React from "react";
 import { X } from "lucide-react";
 
-export type Mood = "excited" | "happy" | "neutral" | "sad" | "waving" | "worried" | "drinking";
+export type Mood = "excited" | "happy" | "neutral" | "sad" | "waving" | "worried" | "drinking" | "idle";
 
 export interface TaskInfo {
   id: string;
@@ -20,6 +20,12 @@ export interface TaskInfo {
   buyer_name?: string;
 }
 
+export interface ActionButton {
+  label: string;
+  href: string;
+  variant?: "default" | "outline" | "success";
+}
+
 interface SquirrelMascotProps {
   mood: Mood;
   message?: string;
@@ -28,6 +34,7 @@ interface SquirrelMascotProps {
   isOwnTask?: boolean;
   isSignedIn?: boolean;
   panelHeight?: number;
+  actions?: ActionButton[];
 }
 
 function getAnswer(query: string, task: TaskInfo): string {
@@ -171,14 +178,46 @@ function ChatPopover({ task, onClose }: { task: TaskInfo; onClose: () => void })
   );
 }
 
-export function SquirrelMascot({ mood, message, task, applicantCount, isOwnTask, isSignedIn, panelHeight }: SquirrelMascotProps) {
+export function SquirrelMascot({ mood, message, task, applicantCount, isOwnTask, isSignedIn, panelHeight, actions }: SquirrelMascotProps) {
   const [isWaving, setIsWaving] = React.useState(false);
   const [chatOpen, setChatOpen] = React.useState(false);
   const [isEating, setIsEating] = React.useState(false);
+  const [danceMode, setDanceMode] = React.useState(false);
+  const [jumpMode, setJumpMode] = React.useState(false);
+  const [blink, setBlink] = React.useState(false);
+  const [idleAnim, setIdleAnim] = React.useState<"idle" | "tailWag" | "lookAround" | "scratch" | "stretch">("idle");
   const timerRef = React.useRef<ReturnType<typeof setTimeout>>();
   const eatTimerRef = React.useRef<ReturnType<typeof setTimeout>>();
+  const danceTimerRef = React.useRef<ReturnType<typeof setTimeout>>();
+  const jumpTimerRef = React.useRef<ReturnType<typeof setTimeout>>();
   const [isInitialDrink, setIsInitialDrink] = React.useState(true);
 
+  // Auto-blink every few seconds
+  React.useEffect(() => {
+    const blinkInterval = setInterval(() => {
+      setBlink(true);
+      setTimeout(() => setBlink(false), 150);
+    }, 3000 + Math.random() * 4000);
+    return () => clearInterval(blinkInterval);
+  }, []);
+
+  // Idle animation cycle — random behaviors when nothing is happening
+  React.useEffect(() => {
+    const scheduleNext = () => setTimeout(idleCycle, 2000 + Math.random() * 4000);
+    const idleCycle = () => {
+      const anims: ("idle" | "tailWag" | "lookAround" | "scratch" | "stretch")[] = ["tailWag", "lookAround", "scratch", "stretch"];
+      const next = anims[Math.floor(Math.random() * anims.length)];
+      setIdleAnim(next);
+      setTimeout(() => {
+        setIdleAnim("idle");
+        scheduleNext();
+      }, 1500 + Math.random() * 1000);
+    };
+    const t = scheduleNext();
+    return () => clearTimeout(t);
+  }, []);
+
+  // Initial drink animation
   React.useEffect(() => {
     if (isInitialDrink) {
       const t = setTimeout(() => setIsInitialDrink(false), 3000);
@@ -186,10 +225,24 @@ export function SquirrelMascot({ mood, message, task, applicantCount, isOwnTask,
     }
   }, [isInitialDrink]);
 
+  // Dance trigger on excited mood
+  React.useEffect(() => {
+    if (mood === "excited") {
+      setDanceMode(true);
+      if (danceTimerRef.current) clearTimeout(danceTimerRef.current);
+      danceTimerRef.current = setTimeout(() => setDanceMode(false), 5000);
+    }
+  }, [mood]);
+
   const handleClick = () => {
     setIsWaving(true);
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => setIsWaving(false), 3000);
+
+    // Random jump on click
+    setJumpMode(true);
+    if (jumpTimerRef.current) clearTimeout(jumpTimerRef.current);
+    jumpTimerRef.current = setTimeout(() => setJumpMode(false), 600);
   };
 
   const handleNutClick = (e: React.MouseEvent) => {
@@ -203,8 +256,9 @@ export function SquirrelMascot({ mood, message, task, applicantCount, isOwnTask,
   const shouldDrink = (mood === "drinking" && isInitialDrink) || isEating;
   const effectiveMood = isWaving ? "waving" : mood;
 
-  const isRunning = effectiveMood === "excited";
+  const isRunning = effectiveMood === "excited" || danceMode;
   const isWavingActive = effectiveMood === "waving";
+  const isJumping = jumpMode;
 
   const squirrelH = panelHeight ?? 176;
   const squirrelW = Math.round(squirrelH * 0.923);
@@ -234,27 +288,66 @@ export function SquirrelMascot({ mood, message, task, applicantCount, isOwnTask,
             </radialGradient>
           </defs>
           <g>
+            {/* === WHOLE BODY ANIMATIONS === */}
+            {effectiveMood === "idle" && idleAnim === "idle" && (
+              <animateTransform attributeName="transform" type="translate" values="0 0;0 -1;0 0;0 -1;0 0" dur="3s" repeatCount="indefinite" />
+            )}
             {isRunning && (
-              <animateTransform attributeName="transform" type="translate" values="0 0;0 -5;0 0;0 -5;0 0" dur="0.45s" repeatCount="indefinite" />
+              <animateTransform attributeName="transform" type="translate" values="0 0;0 -6;0 0;0 -6;0 0" dur="0.4s" repeatCount="indefinite" />
+            )}
+            {isJumping && (
+              <animateTransform attributeName="transform" type="translate" values="0 0;0 -40;0 0" dur="0.55s" repeatCount="1" />
             )}
             {shouldDrink && (
               <animateTransform attributeName="transform" type="translate" values="0 0;0 -2;0 0" dur="2s" repeatCount="indefinite" />
             )}
-            <path d="M 88 176 C 18 162 4 92 28 54 C 48 22 84 22 94 42 C 102 60 78 72 74 92 C 70 112 84 124 84 144 C 84 158 80 168 88 176 Z" fill="url(#tailGrad)" stroke="#8B4513" strokeWidth="2.5" strokeLinejoin="round" />
-            <path d="M 80 46 C 66 60 50 74 44 90" fill="none" stroke="#B86A28" strokeWidth="2" strokeLinecap="round" opacity="0.3" />
-            <path d="M 48 102 C 42 118 42 136 50 150" fill="none" stroke="#8B4513" strokeWidth="2" strokeLinecap="round" opacity="0.25" />
+            {danceMode && (
+              <animateTransform attributeName="transform" type="translate" values="0 0;3 0;0 -2;-3 0;0 0" dur="0.6s" repeatCount="indefinite" />
+            )}
+
+            {/* TAIL — always wagging gently, more when excited */}
+            <g>
+              {danceMode ? (
+                <animateTransform attributeName="transform" type="rotate" values="0 88 176;-20 88 176;10 88 176;-25 88 176;0 88 176" dur="0.5s" repeatCount="indefinite" />
+              ) : isRunning ? (
+                <animateTransform attributeName="transform" type="rotate" values="0 88 176;-15 88 176;0 88 176" dur="0.4s" repeatCount="indefinite" />
+              ) : effectiveMood === "idle" && idleAnim === "tailWag" ? (
+                <animateTransform attributeName="transform" type="rotate" values="0 88 176;-18 88 176;0 88 176;-18 88 176;0 88 176" dur="0.8s" repeatCount="indefinite" />
+              ) : shouldDrink ? (
+                <animateTransform attributeName="transform" type="rotate" values="0 88 176;-6 88 176;0 88 176" dur="0.9s" repeatCount="indefinite" />
+              ) : (
+                <animateTransform attributeName="transform" type="rotate" values="0 88 176;-4 88 176;0 88 176;3 88 176;0 88 176" dur="3s" repeatCount="indefinite" />
+              )}
+              <path d="M 88 176 C 18 162 4 92 28 54 C 48 22 68 22 94 42 C 102 60 78 72 74 92 C 70 112 84 124 84 144 C 84 158 80 168 88 176 Z" fill="url(#tailGrad)" stroke="#8B4513" strokeWidth="2.5" strokeLinejoin="round" />
+              <path d="M 80 46 C 66 60 50 74 44 90" fill="none" stroke="#B86A28" strokeWidth="2" strokeLinecap="round" opacity="0.3" />
+              <path d="M 48 102 C 42 118 42 136 50 150" fill="none" stroke="#8B4513" strokeWidth="2" strokeLinecap="round" opacity="0.25" />
+            </g>
+
             <ellipse cx="120" cy="168" rx="34" ry="30" fill="url(#fur)" stroke="#8B4513" strokeWidth="2.5" />
             <ellipse cx="120" cy="174" rx="22" ry="20" fill="url(#belly)" stroke="#D4893A" strokeWidth="2" />
-            {isRunning ? (
+            {isRunning || jumpMode ? (
               <>
                 <g>
                   <ellipse cx="100" cy="198" rx="13" ry="7" fill="#A05A20" stroke="#8B4513" strokeWidth="2.5">
-                    <animateTransform attributeName="transform" type="rotate" values="-20 100 198;20 100 198;-20 100 198" dur="0.45s" repeatCount="indefinite" />
+                    <animateTransform attributeName="transform" type="rotate" values="-25 100 198;25 100 198;-25 100 198" dur="0.35s" repeatCount="indefinite" />
                   </ellipse>
                 </g>
                 <g>
                   <ellipse cx="140" cy="198" rx="13" ry="7" fill="#A05A20" stroke="#8B4513" strokeWidth="2.5">
-                    <animateTransform attributeName="transform" type="rotate" values="20 140 198;-20 140 198;20 140 198" dur="0.45s" repeatCount="indefinite" />
+                    <animateTransform attributeName="transform" type="rotate" values="25 140 198;-25 140 198;25 140 198" dur="0.35s" repeatCount="indefinite" />
+                  </ellipse>
+                </g>
+              </>
+            ) : effectiveMood === "idle" && idleAnim === "stretch" ? (
+              <>
+                <g>
+                  <ellipse cx="90" cy="195" rx="13" ry="7" fill="#A05A20" stroke="#8B4513" strokeWidth="2.5">
+                    <animate attributeName="cx" values="90;100;90" dur="1.2s" repeatCount="indefinite" />
+                  </ellipse>
+                </g>
+                <g>
+                  <ellipse cx="150" cy="195" rx="13" ry="7" fill="#A05A20" stroke="#8B4513" strokeWidth="2.5">
+                    <animate attributeName="cx" values="150;140;150" dur="1.2s" repeatCount="indefinite" />
                   </ellipse>
                 </g>
               </>
@@ -273,18 +366,46 @@ export function SquirrelMascot({ mood, message, task, applicantCount, isOwnTask,
               <path d="M 164 68 C 166 50 156 34 140 38 C 132 40 130 54 134 64 C 138 74 154 76 164 68 Z" fill="#6B4220" />
             </g>
             <g>
-              {shouldDrink && <animateTransform attributeName="transform" type="rotate" values="0 120 102;-3 120 102;0 120 102" dur="2s" repeatCount="indefinite" />}
+              {shouldDrink && <animateTransform attributeName="transform" type="rotate" values="0 120 102;-4 120 102;0 120 102" dur="2s" repeatCount="indefinite" />}
               {effectiveMood === "sad" && <animateTransform attributeName="transform" type="rotate" values="0 120 102;1 120 102;0 120 102" dur="2s" repeatCount="indefinite" />}
+              {danceMode && <animateTransform attributeName="transform" type="rotate" values="-2 120 102;2 120 102;-2 120 102" dur="0.6s" repeatCount="indefinite" />}
+              {effectiveMood === "idle" && idleAnim === "lookAround" && (
+                <animateTransform attributeName="transform" type="rotate" values="0 120 102;8 120 102;-8 120 102;0 120 102" dur="2s" repeatCount="indefinite" />
+              )}
+              {effectiveMood === "idle" && idleAnim === "scratch" && (
+                <animateTransform attributeName="transform" type="rotate" values="0 120 102;-6 120 102;0 120 102" dur="0.6s" repeatCount="indefinite" />
+              )}
               <circle cx="120" cy="102" r="48" fill="url(#fur)" stroke="#8B4513" strokeWidth="2.5" />
-              <path d="M 110 54 C 106 44 108 36 112 32" fill="none" stroke="#A05A20" strokeWidth="3" strokeLinecap="round" />
-              <circle cx="112" cy="32" r="3" fill="#C47A2A" stroke="#8B4513" strokeWidth="1" />
-              <path d="M 130 54 C 134 44 132 36 128 32" fill="none" stroke="#A05A20" strokeWidth="3" strokeLinecap="round" />
-              <circle cx="128" cy="32" r="3" fill="#C47A2A" stroke="#8B4513" strokeWidth="1" />
+              {/* Ears with subtle twitch */}
+              <g>
+                {effectiveMood === "idle" && (idleAnim === "lookAround" || idleAnim === "scratch") ? (
+                  <animateTransform attributeName="transform" type="rotate" values="0 112 32;-3 112 32;0 112 32" dur="0.6s" repeatCount="indefinite" />
+                ) : (
+                  <animateTransform attributeName="transform" type="rotate" values="0 112 32;1 112 32;0 112 32" dur="4s" repeatCount="indefinite" />
+                )}
+                <path d="M 110 54 C 106 44 108 36 112 32" fill="none" stroke="#A05A20" strokeWidth="3" strokeLinecap="round" />
+                <circle cx="112" cy="32" r="3" fill="#C47A2A" stroke="#8B4513" strokeWidth="1" />
+              </g>
+              <g>
+                {effectiveMood === "idle" && (idleAnim === "lookAround" || idleAnim === "scratch") ? (
+                  <animateTransform attributeName="transform" type="rotate" values="0 128 102;3 128 102;0 128 102" dur="0.6s" repeatCount="indefinite" />
+                ) : (
+                  <animateTransform attributeName="transform" type="rotate" values="0 128 102;-1 128 102;0 128 102" dur="4s" repeatCount="indefinite" />
+                )}
+                <path d="M 130 54 C 134 44 132 36 128 32" fill="none" stroke="#A05A20" strokeWidth="3" strokeLinecap="round" />
+                <circle cx="128" cy="32" r="3" fill="#C47A2A" stroke="#8B4513" strokeWidth="1" />
+              </g>
+              {/* Cheeks with blush animation */}
               <ellipse cx="74" cy="122" rx="28" ry="24" fill="url(#fur)" stroke="#8B4513" strokeWidth="2.5" />
               <ellipse cx="166" cy="122" rx="28" ry="24" fill="url(#fur)" stroke="#8B4513" strokeWidth="2.5" />
-              <ellipse cx="78" cy="126" rx="15" ry="10" fill="#FF8A9E" opacity="0.35" />
-              <ellipse cx="162" cy="126" rx="15" ry="10" fill="#FF8A9E" opacity="0.35" />
+              <ellipse cx="78" cy="126" rx="15" ry="10" fill="#FF8A9E" opacity="0.35">
+                {danceMode && <animate attributeName="opacity" values="0.35;0.6;0.35" dur="0.6s" repeatCount="indefinite" />}
+              </ellipse>
+              <ellipse cx="162" cy="126" rx="15" ry="10" fill="#FF8A9E" opacity="0.35">
+                {danceMode && <animate attributeName="opacity" values="0.35;0.6;0.35" dur="0.6s" repeatCount="indefinite" />}
+              </ellipse>
               <ellipse cx="120" cy="124" rx="19" ry="11" fill="#FDE8C8" stroke="#D4893A" strokeWidth="2" />
+              {/* EYES */}
               {effectiveMood === "sad" ? (
                 <>
                   <ellipse cx="96" cy="96" rx="9" ry="13" fill="#1A1A1A" />
@@ -300,6 +421,11 @@ export function SquirrelMascot({ mood, message, task, applicantCount, isOwnTask,
                     <animate attributeName="d" values="M 144 108 C 146 114 143 118 141 114;M 144 108 C 147 115 143 120 141 116;M 144 108 C 146 114 143 118 141 114" dur="1.8s" repeatCount="indefinite" />
                   </path>
                 </>
+              ) : blink ? (
+                <>
+                  <ellipse cx="96" cy="96" rx="8" ry="2" fill="#1A1A1A" />
+                  <ellipse cx="144" cy="96" rx="8" ry="2" fill="#1A1A1A" />
+                </>
               ) : (
                 <>
                   <ellipse cx="96" cy="96" rx="9" ry="13" fill="#1A1A1A" />
@@ -310,14 +436,42 @@ export function SquirrelMascot({ mood, message, task, applicantCount, isOwnTask,
                   <circle cx="141" cy="88" r="2.2" fill="white" />
                   <circle cx="98" cy="100" r="1.5" fill="white" opacity="0.4" />
                   <circle cx="146" cy="100" r="1.5" fill="white" opacity="0.4" />
+                  {effectiveMood === "idle" && idleAnim === "lookAround" && (
+                    <>
+                      <animate attributeName="cx" values="96;90;96;102;96" dur="2s" repeatCount="indefinite" />
+                      <animate attributeName="cy" values="96;94;96;94;96" dur="2s" repeatCount="indefinite" />
+                    </>
+                  )}
+                  {danceMode && (
+                    <>
+                      <ellipse cx="96" cy="96" rx="9" ry="9" fill="#1A1A1A">
+                        <animate attributeName="rx" values="9;7;9" dur="0.3s" repeatCount="indefinite" />
+                      </ellipse>
+                      <ellipse cx="144" cy="96" rx="9" ry="9" fill="#1A1A1A">
+                        <animate attributeName="rx" values="9;7;9" dur="0.3s" repeatCount="indefinite" />
+                      </ellipse>
+                    </>
+                  )}
                 </>
               )}
+              {/* NOSE */}
               <ellipse cx="120" cy="112" rx="4" ry="3" fill="#3A2010" />
               <ellipse cx="118" cy="111" rx="1.5" ry="1" fill="#5C3A1E" opacity="0.35" />
-              <path d="M 106 124 Q 120 138 134 124" fill="none" stroke="#3A2010" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+              {/* MOUTH — animated smile */}
+              {danceMode || isRunning || (effectiveMood as string) === "excited" ? (
+                <path d="M 104 124 Q 120 144 136 124" fill="none" stroke="#3A2010" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <animate attributeName="d" values="M 104 124 Q 120 144 136 124;M 104 124 Q 120 142 136 124;M 104 124 Q 120 144 136 124" dur="0.6s" repeatCount="indefinite" />
+                </path>
+              ) : effectiveMood === "sad" ? (
+                <path d="M 104 138 Q 120 128 136 138" fill="none" stroke="#3A2010" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+              ) : (
+                <path d="M 106 124 Q 120 136 134 124" fill="none" stroke="#3A2010" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+              )}
               <path d="M 108 124 Q 120 136 132 124 Z" fill="#3A2010" opacity="0.12" />
-              <rect x="115" y="128" width="6" height="7" rx="1.5" fill="#FEFEFE" stroke="#D4893A" strokeWidth="1" />
-              <rect x="121" y="128" width="6" height="7" rx="1.5" fill="#FEFEFE" stroke="#D4893A" strokeWidth="1" />
+              {/* TEETH */}
+              <rect x="115" y="128" width="6" height="10" rx="1.5" fill="#FEFEFE" stroke="#D4893A" strokeWidth="1" />
+              <rect x="121" y="128" width="6" height="10" rx="1.5" fill="#FEFEFE" stroke="#D4893A" strokeWidth="1" />
+              {/* WHISKERS */}
               <g stroke="#A05A20" strokeWidth="1.2" opacity="0.4" strokeLinecap="round">
                 <line x1="64" y1="118" x2="88" y2="124" />
                 <line x1="62" y1="124" x2="88" y2="126" />
@@ -337,7 +491,7 @@ export function SquirrelMascot({ mood, message, task, applicantCount, isOwnTask,
                 <line x1="0" y1="-14" x2="-2" y2="-20" stroke="#6B4220" strokeWidth="3" strokeLinecap="round" />
                 <ellipse cx="-5" cy="0" rx="6" ry="9" fill="#D4A017" opacity="0.2" />
               </g>
-              <path d="M 90 162 C 76 160 66 178 76 190 C 84 198 100 196 110 190" fill="none" stroke="#D4893A" strokeWidth="10" strokeLinecap="round" />
+              <path d="M 90 162 C 80 160 66 178 76 190 C 84 198 100 196 110 190" fill="none" stroke="#D4893A" strokeWidth="10" strokeLinecap="round" />
               <path d="M 150 162 C 164 160 174 178 164 190 C 156 198 140 196 130 190" fill="none" stroke="#D4893A" strokeWidth="10" strokeLinecap="round" />
               <circle cx="118" cy="100" r="2" fill="#7DD3FC" opacity="0.5">
                 <animate attributeName="cy" values="100;90;80" dur="1s" repeatCount="indefinite" />
@@ -356,42 +510,76 @@ export function SquirrelMascot({ mood, message, task, applicantCount, isOwnTask,
                 <line x1="0" y1="-14" x2="2" y2="-20" stroke="#6B4220" strokeWidth="3" strokeLinecap="round" />
                 <ellipse cx="-5" cy="0" rx="6" ry="9" fill="#D4A017" opacity="0.2" />
               </g>
-              <path d="M 90 162 C 76 160 66 178 76 190 C 84 198 100 196 110 190" fill="none" stroke="#D4893A" strokeWidth="10" strokeLinecap="round" />
+              <path d="M 90 162 C 76 160 88 178 76 190 C 84 198 100 196 110 190" fill="none" stroke="#D4893A" strokeWidth="10" strokeLinecap="round" />
               <g>
                 <path d="M 152 156 C 172 146 184 116 174 104" fill="none" stroke="#D4893A" strokeWidth="10" strokeLinecap="round">
-                  <animateTransform attributeName="transform" type="rotate" values="0 152 156;-14 152 156;0 152 156" dur="0.6s" repeatCount="indefinite" />
+                  <animateTransform attributeName="transform" type="rotate" values="0 152 156;-18 152 156;0 152 156" dur="0.5s" repeatCount="indefinite" />
                 </path>
                 <circle cx="174" cy="104" r="6" fill="#D4893A" stroke="#8B4513" strokeWidth="2">
-                  <animateTransform attributeName="transform" type="rotate" values="0 152 156;-14 152 156;0 152 156" dur="0.6s" repeatCount="indefinite" />
+                  <animateTransform attributeName="transform" type="rotate" values="0 152 156;-18 152 156;0 152 156" dur="0.5s" repeatCount="indefinite" />
                 </circle>
               </g>
             </>
-          ) : isRunning ? (
+          ) : isRunning || danceMode ? (
             <>
               <g>
                 <path d="M 90 160 C 76 158 64 174 72 186 C 80 194 96 192 106 186" fill="none" stroke="#D4893A" strokeWidth="10" strokeLinecap="round">
-                  <animateTransform attributeName="transform" type="rotate" values="-15 90 160;15 90 160;-15 90 160" dur="0.45s" repeatCount="indefinite" />
+                  <animateTransform attributeName="transform" type="rotate" values="-20 90 160;20 90 160;-20 90 160" dur="0.35s" repeatCount="indefinite" />
                 </path>
               </g>
               <g>
                 <path d="M 150 160 C 164 158 176 174 168 186 C 160 194 144 192 134 186" fill="none" stroke="#D4893A" strokeWidth="10" strokeLinecap="round">
-                  <animateTransform attributeName="transform" type="rotate" values="15 150 160;-15 150 160;15 150 160" dur="0.45s" repeatCount="indefinite" />
+                  <animateTransform attributeName="transform" type="rotate" values="20 150 160;-20 150 160;20 150 160" dur="0.35s" repeatCount="indefinite" />
                 </path>
               </g>
               <g opacity="0.35">
-                <line x1="52" y1="116" x2="40" y2="114" stroke="#8B4513" strokeWidth="2.5" strokeLinecap="round">
-                  <animate attributeName="x1" values="52;42;52" dur="0.45s" repeatCount="indefinite" />
-                  <animate attributeName="opacity" values="0.35;0.05;0.35" dur="0.45s" repeatCount="indefinite" />
+                <line x1="52" y1="116" x2="36" y2="110" stroke="#8B4513" strokeWidth="2.5" strokeLinecap="round">
+                  <animate attributeName="x1" values="52;38;52" dur="0.35s" repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="0.35;0.05;0.35" dur="0.35s" repeatCount="indefinite" />
                 </line>
-                <line x1="48" y1="126" x2="36" y2="126" stroke="#8B4513" strokeWidth="2.5" strokeLinecap="round">
-                  <animate attributeName="x1" values="48;38;48" dur="0.45s" repeatCount="indefinite" begin="0.1s" />
-                  <animate attributeName="opacity" values="0.35;0.05;0.35" dur="0.45s" repeatCount="indefinite" begin="0.1s" />
+                <line x1="48" y1="126" x2="32" y2="124" stroke="#8B4513" strokeWidth="2.5" strokeLinecap="round">
+                  <animate attributeName="x1" values="48;34;48" dur="0.35s" repeatCount="indefinite" begin="0.08s" />
+                  <animate attributeName="opacity" values="0.35;0.05;0.35" dur="0.35s" repeatCount="indefinite" begin="0.08s" />
                 </line>
-                <line x1="188" y1="120" x2="200" y2="118" stroke="#8B4513" strokeWidth="2.5" strokeLinecap="round">
-                  <animate attributeName="x1" values="188;198;188" dur="0.45s" repeatCount="indefinite" begin="0.2s" />
-                  <animate attributeName="opacity" values="0.35;0.05;0.35" dur="0.45s" repeatCount="indefinite" begin="0.2s" />
+                <line x1="188" y1="120" x2="204" y2="114" stroke="#8B4513" strokeWidth="2.5" strokeLinecap="round">
+                  <animate attributeName="x1" values="188;202;188" dur="0.35s" repeatCount="indefinite" begin="0.15s" />
+                  <animate attributeName="opacity" values="0.35;0.05;0.35" dur="0.35s" repeatCount="indefinite" begin="0.15s" />
                 </line>
               </g>
+            </>
+          ) : isJumping ? (
+            <>
+              <g transform="translate(120, 178)">
+                <ellipse cx="0" cy="4" rx="17" ry="21" fill="url(#acornBody)" stroke="#6B4220" strokeWidth="2.5" />
+                <path d="M -19 -2 C -19 -16 19 -16 19 -2" fill="#8B5E2A" stroke="#6B4220" strokeWidth="2.5" strokeLinecap="round" />
+                <line x1="0" y1="-14" x2="2" y2="-20" stroke="#6B4220" strokeWidth="3" strokeLinecap="round" />
+                <ellipse cx="-5" cy="0" rx="6" ry="9" fill="#D4A017" opacity="0.2" />
+              </g>
+              <g>
+                <path d="M 85 160 C 72 156 60 170 68 182 C 76 190 92 188 102 182" fill="none" stroke="#D4893A" strokeWidth="10" strokeLinecap="round">
+                  <animate attributeName="d" values="M 85 160 C 72 156 60 170 68 182 C 76 190 92 188 102 182;M 82 148 C 68 142 54 156 62 168 C 70 176 86 174 98 168;M 85 160 C 72 156 60 170 68 182 C 76 190 92 188 102 182" dur="0.55s" repeatCount="1" />
+                </path>
+              </g>
+              <g>
+                <path d="M 155 160 C 168 156 180 170 172 182 C 164 190 148 188 138 182" fill="none" stroke="#D4893A" strokeWidth="10" strokeLinecap="round">
+                  <animate attributeName="d" values="M 155 160 C 168 156 180 170 172 182 C 164 190 148 188 138 182;M 158 148 C 180 142 176 166 168 178 C 160 186 144 184 134 178;M 155 160 C 168 156 180 170 172 182 C 164 190 148 188 138 182" dur="0.55s" repeatCount="1" />
+                </path>
+              </g>
+            </>
+          ) : effectiveMood === "idle" && idleAnim === "stretch" ? (
+            <>
+              <g transform="translate(120, 178)">
+                <ellipse cx="0" cy="4" rx="17" ry="21" fill="url(#acornBody)" stroke="#6B4220" strokeWidth="2.5" />
+                <path d="M -19 -2 C -19 -16 19 -16 19 -2" fill="#8B5E2A" stroke="#6B4220" strokeWidth="2.5" strokeLinecap="round" />
+                <line x1="0" y1="-14" x2="2" y2="-20" stroke="#6B4220" strokeWidth="3" strokeLinecap="round" />
+                <ellipse cx="-5" cy="0" rx="6" ry="9" fill="#D4A017" opacity="0.2" />
+              </g>
+              <path d="M 85 160 C 72 156 60 170 68 182 C 76 190 92 188 102 182" fill="none" stroke="#D4893A" strokeWidth="10" strokeLinecap="round">
+                <animate attributeName="d" values="M 85 160 C 72 156 60 170 68 182 C 76 190 92 188 102 182;M 80 158 C 64 150 50 164 58 176 C 66 184 84 182 96 176;M 85 160 C 72 156 60 170 68 182 C 76 190 92 188 102 182" dur="1.2s" repeatCount="indefinite" />
+              </path>
+              <path d="M 155 160 C 168 156 180 170 172 182 C 164 190 148 188 138 182" fill="none" stroke="#D4893A" strokeWidth="10" strokeLinecap="round">
+                <animate attributeName="d" values="M 155 160 C 168 156 180 170 172 182 C 164 190 148 188 138 182;M 160 158 C 176 148 190 148 182 180 C 174 184 156 182 144 176;M 155 160 C 168 156 180 170 172 182 C 164 190 148 188 138 182" dur="1.2s" repeatCount="indefinite" />
+              </path>
             </>
           ) : (
             <>
@@ -401,8 +589,8 @@ export function SquirrelMascot({ mood, message, task, applicantCount, isOwnTask,
                 <line x1="0" y1="-14" x2="2" y2="-20" stroke="#6B4220" strokeWidth="3" strokeLinecap="round" />
                 <ellipse cx="-5" cy="0" rx="6" ry="9" fill="#D4A017" opacity="0.2" />
               </g>
-              <path d="M 90 162 C 76 160 66 178 76 190 C 84 198 100 196 110 190" fill="none" stroke="#D4893A" strokeWidth="10" strokeLinecap="round" />
-              <path d="M 150 162 C 164 160 174 178 164 190 C 156 198 140 196 130 190" fill="none" stroke="#D4893A" strokeWidth="10" strokeLinecap="round" />
+              <path d="M 90 162 C 70 160 60 178 76 190 C 84 198 100 196 110 190" fill="none" stroke="#D4893A" strokeWidth="10" strokeLinecap="round" />
+              <path d="M 150 162 C 170 160 180 178 164 190 C 156 198 140 196 130 190" fill="none" stroke="#D4893A" strokeWidth="10" strokeLinecap="round" />
             </>
           )}
         </svg>
@@ -433,7 +621,11 @@ export function SquirrelMascot({ mood, message, task, applicantCount, isOwnTask,
         <div className="relative rounded-xl border bg-card px-4 py-3 text-sm leading-relaxed shadow-sm">
           <div className="absolute -left-1.5 top-4 h-3 w-3 rotate-45 border-b border-l bg-card" />
           {message ? (
-            <p>{message}</p>
+            <div className="space-y-1.5">
+              {message.split("\n").map((line, i) => (
+                <p key={i}>{line}</p>
+              ))}
+            </div>
           ) : effectiveMood === "excited" ? (
             <p className="font-medium text-emerald-600">Task is Open, Apply fast! <span className="text-foreground">Your skills match perfectly — don't miss out!</span></p>
           ) : effectiveMood === "happy" ? (
@@ -450,8 +642,29 @@ export function SquirrelMascot({ mood, message, task, applicantCount, isOwnTask,
             <p>Ready? Check the details below and apply when you're set!</p>
           )}
 
+          {/* Action buttons */}
+          {actions && actions.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {actions.map((a, i) => (
+                <a
+                  key={i}
+                  href={a.href}
+                  className={`inline-flex items-center rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                    a.variant === "success"
+                      ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                      : a.variant === "outline"
+                      ? "border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+                      : "bg-primary text-primary-foreground hover:bg-primary/90"
+                  }`}
+                >
+                  {a.label}
+                </a>
+              ))}
+            </div>
+          )}
+
           {/* Buyer stats for own task */}
-          {isOwnTask && task && task.status === "open" && (
+          {isOwnTask && task && task.status === "open" && !actions && (
             <div className="mt-2 rounded-lg bg-muted/50 p-2 text-xs">
               <p className="font-medium text-amber-700">
                 📊 {applicantCount ?? 0} applicant{(applicantCount ?? 0) !== 1 ? "s" : ""} applied

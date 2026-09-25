@@ -89,6 +89,7 @@ function getNavForMode(mode: string, currentMode?: string | null): Item[] {
 export function DashboardMobileSidebar({ mode, currentMode }: Props) {
   const pathname = usePathname();
   const [open, setOpen] = React.useState(false);
+  const [verified, setVerified] = React.useState<boolean | null>(null);
 
   React.useEffect(() => {
     if (!open) return;
@@ -96,6 +97,13 @@ export function DashboardMobileSidebar({ mode, currentMode }: Props) {
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = prev; };
   }, [open]);
+
+  React.useEffect(() => {
+    fetch("/api/verification/check-status")
+      .then((r) => r.json())
+      .then((d) => { if (d.ok) setVerified(d.aadhaar && d.bank); })
+      .catch(() => {});
+  }, []);
 
   const nav = getNavForMode(mode, currentMode);
 
@@ -172,9 +180,12 @@ export function DashboardMobileSidebar({ mode, currentMode }: Props) {
                     {active && (
                       <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r-full bg-primary" />
                     )}
-                    <Icon className="h-[18px] w-[18px] shrink-0" />
+                    <Icon className={cn("h-[18px] w-[18px] shrink-0", href === "/onboarding/verify" && verified && "text-emerald-500")} />
                     <span className="truncate">{label}</span>
                     {href === "/dashboard/messages" && <UnreadMessagesBadge />}
+                    {href === "/onboarding/verify" && verified && (
+                      <span className="ml-auto rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600">✓ Done</span>
+                    )}
                   </Link>
                 );
               })}

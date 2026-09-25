@@ -9,12 +9,15 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   ArrowLeft, MapPin, Briefcase, GraduationCap, FolderGit2, Award,
   FileText, Star, ExternalLink, ShieldCheck, Calendar, Clock,
-  Download, IndianRupee, BadgeCheck, XCircle,
+  Download, BadgeCheck, XCircle,
 } from "lucide-react";
-import { formatPaise, timeAgo } from "@/lib/utils";
+import { cn, formatPaise, timeAgo } from "@/lib/utils";
 import { VideoGrid } from "@/components/profile/video-grid";
 import { PreHireChat } from "@/components/people/pre-hire-chat";
 import { HirePanel } from "@/components/people/hire-panel";
+import { SkillOverflow, TechList, ContractSkills } from "@/components/people/skill-overflow";
+import { ProfileGigsSection } from "@/components/people/profile-gigs";
+import { ProfileReviews } from "@/components/people/profile-reviews";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -43,6 +46,9 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
     { data: resume },
     { data: standingRates },
     { data: resumeParse },
+    { data: gigs },
+    { data: contracts },
+    { data: reviews },
   ] = await Promise.all([
     sb.from("users").select("id, full_name, avatar_url, last_active, current_mode, created_at").eq("id", userId).maybeSingle(),
     sb.from("employee_profiles").select("*").eq("user_id", userId).maybeSingle(),
@@ -55,19 +61,45 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
     sb.from("employee_resume").select("filename, uploaded_at").eq("user_id", userId).maybeSingle(),
     sb.from("employee_standing_rates").select("rate_per_task_paise, rate_per_hour_paise, standing_rate").eq("user_id", userId).maybeSingle(),
     sb.from("resumes").select("parsed_skills").eq("user_id", userId).maybeSingle(),
+    sb.from("gigs").select("id, title, slug, images, price, package_basic_price, package_standard_price, package_premium_price, delivery_days, status, created_at, category:skill_categories(name, slug)").eq("employee_id", userId).eq("status", "active").order("created_at", { ascending: false }),
+    sb.from("contracts").select("id, status, agreed_price, pricing_model, gig_id, task_post_id, category_id, category:skill_categories(name, status)").eq("employee_id", userId).in("status", ["active", "completed"]).order("started_at", { ascending: false, nullsFirst: false }).limit(50),
+    sb.from("reviews").select("id, rating, comment, communication_rating, quality_rating, value_rating, gig_id, contract_id, reviewer:users!reviews_reviewer_id_fkey(full_name, avatar_url, last_active), created_at").eq("reviewee_id", userId).order("created_at", { ascending: false }).limit(50),
   ]);
   const parsedTechs: string[] = (resumeParse as any)?.parsed_skills ?? [];
+  const employeeGigs: any[] = (gigs ?? []) as any[];
+  const employeeContracts: any[] = (contracts ?? []) as any[];
+  const employeeReviews: any[] = (reviews ?? []) as any[];
+  const activeContracts = employeeContracts.filter((c: any) => c.status === "active");
+  const completedContracts = employeeContracts.filter((c: any) => c.status === "completed");
+  const avgRating = employeeReviews.length > 0 ? employeeReviews.reduce((s: number, r: any) => s + r.rating, 0) / employeeReviews.length : 0;
 
   if (!u) notFound();
 
   // Who is viewing?
   const { data: viewer } = await sb.auth.getUser();
   const { data: viewerProfile } = viewer?.user
-    ? await sb.from("users").select("current_mode, roles").eq("id", viewer.user.id).maybeSingle()
+    ? await sb.from("users").select("current_mode, roles, full_name, avatar_url").eq("id", viewer.user.id).maybeSingle()
     : { data: null };
   const viewerIsEmployee =
     (viewerProfile as any)?.current_mode === "employee" ||
     (viewerProfile as any)?.current_mode === "both";
+
+  // Fetch direct messages between viewer and employee
+  const viewerId = viewer?.user?.id ?? null;
+  let initialDirectMsgs: any[] = [];
+  if (viewerId && viewerId !== userId) {
+    const { data: dms } = await sb
+      .from("direct_messages")
+      .select(`
+        id, sender_id, receiver_id, body, created_at,
+        sender:users!direct_messages_sender_id_fkey(id, full_name, avatar_url),
+        receiver:users!direct_messages_receiver_id_fkey(id, full_name, avatar_url)
+      `)
+      .or(`and(sender_id.eq.${viewerId},receiver_id.eq.${userId}),and(sender_id.eq.${userId},receiver_id.eq.${viewerId})`)
+      .order("created_at", { ascending: false })
+      .limit(200);
+    initialDirectMsgs = (dms ?? []).reverse();
+  }
 
   const verifiedDocs = (verifs ?? []).filter((v: any) => (v.purpose ?? "employee") === "employee");
   const isVerified = verifiedDocs.length > 0;
@@ -99,7 +131,7 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
         </div>
       </div>
 
-      <div className="container max-w-5xl space-y-6 py-8">
+      <div className="max-w-6xl mx-auto space-y-5 py-6 px-4">
         {/* ===== Header card ===== */}
         <Card>
           <CardContent className="flex flex-col gap-6 p-6 sm:flex-row sm:items-start">
@@ -112,17 +144,22 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
                 <h1 className="font-display text-3xl font-semibold tracking-tight">{(u as any)?.full_name ?? "HiVR member"}</h1>
                 {isVerified && <Badge variant="success" className="text-[10px]"><ShieldCheck className="mr-1 h-3 w-3" />Verified</Badge>}
                 {tier && tier !== "provisional" && <Badge variant="secondary" className="capitalize text-[10px]">{tier.replace("_", " ")}</Badge>}
-                {isAvailable ? (
-                  <Badge variant="default" className="bg-emerald-500/10 text-emerald-700 border-emerald-500/20 text-[10px]">Available for work</Badge>
-                ) : (
-                  <Badge variant="outline" className="text-[10px]">In buyer mode</Badge>
+                {(ep as any)?.availability_status && ["online","offline","away","busy"].includes((ep as any).availability_status) && (
+                  <Badge variant="default" className={cn(
+                    "text-[10px] capitalize gap-1",
+                    (ep as any).availability_status === "online" && "bg-emerald-500 text-white",
+                    (ep as any).availability_status === "busy" && "bg-amber-500 text-white",
+                    (ep as any).availability_status === "away" && "bg-red-500 text-white",
+                    (ep as any).availability_status === "offline" && "bg-gray-400 text-white",
+                  )}>
+                    {(ep as any).availability_status}
+                  </Badge>
                 )}
               </div>
               {headline && <p className="mt-1 text-base text-muted-foreground">{headline}</p>}
               <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                 {(ep as any)?.location && <span><MapPin className="mr-1 inline h-3.5 w-3.5" />{ep.location}</span>}
                 {(ep as any)?.experience_type && <span className="capitalize"><Briefcase className="mr-1 inline h-3.5 w-3.5" />{ep.experience_type === "fresher" ? "Student / fresher" : "Experienced"}</span>}
-                {(ep as any)?.hourly_rate_paise && <span><IndianRupee className="mr-1 inline h-3.5 w-3.5" />From {formatPaise((ep as any).hourly_rate_paise)}/hr</span>}
                 {(ep as any)?.availability_hours && <span><Clock className="mr-1 inline h-3.5 w-3.5" />{(ep as any).availability_hours} hrs/week</span>}
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -134,12 +171,16 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
                     </a>
                   </Button>
                 )}
-                {!viewerIsEmployee && (
+                {!viewerIsEmployee && viewerId && (
                   <PreHireChat
                     employeeId={userId}
                     employeeName={(u as any)?.full_name ?? "HiVR member"}
                     employeeAvatar={(u as any)?.avatar_url ? `${(u as any).avatar_url}?v=${(u as any)?.last_active ?? ''}` : null}
                     responseTimeMinutes={(ep as any)?.response_time_avg_minutes ?? 60}
+                    viewerId={viewerId}
+                    viewerName={(viewerProfile as any)?.full_name ?? "You"}
+                    viewerAvatar={(viewerProfile as any)?.avatar_url ?? null}
+                    initialMessages={initialDirectMsgs}
                   />
                 )}
                 {!viewerIsEmployee && (
@@ -162,40 +203,62 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
           </CardContent>
         </Card>
 
-        {/* Two-column body */}
-        <div className="grid gap-6 lg:grid-cols-[1fr,300px]">
-          <div className="space-y-6 min-w-0">
+        {/* Two-column body — balanced layout */}
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
+          {/* LEFT COLUMN — main content */}
+          <div className="flex-1 space-y-5 min-w-0">
             {/* About */}
             {(ep as any)?.bio && (
               <Card>
-                <CardHeader><CardTitle>About</CardTitle></CardHeader>
+                <CardHeader className="pb-2"><CardTitle className="text-base">About</CardTitle></CardHeader>
                 <CardContent>
-                  <p className="whitespace-pre-wrap text-sm leading-relaxed">{(ep as any).bio}</p>
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">{(ep as any).bio}</p>
                 </CardContent>
               </Card>
             )}
 
-            {/* Showreel — public profile videos */}
-            <VideoGrid userId={userId} isOwner={false} showAdd={false} />
-
-            {/* Experience */}
+            {/* Work experience */}
             {(experience ?? []).length > 0 && (
               <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><Briefcase className="h-4 w-4" /> Work experience</CardTitle>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-base"><Briefcase className="h-4 w-4" /> Work experience</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-3">
                   {(experience ?? []).map((e: any) => (
                     <div key={e.id} className="flex items-start gap-3">
-                      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-primary/10 text-primary"><Briefcase className="h-4 w-4" /></div>
-                      <div>
-                        <p className="text-sm font-semibold">{e.role}{e.is_current && <span className="ml-1 text-[10px] font-normal text-emerald-600">· current</span>}</p>
-                        <p className="text-xs text-muted-foreground">{e.company} · {e.location ?? "—"}</p>
+                      <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-primary/10 text-primary"><Briefcase className="h-3.5 w-3.5" /></div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold truncate">{e.role}{e.is_current && <span className="ml-1 text-[10px] font-normal text-emerald-600">· current</span>}</p>
+                        <p className="text-xs text-muted-foreground truncate">{e.company} · {e.location ?? "—"}</p>
                         <p className="mt-0.5 text-[10px] text-muted-foreground">
                           {e.start_date ? new Date(e.start_date).toLocaleDateString("en-IN", { month: "short", year: "numeric" }) : "—"} – {e.is_current ? "Present" : (e.end_date ? new Date(e.end_date).toLocaleDateString("en-IN", { month: "short", year: "numeric" }) : "—")}
                           {e.employment_type && <> · <span className="capitalize">{e.employment_type.replace("_", " ")}</span></>}
                         </p>
-                        {e.description && <p className="mt-1 text-xs">{e.description}</p>}
+                        {e.description && <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{e.description}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* My Work gallery */}
+            <VideoGrid userId={userId} isOwner={false} showAdd={false} />
+
+            {/* Education */}
+            {(education ?? []).length > 0 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-base"><GraduationCap className="h-4 w-4" /> Education</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {(education ?? []).map((e: any) => (
+                    <div key={e.id} className="flex items-start gap-3">
+                      <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-primary/10 text-primary"><GraduationCap className="h-3.5 w-3.5" /></div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold truncate">{e.institution}{e.is_current && <span className="ml-1 text-[10px] font-normal text-emerald-600">· current</span>}</p>
+                        <p className="text-xs text-muted-foreground truncate">{[e.degree, e.field_of_study].filter(Boolean).join(" · ")}</p>
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">{e.start_year ?? "—"} – {e.is_current ? "Present" : (e.end_year ?? "—")}</p>
                       </div>
                     </div>
                   ))}
@@ -206,8 +269,8 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
             {/* Projects */}
             {(projects ?? []).length > 0 && (
               <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><FolderGit2 className="h-4 w-4" /> Projects</CardTitle>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-base"><FolderGit2 className="h-4 w-4" /> Projects</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -221,7 +284,7 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
                           {p.verification_status === "rejected" && <XCircle className="ml-auto h-3.5 w-3.5 text-rose-500" />}
                         </p>
                         {p.role && <p className="text-[10px] text-muted-foreground">{p.role}</p>}
-                        <p className="mt-1 line-clamp-3 text-xs text-muted-foreground">{p.description}</p>
+                        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{p.description}</p>
                         {p.tech_stack?.length > 0 && (
                           <div className="mt-1.5 flex flex-wrap gap-1">
                             {p.tech_stack.map((t: string) => (
@@ -236,40 +299,19 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
               </Card>
             )}
 
-            {/* Education */}
-            {(education ?? []).length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><GraduationCap className="h-4 w-4" /> Education</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {(education ?? []).map((e: any) => (
-                    <div key={e.id} className="flex items-start gap-3">
-                      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-primary/10 text-primary"><GraduationCap className="h-4 w-4" /></div>
-                      <div>
-                        <p className="text-sm font-semibold">{e.institution}{e.is_current && <span className="ml-1 text-[10px] font-normal text-emerald-600">· current</span>}</p>
-                        <p className="text-xs text-muted-foreground">{[e.degree, e.field_of_study].filter(Boolean).join(" · ")}</p>
-                        <p className="mt-0.5 text-[10px] text-muted-foreground">{e.start_year ?? "—"} – {e.is_current ? "Present" : (e.end_year ?? "—")}</p>
-                      </div>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
-
             {/* Certifications */}
             {(certifications ?? []).length > 0 && (
               <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><Award className="h-4 w-4" /> Certifications</CardTitle>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-base"><Award className="h-4 w-4" /> Certifications</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   {(certifications ?? []).map((c: any) => (
                     <div key={c.id} className="flex items-start gap-3">
-                      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-500/10 text-amber-600"><Award className="h-4 w-4" /></div>
-                      <div>
-                        <p className="text-sm font-semibold">{c.name}</p>
-                        <p className="text-xs text-muted-foreground">{c.issuer} · {c.issued_at ? new Date(c.issued_at).toLocaleDateString("en-IN", { month: "short", year: "numeric" }) : "—"}</p>
+                      <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-amber-500/10 text-amber-600"><Award className="h-3.5 w-3.5" /></div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold truncate">{c.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{c.issuer} · {c.issued_at ? new Date(c.issued_at).toLocaleDateString("en-IN", { month: "short", year: "numeric" }) : "—"}</p>
                         {c.url && (
                           <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
                             <ExternalLink className="h-2.5 w-2.5" />
@@ -286,19 +328,24 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
 
             {!(ep as any)?.bio && (experience ?? []).length === 0 && (projects ?? []).length === 0 && (education ?? []).length === 0 && (certifications ?? []).length === 0 && (
               <Card>
-                <CardContent className="p-8 text-center text-sm text-muted-foreground">
+                <CardContent className="py-8 text-center text-sm text-muted-foreground">
                   This profile is still being built. Check back later.
                 </CardContent>
               </Card>
             )}
+
+            {/* My Gigs — directly in the flow, no gap below */}
+            {employeeGigs.length > 0 && (
+              <ProfileGigsSection gigs={employeeGigs} />
+            )}
           </div>
 
-          {/* Right rail */}
-          <aside className="space-y-4">
-            {/* Skills */}
+          {/* RIGHT COLUMN — sticky sidebar */}
+          <aside className="w-full shrink-0 space-y-5 lg:w-[320px] lg:sticky lg:top-24">
+            {/* Skills + Technologies merged into one card */}
             {((skills ?? []).length > 0 || parsedTechs.length > 0) && (
               <Card>
-                <CardHeader>
+                <CardHeader className="pb-2">
                   <CardTitle className="text-sm">Skills</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -316,48 +363,43 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
                           {(s.verification_status === "verified" || s.verification_status === "experienced" || s.verification_status === "top_rated") && <ShieldCheck className="h-2.5 w-2.5" />}
                         </Link>
                       ))}
-                      {(skills ?? []).length > 4 && (
-                        <span className="inline-flex items-center rounded-full border border-dashed px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                          +{(skills ?? []).length - 4} more
-                        </span>
-                      )}
+                      <SkillOverflow
+                        skills={(skills ?? []).slice(4).map((s: any) => ({
+                          id: s.id,
+                          name: s.category?.name ?? "Skill",
+                          slug: s.category?.slug ?? "",
+                          is_primary: s.is_primary,
+                          verification_status: s.verification_status,
+                        }))}
+                        userId={userId}
+                      />
                     </div>
                   )}
-                  {parsedTechs.length > 0 && (
-                    <div>
-                      <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Technologies</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {parsedTechs.slice(0, 8).map((t: string, i: number) => (
-                          <span
-                            key={i}
-                            className="inline-flex cursor-default items-center gap-1 rounded-full border border-dashed bg-muted/20 px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
-                          >
-                            {t}
-                          </span>
-                        ))}
-                        {parsedTechs.length > 8 && (
-                          <span className="inline-flex items-center rounded-full border border-dashed px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                            +{parsedTechs.length - 8} more
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )}
+                  {parsedTechs.length > 0 && <TechList techs={parsedTechs} />}
                 </CardContent>
               </Card>
             )}
 
-            {/* Verifications */}
+            {/* Reviews + Activity — premium */}
+            <ProfileReviews
+              reviews={employeeReviews}
+              contracts={employeeContracts}
+              activeCount={activeContracts.length}
+              completedCount={completedContracts.length}
+              completionRate={(ep as any)?.completion_rate ?? null}
+            />
+
+            {/* Verifications — compact */}
             {verifiedDocs.length > 0 && (
               <Card>
-                <CardHeader>
+                <CardHeader className="pb-2">
                   <CardTitle className="text-sm">Verifications</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ul className="space-y-1.5">
+                  <ul className="space-y-1">
                     {verifiedDocs.map((v: any, i: number) => (
                       <li key={i} className="flex items-center gap-2 text-xs">
-                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
                         <span className="font-medium uppercase">{v.doc_type}</span>
                         <span className="text-emerald-600">✓ Verified</span>
                       </li>
@@ -366,14 +408,6 @@ export default async function PublicProfilePage({ params }: { params: { id: stri
                 </CardContent>
               </Card>
             )}
-
-            {/* Member since */}
-            <Card>
-              <CardContent className="p-4 text-[10px] text-muted-foreground">
-                <Calendar className="mr-1 inline h-3 w-3" />
-                Member since {(u as any)?.created_at ? new Date((u as any).created_at).toLocaleDateString("en-IN", { month: "long", year: "numeric" }) : "—"}
-              </CardContent>
-            </Card>
           </aside>
         </div>
       </div>

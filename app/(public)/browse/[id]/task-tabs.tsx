@@ -146,121 +146,52 @@ function OverviewTab({ task }: { task: TaskLite }) {
   const sections = splitDescription(task.description);
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr,300px]">
-      <div className="space-y-6 min-w-0">
-        <Card>
-          <CardContent className="prose prose-sm dark:prose-invert max-w-none p-6">
-            <h2 className="mb-3 font-display text-lg font-semibold">About this task</h2>
-            {sections.length > 0 ? (
-              sections.map((s, i) => (
-                <div key={i} className="mb-4 last:mb-0">
-                  {s.heading && <h3 className="mb-2 mt-4 font-display text-base font-semibold text-foreground">{s.heading}</h3>}
-                  {s.body.split("\n").filter((l) => l.trim()).map((line, j) => (
-                    <p key={j} className="my-1 break-words text-sm leading-relaxed text-foreground/90">{line}</p>
-                  ))}
-                </div>
-              ))
-            ) : (
-              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground/90">{task.description}</p>
-            )}
-          </CardContent>
-        </Card>
+    <div className="space-y-6">
+      <Card>
+        <CardContent className="prose prose-sm dark:prose-invert max-w-none p-6">
+          <h2 className="mb-3 font-display text-lg font-semibold">About this task</h2>
+          {sections.length > 0 ? (
+            sections.map((s, i) => (
+              <div key={i} className="mb-4 last:mb-0">
+                {s.heading && <h3 className="mb-2 mt-4 font-display text-base font-semibold text-foreground">{s.heading}</h3>}
+                {s.body.split("\n").filter((l) => l.trim()).map((line, j) => (
+                  <p key={j} className="my-1 break-words text-sm leading-relaxed text-foreground/90">{line}</p>
+                ))}
+              </div>
+            ))
+          ) : (
+            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground/90">{task.description}</p>
+          )}
+        </CardContent>
+      </Card>
 
-        {/* Quick info chips */}
-        <Card>
-          <CardContent className="p-6">
-            <h2 className="mb-3 font-display text-lg font-semibold">At a glance</h2>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border bg-gradient-to-br from-primary/5 to-primary/10 p-4">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Category</p>
-                <p className="mt-1 flex items-center gap-2 font-display text-base font-semibold capitalize">
-                  <Briefcase className="h-4 w-4 text-primary" />
-                  {task.category?.name ?? "—"}
-                </p>
-              </div>
-              <div className="rounded-xl border bg-gradient-to-br from-amber-500/5 to-amber-500/10 p-4">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Tier</p>
-                <p className="mt-1 flex items-center gap-2 font-display text-base font-semibold capitalize">
-                  <Star className="h-4 w-4 text-amber-500" />
-                  {task.category?.tier === "role_engagement" ? "B · Role engagement" : "A · Micro-task"}
-                </p>
-              </div>
-              <div className="rounded-xl border bg-gradient-to-br from-emerald-500/5 to-emerald-500/10 p-4">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Pricing</p>
-                <p className="mt-1 flex items-center gap-2 font-display text-base font-semibold capitalize">
-                  <TrendingUp className="h-4 w-4 text-emerald-500" />
-                  {task.pricing_model.replace("_", " ")}
-                </p>
-              </div>
-              <div className="rounded-xl border bg-gradient-to-br from-sky-500/5 to-sky-500/10 p-4">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Status</p>
-                <p className="mt-1 flex items-center gap-2 font-display text-base font-semibold capitalize">
-                  <Sparkles className="h-4 w-4 text-sky-500" />
-                  {task.status.replace("_", " ")}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* At a glance — premium info bar */}
+      <div className="grid grid-cols-2 divide-x divide-y rounded-xl border bg-card md:grid-cols-4 md:divide-y-0">
+        <div className="space-y-1 p-4">
+          <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            <Briefcase className="h-3 w-3" /> Category
+          </p>
+          <p className="font-display text-sm font-semibold capitalize leading-tight">{task.category?.name ?? "—"}</p>
+        </div>
+        <div className="space-y-1 p-4">
+          <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            <TrendingUp className="h-3 w-3" /> Pricing
+          </p>
+          <p className="font-display text-sm font-semibold capitalize leading-tight">{task.pricing_model.replace("_", " ")}</p>
+        </div>
+        <div className="space-y-1 p-4">
+          <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            <Star className="h-3 w-3" /> Tier
+          </p>
+          <p className="font-display text-sm font-semibold capitalize leading-tight">{task.category?.tier === "role_engagement" ? "B · Role" : "A · Micro"}</p>
+        </div>
+        <div className="space-y-1 p-4">
+          <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            <Sparkles className="h-3 w-3" /> Status
+          </p>
+          <p className="font-display text-sm font-semibold capitalize leading-tight">{task.status.replace("_", " ")}</p>
+        </div>
       </div>
-
-      {/* Deliverables section */}
-      {task.deliverables && task.deliverables.length > 0 && (
-        <Card>
-          <CardContent className="p-6">
-            <h2 className="font-display text-lg font-semibold flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-              Deliverables
-            </h2>
-            <ul className="mt-3 space-y-2">
-              {task.deliverables.map((d, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm">
-                  <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
-                  <span>{d}</span>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Sticky right rail (extra info) */}
-      <aside className="space-y-4">
-        <Card>
-          <CardContent className="p-5">
-            <h3 className="font-display text-sm font-semibold">Skills required</h3>
-            {task.skills_required && task.skills_required.length > 0 ? (
-              <>
-                <p className="mt-1 text-xs text-muted-foreground">Tagged by the buyer — make sure your profile includes these.</p>
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {task.skills_required.map((s) => (
-                    <Badge key={s} variant="secondary" className="text-xs">{s}</Badge>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="mt-1 text-xs text-muted-foreground">Inferred from the description.</p>
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {inferSkills(task).map((s) => (
-                    <Badge key={s} variant="secondary" className="text-xs">{s}</Badge>
-                  ))}
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5">
-            <h3 className="font-display text-sm font-semibold">Important dates</h3>
-            <div className="mt-3 space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-muted-foreground">Posted</span><span className="font-medium">{timeAgo(task.created_at)}</span></div>
-              {task.deadline && <div className="flex justify-between"><span className="text-muted-foreground">Deadline</span><span className="font-medium">{new Date(task.deadline).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span></div>}
-              {task.estimated_hours != null && <div className="flex justify-between"><span className="text-muted-foreground">Est. time</span><span className="font-medium">~{task.estimated_hours} {task.category?.tier === "role_engagement" ? "days" : "hrs"}</span></div>}
-            </div>
-          </CardContent>
-        </Card>
-      </aside>
     </div>
   );
 }
@@ -479,15 +410,4 @@ function splitDescription(desc: string): { heading: string | null; body: string 
   });
 }
 
-function inferSkills(task: TaskLite): string[] {
-  // Cheap keyword-based inference. The buyer's exact skills are visible
-  // to logged-in employees on the category page; this is just a teaser.
-  const text = (task.title + " " + task.description).toLowerCase();
-  const candidates = [
-    "Excel", "Spreadsheets", "Python", "JavaScript", "TypeScript", "React", "Node.js",
-    "SQL", "Postgres", "REST APIs", "Data analysis", "Machine learning", "NLP",
-    "Frontend", "Backend", "DevOps", "Docker", "Kubernetes", "AWS", "GCP", "Azure",
-    "Teaching", "Mentoring", "Translation", "Writing", "Design", "Figma", "Video editing",
-  ];
-  return candidates.filter((c) => text.includes(c.toLowerCase())).slice(0, 6);
-}
+

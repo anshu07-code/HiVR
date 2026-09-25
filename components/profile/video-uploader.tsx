@@ -41,6 +41,7 @@ export function VideoUploader({
   const [duration, setDuration] = React.useState(0);
   const [progress, setProgress] = React.useState(0);
   const [busy, setBusy] = React.useState(false);
+  const [uploaded, setUploaded] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   // MediaRecorder
@@ -56,11 +57,22 @@ export function VideoUploader({
     streamRef.current?.getTracks().forEach((t) => t.stop());
   }, [previewUrl]);
 
+  function clearFile() {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setFile(null);
+    setPreviewUrl(null);
+    setDuration(0);
+  }
+
   // ---------- file picker ----------
   function pickFile(f: File | null) {
     if (!f) return;
     if (f.size > MAX_BYTES) { setError("Max 50 MB."); return; }
-    if (!/^video\//.test(f.type)) { setError("Pick a video file (mp4, webm, mov)."); return; }
+    const ext = f.name.split(".").pop()?.toLowerCase();
+    if (!/^video\//.test(f.type) && !["mp4", "webm", "mov", "avi", "mkv"].includes(ext ?? "")) {
+      setError("Pick a video file (mp4, webm, mov).");
+      return;
+    }
     setError(null);
     setFile(f);
     setDuration(0);
@@ -157,14 +169,16 @@ export function VideoUploader({
         };
         xhr.onload = () => {
           try { resolve(JSON.parse(xhr.responseText)); }
-          catch { reject(new Error("Invalid response")); }
+          catch { reject(new Error(xhr.responseText?.slice(0, 200) || "Invalid response from server")); }
         };
         xhr.onerror = () => reject(new Error("Network error"));
         xhr.send(fd);
       });
       setProgress(100);
       if (!result.ok) throw new Error(result.error ?? "Upload failed");
+      setUploaded(true);
       onUploaded({ id: result.id, storagePath: result.storagePath, caption: caption.trim() });
+      setTimeout(() => onClose(), 1500);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -174,31 +188,26 @@ export function VideoUploader({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="font-display text-lg font-semibold">Add a video</h3>
-        <button onClick={onClose} className="rounded-md p-1 hover:bg-accent" aria-label="Close">
-          <X className="h-4 w-4" />
-        </button>
-      </div>
+      <h3 className="font-display text-lg font-semibold">Add a video</h3>
 
       <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
-          onClick={() => { setSource("file"); streamRef.current?.getTracks().forEach((t) => t.stop()); }}
+          onClick={() => { clearFile(); setSource("file"); streamRef.current?.getTracks().forEach((t) => t.stop()); }}
           className={cn("rounded-md border p-2 text-xs font-medium", source === "file" ? "border-primary bg-primary/5" : "hover:bg-muted")}
         >
           <VideoIcon className="mx-auto mb-1 h-4 w-4" />Upload
         </button>
         <button
           type="button"
-          onClick={() => setSource("record")}
+          onClick={() => { clearFile(); setSource("record"); streamRef.current?.getTracks().forEach((t) => t.stop()); }}
           className={cn("rounded-md border p-2 text-xs font-medium", source === "record" ? "border-primary bg-primary/5" : "hover:bg-muted")}
         >
           <Camera className="mx-auto mb-1 h-4 w-4" />Record
         </button>
       </div>
 
-      {source === "record" && !file && (
+      {source === "record" && (
         <div className="space-y-2">
           <div className="relative aspect-video w-full overflow-hidden rounded-lg border bg-zinc-950">
             <video ref={videoRef} playsInline className="h-full w-full object-cover [transform:scaleX(-1)]" />
@@ -282,9 +291,9 @@ export function VideoUploader({
 
       <div className="flex items-center justify-end gap-2 pt-1">
         <Button variant="ghost" size="sm" onClick={onClose} disabled={busy}>Cancel</Button>
-        <Button onClick={upload} disabled={busy || !file || !caption.trim()} variant="gradient" size="sm">
-          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-          {busy ? "Uploading…" : "Upload"}
+        <Button onClick={upload} disabled={busy || uploaded || !file || !caption.trim()} variant="gradient" size="sm">
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : uploaded ? <Check className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
+          {busy ? "Uploading…" : uploaded ? "Uploaded ✓" : "Upload"}
         </Button>
       </div>
     </div>

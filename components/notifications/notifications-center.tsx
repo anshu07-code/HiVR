@@ -128,7 +128,7 @@ export function NotificationsCenter({ userId, initial }: { userId: string; initi
         if (lastRound?.status === "accepted") {
           const { data: app } = await sb
             .from("task_applications")
-            .select("task_id")
+            .select("task_id, employee_id")
             .eq("id", settleAppId)
             .maybeSingle();
           if (app) {
@@ -136,7 +136,7 @@ export function NotificationsCenter({ userId, initial }: { userId: string; initi
               .from("contracts")
               .select("id")
               .eq("task_post_id", (app as any).task_id)
-              .eq("employee_id", userId)
+              .eq("employee_id", (app as any).employee_id)
               .order("created_at", { ascending: false })
               .limit(1)
               .maybeSingle();

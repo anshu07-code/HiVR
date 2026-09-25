@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+export const dynamic = "force-dynamic";
+
 type Round = {
   id: string;
   application_id: string;
@@ -217,11 +219,11 @@ export async function POST(req: NextRequest) {
         finalAmountPaise = Math.round(lastRound.amount_paise * hours);
       }
 
-      // Mark round as accepted
-      await sb.from("settlement_rounds").update({ status: "accepted" }).eq("id", lastRound.id);
-
       // Use admin client for writes to bypass RLS (same as hire_applicant's SECURITY DEFINER)
       const admin = createAdminClient();
+
+      // Mark round as accepted via admin client to avoid RLS blocking the update
+      await admin.from("settlement_rounds").update({ status: "accepted" }).eq("id", lastRound.id);
 
       // Derive tier from category
       const { data: catRow } = await sb.from("skill_categories").select("tier").eq("id", task.category_id).maybeSingle();
@@ -289,10 +291,11 @@ export async function POST(req: NextRequest) {
       }
 
       const expireStatus = isAutoExpire ? "expired" : "declined";
-      await sb.from("settlement_rounds").update({ status: expireStatus }).eq("id", lastRound.id);
+      const admin = createAdminClient();
+      await admin.from("settlement_rounds").update({ status: expireStatus }).eq("id", lastRound.id);
 
       // Mark all rounds as expired/declined
-      await sb.from("settlement_rounds").update({ status: expireStatus })
+      await admin.from("settlement_rounds").update({ status: expireStatus })
         .eq("application_id", applicationId)
         .in("status", expireStatus === "expired" ? ["pending", "countered"] : ["pending", "countered"]);
 
@@ -300,7 +303,6 @@ export async function POST(req: NextRequest) {
       const history = (app as any).hiring_stage_history ?? [];
       const lastEntry = history[history.length - 1];
       const prevStage = lastEntry?.from ?? "shortlist";
-      const admin = createAdminClient();
       await admin.from("task_applications").update({
         hiring_stage: prevStage,
         hiring_stage_history: history.concat([

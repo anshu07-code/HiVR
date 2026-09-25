@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, X, Plus, Edit3, Trash2 } from "lucide-react";
+import { rupeesToPaise } from "@/lib/utils";
 
 type EditGigDialogProps = {
   gigId: string;
@@ -40,7 +41,7 @@ export function EditGigDialog({ gigId, open, onOpenChange, onSaved }: EditGigDia
         const g = data as any;
         setTitle(g.title ?? "");
         setDescription(g.description ?? "");
-        setPrice(g.pricing_model === "fixed" ? String(g.price ?? "") : "");
+        setPrice(g.pricing_model === "fixed" ? String(Math.round((g.price ?? 0) / 100) || "") : "");
         setDeliveryDays(g.delivery_days ? String(g.delivery_days) : "");
         setTags((g.tags ?? []) as string[]);
         setDeliverables((g.deliverables?.length ? g.deliverables : [""]) as string[]);
@@ -72,7 +73,7 @@ export function EditGigDialog({ gigId, open, onOpenChange, onSaved }: EditGigDia
     const { error } = await (sb.from("gigs") as any).update({
       title,
       description,
-      price: price ? parseInt(price) : null,
+      price: price ? rupeesToPaise(parseInt(price)) : null,
       delivery_days: deliveryDays ? parseInt(deliveryDays) : null,
       tags,
       deliverables: filteredDeliverables,

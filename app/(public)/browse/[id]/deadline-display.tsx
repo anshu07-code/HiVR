@@ -41,7 +41,7 @@ function formatIST(iso: string): string {
   }
 }
 
-export function DeadlineDisplay({ deadline }: { deadline: string }) {
+export function DeadlineDisplay({ deadline, status }: { deadline: string; status?: string }) {
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -49,15 +49,16 @@ export function DeadlineDisplay({ deadline }: { deadline: string }) {
     return () => clearInterval(t);
   }, []);
 
-  const isOpen = new Date(deadline).getTime() > now;
+  const deadlinePassed = new Date(deadline).getTime() <= now;
+  const isClosed = status && status !== "open";
+  const showClosed = isClosed || deadlinePassed;
 
   return (
-    <div className="mt-3 rounded-md border bg-amber-500/5 p-2 text-xs">
-      <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
+    <div className={`mt-3 rounded-md border p-2 text-xs ${showClosed ? "border-muted bg-muted/30" : "bg-amber-500/5"}`}>
+      <div className={`flex items-center gap-1.5 ${showClosed ? "text-muted-foreground" : "text-amber-700 dark:text-amber-400"}`}>
         <Clock className="h-3 w-3" />
         <span className="font-medium">
-          {isOpen ? "Closes" : "Closed"}{" "}
-          {timeUntil(deadline)}
+          {showClosed ? "Closed" : "Closes"}{!showClosed && <> {timeUntil(deadline)}</>}
         </span>
       </div>
       <p className="mt-0.5 text-[10px] text-muted-foreground">

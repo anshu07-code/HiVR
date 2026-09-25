@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { formatPaise } from "@/lib/utils";
 
 const MAX_ROUNDS = 4;
 
@@ -114,18 +115,27 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "proposed_price required for counter" }, { status: 400 });
       }
 
-      // Validate price range: not above the first round's price (listed price), not below 80%
-      const { data: firstRound } = await sb.from("negotiation_rounds")
-        .select("proposed_price")
-        .eq("negotiation_id", o.id)
-        .eq("round_number", 1)
-        .single();
-      if (firstRound) {
-        const refPrice = (firstRound as any).proposed_price / 100;
+      // Validate price range: for gig negotiations, use the gig's listed price;
+      // otherwise fall back to the first round's proposed price
+      let refPricePaise: number | null = null;
+      if (o.gig_id) {
+        const { data: gig } = await sb.from("gigs").select("price, package_basic_price").eq("id", o.gig_id).single();
+        if (gig) refPricePaise = (gig as any).price || (gig as any).package_basic_price;
+      }
+      if (!refPricePaise) {
+        const { data: firstRound } = await sb.from("negotiation_rounds")
+          .select("proposed_price")
+          .eq("negotiation_id", o.id)
+          .eq("round_number", 1)
+          .single();
+        if (firstRound) refPricePaise = (firstRound as any).proposed_price;
+      }
+      if (refPricePaise) {
+        const refPrice = refPricePaise / 100;
         const minPrice = Math.round(refPrice * 0.8);
         if (body.proposed_price > refPrice || body.proposed_price < minPrice) {
           return NextResponse.json({
-            error: `Price must be between ₹${minPrice.toLocaleString("en-IN")} and ₹${refPrice.toLocaleString("en-IN")}`,
+            error: `Price must be between ${formatPaise(minPrice * 100)} and ${formatPaise(refPrice * 100)}`,
           }, { status: 400 });
         }
       }

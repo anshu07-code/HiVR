@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { X, Bell, Mail, Users, ShieldCheck, CheckCircle2, Sparkles } from "lucide-react";
+import { X, Bell, Mail, Users, ShieldCheck, CheckCircle2, Sparkles, Handshake, XCircle, Zap, Star } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
@@ -11,6 +11,11 @@ const TYPE_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
   kyc_verified: ShieldCheck,
   hiring_stage: Sparkles,
   new_message: Mail,
+  offer: Handshake,
+  offer_declined: XCircle,
+  hire_offer: Handshake,
+  instant_hire_offer: Zap,
+  task_recommendation: Star,
   default: Bell,
 };
 
@@ -48,9 +53,13 @@ export function NotificationToast() {
           const n = payload.new as any;
           if (n.user_id !== (sb.auth as any).currentUser?.id) return; // only show own notifications
 
-          // Skip if user is already viewing the page the notification links to
+          // Skip if user is already on the page/section the notification links to
           const link = n.link ?? "";
-          if (link && pathRef.current.startsWith(link)) return;
+          if (link) {
+            const base = link.replace(/\/+$/, "");
+            if (pathRef.current === base ||
+                (base !== "/" && pathRef.current.startsWith(base + "/"))) return;
+          }
 
           const toast: Toast = {
             id: n.id,
@@ -71,7 +80,7 @@ export function NotificationToast() {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed bottom-6 right-6 z-[200] flex flex-col gap-2">
+    <div className="fixed bottom-6 right-6 z-[200] flex flex-col gap-2 overflow-hidden">
       {toasts.map((t) => {
         const Icon = TYPE_ICON[t.type] ?? TYPE_ICON.default;
         const Wrapper = t.link ? Link : "div";

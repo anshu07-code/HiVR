@@ -7,13 +7,14 @@ import {
   LayoutDashboard, Briefcase, Wallet, Award, ShieldCheck, MessageSquare, Star,
   Settings, ChevronsLeft, ChevronsRight, ListChecks, FileText, Users, BarChart3, Calendar, Sparkles,
   Search, UserSearch, FolderTree, BookOpen, Tag, Building2, Activity, FolderKanban, Zap, Eye, Bell,
-  TrendingUp, Handshake, Heart, FolderGit2, Lightbulb,
+  TrendingUp, Handshake, Heart, FolderGit2, Lightbulb, Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "./logo";
 import { Button } from "@/components/ui/button";
 import { TourTrigger } from "@/components/onboarding/tour-guide";
 import { UnreadMessagesBadge } from "./unread-messages-badge";
+import { PendingOfferBadge } from "./pending-offer-badge";
 
 type Item = { href: string; label: string; Icon: React.ComponentType<{ className?: string }> };
 
@@ -162,12 +163,13 @@ function PublicQuickLinks({ collapsed }: { collapsed: boolean }) {
  * outer aside on every navigation. Prevents the sidebar from flickering/shifting
  * when the active route changes.
  */
-function SidebarNav({ items, collapsed }: { items: Item[]; collapsed: boolean }) {
+function SidebarNav({ items, collapsed, verified }: { items: Item[]; collapsed: boolean; verified?: boolean }) {
   const pathname = usePathname();
   return (
     <nav className="scrollbar-thin flex-1 space-y-0.5 overflow-y-auto p-2">
       {items.map(({ href, label, Icon }) => {
         const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+        const isVerifyLink = href === "/onboarding/verify";
         return (
           <Link
             key={href}
@@ -181,9 +183,23 @@ function SidebarNav({ items, collapsed }: { items: Item[]; collapsed: boolean })
             {active && (
               <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r-full bg-primary" />
             )}
-            <Icon className="h-[18px] w-[18px] shrink-0" />
+            <Icon className={cn(
+              "h-[18px] w-[18px] shrink-0",
+              isVerifyLink && verified && "text-emerald-500",
+            )} />
             {!collapsed && <span className="truncate">{label}</span>}
             {!collapsed && href === "/dashboard/messages" && <UnreadMessagesBadge />}
+            {!collapsed && href === "/dashboard/job-offers" && <PendingOfferBadge />}
+            {!collapsed && isVerifyLink && verified && (
+              <span className="ml-auto flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600">
+                <Check className="h-3 w-3" /> Verified
+              </span>
+            )}
+            {!collapsed && isVerifyLink && verified === false && (
+              <span className="ml-auto flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600">
+                Pending
+              </span>
+            )}
           </Link>
         );
       })}
@@ -199,11 +215,16 @@ const BOTH_NAV: Item[] = (() => {
 })();
 
 export function DashboardSidebar({ mode = "employee", currentMode }: { mode?: SidebarMode; currentMode?: string | null }) {
-  // No usePathname() here on purpose. Only the nav subtrees re-render on
-  // route change, so the Logo, collapse button, and outer aside stay
-  // completely stable.
   const [collapsed, setCollapsed] = React.useState(false);
+  const [verified, setVerified] = React.useState<boolean | null>(null);
   const nav = mode === "admin" ? ADMIN_NAV : mode === "buyer" ? BUYER_NAV : mode === "business" ? BUSINESS_NAV : currentMode === "both" ? BOTH_NAV : EMPLOYEE_NAV;
+
+  React.useEffect(() => {
+    fetch("/api/verification/check-status")
+      .then((r) => r.json())
+      .then((d) => { if (d.ok) setVerified(d.aadhaar && d.bank); })
+      .catch(() => {});
+  }, []);
 
   return (
     <aside
@@ -217,7 +238,7 @@ export function DashboardSidebar({ mode = "employee", currentMode }: { mode?: Si
         <Logo withWordmark={!collapsed} />
       </div>
       <PublicQuickLinks collapsed={collapsed} />
-      <SidebarNav items={nav} collapsed={collapsed} />
+      <SidebarNav items={nav} collapsed={collapsed} verified={verified ?? undefined} />
       <div className="border-t p-2 space-y-1">
         {!collapsed && <TourTrigger />}
         <Button

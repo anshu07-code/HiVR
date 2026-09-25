@@ -316,24 +316,26 @@ export default async function CategoryPage({ params, searchParams }: { params: {
                 )}
 
                 <div className="mt-8 flex flex-wrap gap-3 items-center">
-                  {user ? (
-                    <Button asChild size="lg" className="bg-white text-primary hover:bg-white/90 shadow-xl shadow-black/20 font-semibold px-8">
-                      <Link href="/find-people">
-                        Explore freelancers
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </Link>
-                    </Button>
+                  {effectiveStatus === "active" ? (
+                    <>
+                      <Button asChild size="lg" className="bg-white text-primary hover:bg-white/90 shadow-xl shadow-black/20 font-semibold px-8">
+                        <Link href="/find-people">
+                          Explore freelancers
+                          <ArrowRight className="ml-2 h-4 w-4" />
+                        </Link>
+                      </Button>
+                      <Button asChild size="lg" variant="outline" className="border-white/30 text-white hover:bg-white/10 hover:text-white">
+                        <Link href={`/browse?category=${cat.slug}`}>Browse tasks</Link>
+                      </Button>
+                    </>
+                  ) : user ? (
+                    <WaitlistButton categoryId={cat.id} signedIn={!!user} />
                   ) : (
                     <Button asChild size="lg" className="bg-white text-primary hover:bg-white/90 shadow-xl shadow-black/20 font-semibold px-8">
                       <Link href="/auth/signup">
                         Join HiVR
                         <ArrowRight className="ml-2 h-4 w-4" />
                       </Link>
-                    </Button>
-                  )}
-                  {effectiveStatus === "active" && (
-                    <Button asChild size="lg" variant="outline" className="border-white/30 text-white hover:bg-white/10 hover:text-white">
-                      <Link href={`/browse?category=${cat.slug}`}>Browse tasks</Link>
                     </Button>
                   )}
                 </div>
@@ -416,6 +418,9 @@ export default async function CategoryPage({ params, searchParams }: { params: {
             categoryName={cat.name}
             taskCountByCat={taskCountByCat}
             gigCountByCat={gigCountByCat}
+            parentStatus={effectiveStatus}
+            parentCategoryId={cat.id}
+            signedIn={!!user}
           />
         )}
 

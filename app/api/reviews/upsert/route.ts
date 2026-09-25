@@ -25,6 +25,9 @@ export async function POST(req: NextRequest) {
   const contractId = String(body.contractId ?? "");
   const rating = Number(body.rating ?? 0);
   const comment = body.comment ? String(body.comment) : null;
+  const communicationRating = body.communication_rating != null ? Number(body.communication_rating) : null;
+  const qualityRating = body.quality_rating != null ? Number(body.quality_rating) : null;
+  const valueRating = body.value_rating != null ? Number(body.value_rating) : null;
 
   if (!contractId) return NextResponse.json({ ok: false, error: "contractId required" }, { status: 400 });
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
@@ -33,15 +36,25 @@ export async function POST(req: NextRequest) {
   if (comment && comment.length > 2000) {
     return NextResponse.json({ ok: false, error: "comment too long (max 2000 chars)" }, { status: 400 });
   }
+  if (communicationRating != null && (!Number.isInteger(communicationRating) || communicationRating < 1 || communicationRating > 5)) {
+    return NextResponse.json({ ok: false, error: "communication_rating must be an integer 1-5" }, { status: 400 });
+  }
+  if (qualityRating != null && (!Number.isInteger(qualityRating) || qualityRating < 1 || qualityRating > 5)) {
+    return NextResponse.json({ ok: false, error: "quality_rating must be an integer 1-5" }, { status: 400 });
+  }
+  if (valueRating != null && (!Number.isInteger(valueRating) || valueRating < 1 || valueRating > 5)) {
+    return NextResponse.json({ ok: false, error: "value_rating must be an integer 1-5" }, { status: 400 });
+  }
 
   // 1. Verify contract membership + status
-  const { data: contract, error: cErr } = await sb
+  const { data: rawContract, error: cErr } = await sb
     .from("contracts")
     .select("id, status, buyer_id, employee_id")
     .eq("id", contractId)
-    .maybeSingle();
+    .maybeSingle() as any;
   if (cErr) return NextResponse.json({ ok: false, error: cErr.message }, { status: 500 });
-  if (!contract) return NextResponse.json({ ok: false, error: "Contract not found" }, { status: 404 });
+  if (!rawContract) return NextResponse.json({ ok: false, error: "Contract not found" }, { status: 404 });
+  const contract = rawContract as { id: string; status: string; buyer_id: string; employee_id: string };
   if (contract.status !== "completed") {
     return NextResponse.json({ ok: false, error: "Reviews are only allowed on completed contracts" }, { status: 400 });
   }
@@ -52,12 +65,13 @@ export async function POST(req: NextRequest) {
   const revieweeId = user.id === contract.buyer_id ? contract.employee_id : contract.buyer_id;
 
   // 2. Check if a review already exists (for the editable_until check)
-  const { data: existing } = await sb
+  const { data: rawExisting } = await sb
     .from("reviews")
     .select("id, editable_until, created_at")
     .eq("contract_id", contractId)
     .eq("reviewer_id", user.id)
-    .maybeSingle();
+    .maybeSingle() as any;
+  const existing = rawExisting as { id: string; editable_until: string | null; created_at: string } | null;
 
   if (existing) {
     const stillEditable = existing.editable_until && new Date(existing.editable_until) > new Date();
@@ -76,14 +90,15 @@ export async function POST(req: NextRequest) {
         reviewee_id: revieweeId,
         rating,
         comment,
+        communication_rating: communicationRating ?? rating,
+        quality_rating: qualityRating ?? rating,
+        value_rating: valueRating ?? rating,
         is_verified_purchase: true,
-        // editable_until: keep the original 48h window from the first submit
-        // by leaving the column alone (handled by trigger / first-insert default).
       } as any,
       { onConflict: "contract_id,reviewer_id" }
     )
-    .select("id, rating, comment, created_at, editable_until")
-    .single();
+    .select("id, rating, comment, communication_rating, quality_rating, value_rating, created_at, editable_until")
+    .single() as any;
 
   if (error) {
     // eslint-disable-next-line no-console

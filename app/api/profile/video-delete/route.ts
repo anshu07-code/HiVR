@@ -23,12 +23,11 @@ export async function DELETE(req: Request) {
     const path = url.searchParams.get("path");
     if (!id) return NextResponse.json({ ok: false, error: "Missing id" }, { status: 400 });
 
-    // RLS on profile_videos restricts deletes to the owner.
-    const { error: delErr } = await (sb.from("profile_videos") as any).delete().eq("id", id).eq("user_id", user.id);
+    const admin = createAdminClient();
+    const { error: delErr } = await (admin.from("profile_videos") as any).delete().eq("id", id).eq("user_id", user.id);
     if (delErr) return NextResponse.json({ ok: false, error: delErr.message }, { status: 400 });
 
     if (path) {
-      const admin = createAdminClient();
       await admin.storage.from("profile-videos").remove([path]).catch(() => undefined);
     }
 

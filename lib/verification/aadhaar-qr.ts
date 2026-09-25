@@ -289,12 +289,20 @@ export function looksLikeAadhaarQr(raw: string): boolean {
 /**
  * Parse the Aadhaar secure QR XML. Returns the signed data and the
  * signature bytes for verification.
+ *
+ * Handles multiple UIDAI XML formats including:
+ *   - <PrintLetterBarcodeData> with <Signature> child element
+ *   - <PrintLetterBarcodeData> with Signature as attribute reference
+ *   - <SignedData> wrapper formats
+ *   - e-Aadhaar / mAadhaar app export formats
+ *   - Base64 signature in textContent, attribute, or CDATA
  */
 export function parseAadhaarQr(rawXml: string): {
   data: Omit<AadhaarSignedData, 'signatureBytes'>;
   signatureBytes: Uint8Array;
 } | null {
   if (!rawXml) return null;
+
   let doc: Document;
   try {
     doc = new DOMParser().parseFromString(rawXml, "text/xml");
@@ -305,58 +313,91 @@ export function parseAadhaarQr(rawXml: string): {
   const err = doc.querySelector("parsererror");
   if (err) return null;
 
-  const root = doc.querySelector("PrintLetterBarcodeData") || doc.querySelector("SignedData");
+  const root = doc.querySelector("PrintLetterBarcodeData") || doc.querySelector("SignedData") || doc.documentElement;
   if (!root) return null;
 
-  // The signature is a base64-encoded element with attribute "reference"
-  const sigEl = doc.querySelector('Signature[reference*="Signature"]')
-    || doc.querySelector("Signature")
-    || doc.querySelector('*[reference*="Signature"]');
-  if (!sigEl) return null;
+  // ----- Extract signature bytes (multiple formats) -----
+  const possibleSigEls = [
+    doc.querySelector('Signature'),
+    doc.querySelector('[Signature]'),
+    doc.querySelector('[signature]'),
+    root.querySelector('Signature'),
+    root.querySelector('[reference]'),
+    root.querySelector('[Reference]'),
+  ].filter(Boolean);
 
-  // The signature is in the parent's attribute (some UIDAI versions)
-  // OR inside the Signature element as base64 text
-  let sigB64 =
-    sigEl.getAttribute("reference") ||
-    sigEl.textContent ||
-    "";
-  sigB64 = sigB64.trim();
-  if (!sigB64) return null;
+  let signatureBytes: Uint8Array | null = null;
 
-  // Strip "Signature/" prefix UIDAI sometimes adds
-  sigB64 = sigB64.replace(/^Signature\//i, "");
+  for (const el of possibleSigEls) {
+    // Try extracting base64 from various sources
+    const candidates = [
+      el!.getAttribute("reference"),
+      el!.getAttribute("Reference"),
+      el!.getAttribute("value"),
+      el!.getAttribute("signature"),
+      el!.getAttribute("Signature"),
+      el!.textContent,
+    ].filter(Boolean).map((s) => s!.trim()).filter((s) => s.length > 10);
 
-  let signatureBytes: Uint8Array;
-  try {
-    const binStr = atob(sigB64);
-    signatureBytes = new Uint8Array(binStr.length);
-    for (let i = 0; i < binStr.length; i++) signatureBytes[i] = binStr.charCodeAt(i);
-  } catch {
-    return null;
+    for (const c of candidates) {
+      const cleaned = c.replace(/^Signature\//i, "").replace(/\s+/g, "");
+      try {
+        const binStr = atob(cleaned);
+        if (binStr.length > 10) {
+          signatureBytes = new Uint8Array(binStr.length);
+          for (let i = 0; i < binStr.length; i++) signatureBytes[i] = binStr.charCodeAt(i);
+          break;
+        }
+      } catch {
+        // not valid base64, try next candidate
+      }
+    }
+    if (signatureBytes) break;
   }
 
-  // Extract fields. The signed data is everything INSIDE PrintLetterBarcodeData
-  // EXCEPT the Signature element. UIDAI signs a specific subset — to be
-  // 100% spec-compliant, we re-serialize the signed portion exactly.
-  // For our purposes, we extract the named fields directly.
-  const get = (tag: string) => root.querySelector(tag)?.textContent?.trim() ?? null;
+  // Also try the entire raw XML for a standalone base64 signature string
+  if (!signatureBytes) {
+    const sigMatch = rawXml.match(/<Signature[^>]*>([A-Za-z0-9+/=]+)<\/Signature>/);
+    if (sigMatch) {
+      try {
+        const cleaned = sigMatch[1].replace(/\s+/g, "");
+        const binStr = atob(cleaned);
+        if (binStr.length > 10) {
+          signatureBytes = new Uint8Array(binStr.length);
+          for (let i = 0; i < binStr.length; i++) signatureBytes[i] = binStr.charCodeAt(i);
+        }
+      } catch { /* not valid base64 */ }
+    }
+  }
 
-  const name = get("name") ?? "";
-  const dobRaw = get("dob") ?? "";
+  if (!signatureBytes) return null;
+
+  // ----- Extract fields with multiple tag name fallbacks -----
+  const get = (tags: string[]) => {
+    for (const tag of tags) {
+      const el = root!.querySelector(tag);
+      if (el?.textContent?.trim()) return el.textContent.trim();
+    }
+    return null;
+  };
+
+  const name = get(["name", "Name", "fullName", "FullName"]) ?? "";
+  const dobRaw = get(["dob", "DOB", "dateOfBirth", "DateOfBirth"]) ?? "";
   const dob = normalizeAadhaarDob(dobRaw);
-  const genderRaw = get("gender") ?? "";
+  const genderRaw = get(["gender", "Gender"]) ?? "";
   const gender = (genderRaw === "M" || genderRaw === "F" || genderRaw === "O") ? genderRaw : null;
-  const address = get("address") ? get("address")!.replace(/[^\x20-\x7E\n]/g, "").trim() : null;
-  const photoBase64 = get("photo") ? "data:image/jpeg;base64," + get("photo") : null;
-  const aadhaarLast4 = get("uid") ?? get("aadhaar") ?? "";
-  const mobileHash = get("m") ?? null;
-  const emailHash = get("e") ?? null;
+  const addressRaw = get(["address", "Address", "co", "Co"]);
+  const address = addressRaw ? addressRaw.replace(/[^\x20-\x7E\n]/g, "").trim() : null;
+  const photoRaw = get(["photo", "Photo"]);
+  const photoBase64 = photoRaw ? "data:image/jpeg;base64," + photoRaw : null;
+  const aadhaarLast4 = get(["uid", "aadhaar", "Uid", "Aadhaar"]) ?? "";
+  const mobileHash = get(["m", "mobile", "Mobile"]) ?? null;
+  const emailHash = get(["e", "email", "Email"]) ?? null;
 
-  // Some UIDAI versions use different tag names; fallback
-  const data = {
-    name: name || (root.querySelector("Name")?.textContent ?? "").trim(),
-    dob: dob || (root.querySelector("DOB")?.textContent ?? "").trim(),
-    gender,
+  const data: Omit<AadhaarSignedData, 'signatureBytes'> = {
+    name,
+    dob,
+    gender: gender as 'M' | 'F' | 'O' | null,
     address,
     photoBase64,
     aadhaarLast4,
@@ -436,22 +477,42 @@ export function buildSignedDataBytes(rawXml: string, signatureBytes: Uint8Array)
   // not including the wrapping tags themselves. We re-serialize in the
   // canonical order.
   const doc = new DOMParser().parseFromString(stripped, "text/xml");
-  const root = doc.querySelector("PrintLetterBarcodeData");
+  const root = doc.querySelector("PrintLetterBarcodeData") || doc.querySelector("SignedData") || doc.documentElement;
   if (!root) return new TextEncoder().encode(stripped);
 
   // Canonical order: name, dob, gender, co, address, uid, photo, m, e
-  const order = ["name", "dob", "gender", "co", "address", "uid", "photo", "m", "e"];
+  // Try alternate tag names for each position
+  const order: string[][] = [
+    ["name", "Name"],
+    ["dob", "DOB", "dateOfBirth"],
+    ["gender", "Gender"],
+    ["co", "Co"],
+    ["address", "Address"],
+    ["uid", "aadhaar", "Uid", "Aadhaar"],
+    ["photo", "Photo"],
+    ["m", "mobile"],
+    ["e", "email"],
+  ];
+
   const enc = new TextEncoder();
   const chunks: Uint8Array[] = [];
-  for (const tag of order) {
-    const el = root.querySelector(tag);
+  for (const tags of order) {
+    let el: Element | null = null;
+    for (const tag of tags) {
+      el = root.querySelector(tag);
+      if (el) break;
+    }
     if (!el) continue;
-    // The signed form is: <tag attr="value">innerText</tag>
-    // We use the raw inner HTML of the child
     const text = el.innerHTML ?? el.textContent ?? "";
     const bytes = enc.encode(text);
     chunks.push(bytes);
   }
+
+  // If we got nothing from canonical order, try the raw text content
+  if (chunks.length === 0) {
+    return new TextEncoder().encode(root.textContent ?? "");
+  }
+
   // Concatenate
   const total = chunks.reduce((s, c) => s + c.length, 0);
   const out = new Uint8Array(total);
@@ -473,12 +534,12 @@ export async function verifyAadhaarSignature(
   publicKey: CryptoKey,
 ): Promise<boolean> {
   try {
-    const data = buildSignedDataBytes(rawXml, signatureBytes);
-    return await crypto.subtle.verify(
+    const signedData = buildSignedDataBytes(rawXml, signatureBytes);
+    return await (crypto.subtle.verify as any)(
       "RSASSA-PKCS1-v1_5",
       publicKey,
       signatureBytes,
-      data,
+      signedData,
     );
   } catch (e) {
     // eslint-disable-next-line no-console
@@ -491,34 +552,47 @@ export async function verifyAadhaarSignature(
 
 /**
  * Verify an Aadhaar QR payload (raw XML from the camera).
- * Returns the signed data if the signature is valid.
+ * Returns the signed data ONLY if the RSA-2048 signature is valid.
+ *
+ * If parsing or signature verification fails, we still return the
+ * parsed data with `ok: false` so the UI can show the extracted
+ * information and let the user fall back to the upload/OCR path.
+ *
+ * Security: `ok: true` is ONLY returned when the UIDAI digital
+ * signature is cryptographically verified. This guarantees the data
+ * came from UIDAI and hasn't been tampered with. Without this check,
+ * anyone could forge a QR with a fake name/photo.
  */
 export async function verifyAadhaarQr(rawQrPayload: string): Promise<AadhaarVerifyResult> {
   if (!looksLikeAadhaarQr(rawQrPayload)) {
-    return { ok: false, error: "Not an Aadhaar QR code" };
+    return { ok: false, error: "Not an Aadhaar QR code. Paste the full XML text from the QR scanner." };
   }
   const parsed = parseAadhaarQr(rawQrPayload);
   if (!parsed) {
-    return { ok: false, error: "Could not parse Aadhaar QR data" };
+    return { ok: false, error: "Could not parse Aadhaar QR data. Try the upload method instead." };
   }
   if (!parsed.data.name) {
-    return { ok: false, error: "QR missing required fields (name)", data: parsed.data };
+    return { ok: false, error: "QR missing required fields (name). Try the upload method instead.", data: parsed.data };
   }
   try {
     const key = await loadUidaiPublicKey();
     const sigValid = await verifyAadhaarSignature(parsed.data.rawXml, parsed.signatureBytes, key);
     if (!sigValid) {
+      // Signature invalid — the QR data is not from UIDAI.
+      // Return the parsed data so the UI can show what was found,
+      // but with ok: false so aadhaarQrVerified stays false.
       return {
         ok: false,
-        error: "Aadhaar QR signature is INVALID. This QR appears to be fake or tampered.",
+        error: "Aadhaar QR signature is INVALID. This data was not signed by UIDAI. Use the upload method instead.",
         data: parsed.data,
       };
     }
     return { ok: true, data: { ...parsed.data, signatureBytes: parsed.signatureBytes } };
   } catch (e) {
+    // Network or crypto error — can't verify the signature.
     return {
       ok: false,
-      error: `Signature check failed: ${(e as Error).message}`,
+      error: `Could not verify UIDAI signature: ${(e as Error).message}. Try the upload method instead.`,
       data: parsed.data,
     };
   }

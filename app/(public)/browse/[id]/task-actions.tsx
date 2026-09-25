@@ -270,19 +270,20 @@ export function TaskActions({
         )}
 
         {/* ---------- skill match detail (matched / missing) ---------- */}
-        {applyCtx && !applied && (applyCtx.matchedSkills.length > 0 || applyCtx.missingSkills.length > 0) && (
-          <div className="rounded-md border bg-muted/20 p-2.5 text-[11px]">
+        {applyCtx && !applied && applyCtx.missingSkills.length > 0 && (
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2.5 text-[11px]">
             <p className="mb-1 font-semibold uppercase tracking-wider text-muted-foreground">Skill match</p>
-            {applyCtx.matchedSkills.length > 0 && (
-              <p className="text-emerald-700">
-                ✓ Matched: {applyCtx.matchedSkills.join(", ")}
-              </p>
-            )}
-            {applyCtx.missingSkills.length > 0 && (
-              <p className="mt-0.5 text-amber-700">
-                ✗ Missing from your profile: {applyCtx.missingSkills.join(", ")}
-              </p>
-            )}
+            <p className="text-amber-700">
+              ✗ Missing from your profile: {applyCtx.missingSkills.join(", ")}
+            </p>
+          </div>
+        )}
+        {applyCtx && !applied && applyCtx.hasSkill && applyCtx.missingSkills.length === 0 && applyCtx.matchedSkills.length > 0 && (
+          <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2.5 text-[11px]">
+            <p className="mb-1 font-semibold uppercase tracking-wider text-muted-foreground">Skill match</p>
+            <p className="text-emerald-700">
+              ✓ All skills matched on your profile
+            </p>
           </div>
         )}
 

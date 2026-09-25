@@ -19,6 +19,9 @@ type Review = {
   contract_id: string;
   reviewee_id: string;
   rating: number;
+  communication_rating: number | null;
+  quality_rating: number | null;
+  value_rating: number | null;
   comment: string | null;
   editable_until: string;
   created_at: string;
@@ -488,6 +491,9 @@ function ReviewEditorModal({
   onSaved: () => void;
 }) {
   const [rating, setRating] = React.useState(review?.rating ?? 0);
+  const [commRating, setCommRating] = React.useState(review?.communication_rating ?? 0);
+  const [qualRating, setQualRating] = React.useState(review?.quality_rating ?? 0);
+  const [valRating, setValRating] = React.useState(review?.value_rating ?? 0);
   const [comment, setComment] = React.useState(review?.comment ?? "");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -505,7 +511,14 @@ function ReviewEditorModal({
     try {
       const r = await fetch("/api/reviews/upsert", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ contractId, rating, comment: comment.trim() || null }),
+        body: JSON.stringify({
+          contractId,
+          rating,
+          communication_rating: commRating || rating,
+          quality_rating: qualRating || rating,
+          value_rating: valRating || rating,
+          comment: comment.trim() || null,
+        }),
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
@@ -552,12 +565,26 @@ function ReviewEditorModal({
 
         <div className="mt-4 space-y-3">
           <div>
-            <p className="mb-1.5 text-xs font-semibold">Rating</p>
+            <p className="mb-1.5 text-xs font-semibold">Overall rating</p>
             <div className="flex items-center gap-2">
               <StarPicker value={rating} onChange={setRating} />
               <span className="text-sm text-muted-foreground">
                 {rating === 0 ? "Pick a rating" : `${rating}/5`}
               </span>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-4">
+            <div>
+              <p className="mb-1 text-[10px] font-medium text-muted-foreground">Communication</p>
+              <StarPicker value={commRating} onChange={setCommRating} />
+            </div>
+            <div>
+              <p className="mb-1 text-[10px] font-medium text-muted-foreground">Quality</p>
+              <StarPicker value={qualRating} onChange={setQualRating} />
+            </div>
+            <div>
+              <p className="mb-1 text-[10px] font-medium text-muted-foreground">Value</p>
+              <StarPicker value={valRating} onChange={setValRating} />
             </div>
           </div>
           <div>

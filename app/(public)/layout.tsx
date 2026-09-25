@@ -2,6 +2,7 @@ import * as React from "react";
 import { PublicNavbar } from "@/components/layout/public-navbar";
 import { SiteFooter } from "@/components/layout/footer";
 import { NotificationToast } from "@/components/notifications/toast";
+import { LiveNotificationPopup } from "@/components/notifications/live-popup";
 import { FeedbackButton } from "@/components/feedback/feedback-button";
 
 /**
@@ -25,6 +26,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
       <SiteFooter />
       <FeedbackButton />
       <NotificationToast />
+      <LiveNotificationPopup />
     </>
   );
 }

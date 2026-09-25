@@ -340,7 +340,7 @@ export function FundEscrowModal({
             <KeyRound className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <div className="space-y-1">
               <p>
-                <strong>Razorpay top-up + auto-fund.</strong> Loads the money into your HiVR wallet first, then immediately funds the escrow from it. Use this if you want to keep the wallet balance for future use.
+                <strong>Razorpay top-up + auto-fund.</strong> Routes the payment through your HiVR wallet before funding the escrow. Same end result, but the transaction is recorded in your wallet history.
               </p>
               <p className="text-[10px] opacity-80">
                 ⚡ Instant credit once Razorpay payment succeeds.
@@ -450,7 +450,7 @@ export function FundEscrowModal({
 
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="ghost" size="sm" onClick={onClose} disabled={busy}>Cancel</Button>
-          {source === "razorpay" ? (
+          {source === "razorpay" || source === "razorpay_direct" ? (
             <Button
               size="sm"
               variant="gradient"

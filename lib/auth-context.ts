@@ -284,13 +284,16 @@ export async function getEmployeeApplyContext(opts: { userId: string; taskId: st
 
   const perHour = Number((settings ?? []).find((s: any) => s.key === "application_rate_limit_per_hour")?.value?.value ?? 10);
   const skillMatch = (skills ?? []).find((s: any) => s.category_id === task?.category_id);
-  const hasSkill = skillMatch?.verification_status === "verified" || skillMatch?.verification_status === "experienced" || skillMatch?.verification_status === "top_rated";
-  const docTypes = new Set((vs ?? []).map((v: any) => v.doc_type));
+  const hasCategorySkill = skillMatch?.verification_status === "verified" || skillMatch?.verification_status === "experienced" || skillMatch?.verification_status === "top_rated";
 
   const profileCompleteness = Number(completenessRpc ?? 0);
   const skillMatchRow = (skillMatchRpc as any)?.[0] ?? skillMatchRpc;
   const matchedSkills: string[] = (skillMatchRow?.matched_skills as string[]) ?? [];
   const missingSkills: string[] = (skillMatchRow?.missing_skills as string[]) ?? [];
+
+  // hasSkill = category-level match OR the RPC confirmed matching skills
+  const hasSkill = hasCategorySkill || matchedSkills.length > 0;
+  const docTypes = new Set((vs ?? []).map((v: any) => v.doc_type));
 
   const paused = !!ep?.application_paused;
   const disputeLossCount = ep?.dispute_loss_count ?? 0;

@@ -19,6 +19,7 @@ export function UnreadMessagesBadge() {
         .from("direct_messages")
         .select("id", { count: "exact", head: true })
         .eq("receiver_id", user.id)
+        .is("read_at", null)
         .limit(100);
 
       if (!cancelled) setCount(dmCount ?? 0);

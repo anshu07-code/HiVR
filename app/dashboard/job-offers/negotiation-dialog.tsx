@@ -107,17 +107,26 @@ export function NegotiationDialog({
     } catch {}
   }
 
-  // Fetch rounds when open or realtimeUpdate changes
+  // Fetch rounds + offer status when open or realtimeUpdate changes
   React.useEffect(() => {
     if (!open) return;
     const sb = createClient();
-    sb.from("negotiation_rounds")
-      .select("*")
-      .eq("negotiation_id", offer.id)
-      .order("round_number", { ascending: true })
-      .then(({ data }) => {
-        setRounds(data ?? []);
-      });
+    Promise.all([
+      sb.from("negotiation_rounds")
+        .select("*")
+        .eq("negotiation_id", offer.id)
+        .order("round_number", { ascending: true }),
+      sb.from("negotiation_offers")
+        .select("status, proposed_price")
+        .eq("id", offer.id)
+        .single(),
+    ]).then(([roundsRes, offerRes]) => {
+      setRounds(roundsRes.data ?? []);
+      if (offerRes.data) {
+        setLocalStatus((offerRes.data as any).status);
+        setLocalPrice((offerRes.data as any).proposed_price);
+      }
+    });
     // When contract_id is available, fetch workspace + sign status (only if not already provided via props)
     const cId = offer.contract_id || propContractId;
     if (cId && !propWorkspaceId) {

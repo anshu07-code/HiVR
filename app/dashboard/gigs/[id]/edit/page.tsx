@@ -12,7 +12,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Upload, X, Plus, GripVertical, ArrowLeft, Info } from "lucide-react";
 import Link from "next/link";
-import { cn } from "@/lib/utils";
+import { cn, rupeesToPaise } from "@/lib/utils";
 
 // Category vocab — same as create gig form
 const PARENT_VOCAB: Record<string, {
@@ -260,7 +260,7 @@ export default function EditGigPage({ params }: { params: { id: string } }) {
     };
 
     if (pricingModel === "fixed") {
-      payload.price = parseInt(form.get("price") as string);
+      payload.price = rupeesToPaise(parseInt(form.get("price") as string));
       payload.delivery_days = parseInt(form.get("delivery_days") as string) || null;
       payload.package_basic_title = null;
       payload.package_standard_title = null;
@@ -269,7 +269,7 @@ export default function EditGigPage({ params }: { params: { id: string } }) {
       ["basic", "standard", "premium"].forEach((tier) => {
         payload[`package_${tier}_title`] = form.get(`${tier}_title`);
         payload[`package_${tier}_description`] = form.get(`${tier}_description`);
-        payload[`package_${tier}_price`] = parseInt(form.get(`${tier}_price`) as string);
+        payload[`package_${tier}_price`] = rupeesToPaise(parseInt(form.get(`${tier}_price`) as string));
         payload[`package_${tier}_delivery`] = parseInt(form.get(`${tier}_delivery`) as string);
         payload[`package_${tier}_revisions`] = parseInt(form.get(`${tier}_revisions`) as string) || 0;
       });
@@ -446,7 +446,7 @@ export default function EditGigPage({ params }: { params: { id: string } }) {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="price">Price (₹) *</Label>
-                  <Input id="price" name="price" type="number" min="1" defaultValue={gig.price ?? ""} required />
+                  <Input id="price" name="price" type="number" min="1" defaultValue={Math.round((gig.price ?? 0) / 100) || ""} required />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="delivery_days">Delivery (days)</Label>
@@ -469,7 +469,7 @@ export default function EditGigPage({ params }: { params: { id: string } }) {
                       </div>
                       <div className="space-y-2">
                         <Label>Price (₹) *</Label>
-                        <Input name={`${tier}_price`} type="number" min="1" defaultValue={gig[`package_${tier}_price`] ?? ""} required />
+                        <Input name={`${tier}_price`} type="number" min="1" defaultValue={Math.round((gig[`package_${tier}_price`] ?? 0) / 100) || ""} required />
                       </div>
                       <div className="space-y-2">
                         <Label>Delivery (days) *</Label>

@@ -435,7 +435,7 @@ function PartyCard({ role, user }: { role: string; user: any }) {
         </div>
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">{user?.full_name ?? "—"}</p>
-          {user?.email && <p className="truncate text-[10px] text-muted-foreground">{user.email}</p>}
+          {user?.email && <p className="truncate text-[10px] text-muted-foreground">Email hidden for privacy</p>}
         </div>
       </div>
     </div>

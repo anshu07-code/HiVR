@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Upload, X, Plus, GripVertical, Info, ChevronDown, Search, ArrowLeft } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, rupeesToPaise } from "@/lib/utils";
 import { CategoryIcon } from "@/components/marketing/category-icon";
 
 function makeSlug(text: string) {
@@ -316,22 +316,22 @@ export function GigForm() {
     };
 
     if (pricingModel === "fixed") {
-      payload.price = price;
+      payload.price = rupeesToPaise(price);
       payload.delivery_days = deliveryDays || null;
     } else {
       payload.package_basic_title = form.get("basic_title") as string;
       payload.package_basic_description = form.get("basic_description") as string;
-      payload.package_basic_price = parseInt(form.get("basic_price") as string);
+      payload.package_basic_price = rupeesToPaise(parseInt(form.get("basic_price") as string));
       payload.package_basic_delivery = parseInt(form.get("basic_delivery") as string);
       payload.package_basic_revisions = parseInt(form.get("basic_revisions") as string) || 0;
       payload.package_standard_title = form.get("standard_title") as string;
       payload.package_standard_description = form.get("standard_description") as string;
-      payload.package_standard_price = parseInt(form.get("standard_price") as string);
+      payload.package_standard_price = rupeesToPaise(parseInt(form.get("standard_price") as string));
       payload.package_standard_delivery = parseInt(form.get("standard_delivery") as string);
       payload.package_standard_revisions = parseInt(form.get("standard_revisions") as string) || 0;
       payload.package_premium_title = form.get("premium_title") as string;
       payload.package_premium_description = form.get("premium_description") as string;
-      payload.package_premium_price = parseInt(form.get("premium_price") as string);
+      payload.package_premium_price = rupeesToPaise(parseInt(form.get("premium_price") as string));
       payload.package_premium_delivery = parseInt(form.get("premium_delivery") as string);
       payload.package_premium_revisions = parseInt(form.get("premium_revisions") as string) || 0;
     }

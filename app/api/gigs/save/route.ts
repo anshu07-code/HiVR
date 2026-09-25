@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { NextRequest } from "next/server";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
 export async function POST(req: NextRequest) {
@@ -40,6 +41,8 @@ export async function POST(req: NextRequest) {
       console.error("update_gig_saved_count RPC error:", rpcErr);
     }
 
+    revalidatePath("/dashboard/saved");
+    revalidatePath(`/gigs/${body.gig_id}`);
     return NextResponse.json({ saved_count: count });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });

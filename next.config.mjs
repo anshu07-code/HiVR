@@ -32,14 +32,15 @@ const nextConfig = {
     const csp = [
       "default-src 'self'",
       "img-src 'self' data: blob: https:",
-      "media-src 'self' blob: https://assets.mixkit.co https://cdn.pixabay.com",
+      "media-src 'self' blob: https://assets.mixkit.co https://cdn.pixabay.com https://*.supabase.co",
       "style-src 'self' 'unsafe-inline'",
       // Next.js dev server needs 'unsafe-eval' for fast refresh. In
       // production this is still emitted but browsers ignore unsafe-eval
       // for non-script contexts.
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://checkout.razorpay.com https://cdn.jsdelivr.net",
+      "worker-src 'self' blob:",
       "font-src 'self' data:",
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.razorpay.com https://lumberjack.razorpay.com",
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.razorpay.com https://lumberjack.razorpay.com https://cdn.jsdelivr.net https://storage.googleapis.com",
       "frame-src 'self' https://checkout.razorpay.com https://api.razorpay.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",

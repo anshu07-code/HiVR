@@ -18,8 +18,8 @@ import {
 } from "lucide-react";
 import { ShareButton } from "./share-button";
 import { TimeAgo } from "@/components/time-ago";
-import { SquirrelMascot } from "@/components/marketing/squirrel-mascot";
 import { DeadlineDisplay } from "./deadline-display";
+import { DraggableSquirrel } from "./draggable-squirrel";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -32,7 +32,7 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
   // Fetch task + current user in parallel.
   const [{ data: task }, { data: { user } }] = await Promise.all([
     sb.from("task_posts")
-      .select("id, title, description, pricing_model, budget_min, budget_max, status, created_at, deadline, estimated_hours, buyer_id, category_id, openings, skills_required, deliverables, category:skill_categories(slug, name, icon, tier)")
+      .select("id, title, description, pricing_model, budget_min, budget_max, status, created_at, deadline, estimated_hours, buyer_id, category_id, openings, skills_required, brief, category:skill_categories(slug, name, icon, tier)")
       .eq("id", taskId)
       .maybeSingle(),
     sb.auth.getUser(),
@@ -167,58 +167,134 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
     }
   }
 
-  // Squirrel mood — intelligent, contextual
+  // Fetch negotiation offer for current user for this task
+  let myOffer: any = null;
+  let contractId: string | null = null;
+  if (user && hasInteractions) {
+    const { data: offerData } = await sb
+      .from("negotiation_offers")
+      .select("id, status, proposed_price, created_at, responded_at, contract_id")
+      .or(`employee_id.eq.${user.id},buyer_id.eq.${user.id}`)
+      .eq("task_post_id", taskId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (offerData) {
+      myOffer = offerData;
+      if (offerData.contract_id) contractId = offerData.contract_id;
+    }
+    if (!contractId && myApp?.status === "hired") {
+      const { data: c } = await sb
+        .from("contracts")
+        .select("id")
+        .eq("task_post_id", taskId)
+        .eq("employee_id", user.id)
+        .neq("status", "cancelled")
+        .order("started_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (c) contractId = (c as any).id;
+    }
+  }
+
+  // Squirrel mood + actions — fully personalized per user per task
   const taskOpen = task.status === "open" && (!task.deadline || new Date(task.deadline) > new Date());
   const isBothMode = userRoles.includes("employee") && userRoles.includes("buyer");
   const isPureBuyer = userRoles.includes("buyer") && !userRoles.includes("employee");
   let squirrelMood: "excited" | "happy" | "neutral" | "sad" | "waving" | "worried" | "drinking" = "neutral";
   let squirrelNote: string | undefined;
+  let squirrelActions: { label: string; href: string; variant?: "default" | "outline" | "success" }[] | undefined;
 
   if (!user) {
     squirrelMood = "drinking";
     squirrelNote = "Sign in to apply for this task.";
-  } else if (task.status !== "open") {
-    squirrelMood = "sad";
-    squirrelNote = "Ah Task closed! You were late! 😢";
-  } else if (myApp) {
+  } else if (contractId || (myApp && myApp.status === "hired") || (myOffer && myOffer.status === "accepted")) {
     squirrelMood = "happy";
-    squirrelNote = "You've applied! Fingers crossed 🤞 I'm rooting for you!";
+    squirrelNote = "🎉 Congratulations! You've been hired for this task!\nYou're officially part of the team. Head to your contract to get started.";
+    squirrelActions = [{ label: "📄 View Contract", href: `/dashboard/contracts/${contractId ?? ""}`, variant: "success" }];
+    if (isBuyer) {
+      squirrelActions.push({ label: "👥 Applicants", href: `/dashboard/tasks/${taskId}/applicants`, variant: "outline" });
+    }
+  } else if (myApp && myApp.status === "shortlisted") {
+    squirrelMood = "excited";
+    squirrelNote = "👀 You've been shortlisted!\nThe buyer is interested in your profile. Keep an eye on your offers and messages.";
+    squirrelActions = [{ label: "📋 My Applications", href: "/dashboard/applications", variant: "default" }];
+  } else if (myOffer && myOffer.status === "pending") {
+    squirrelMood = "excited";
+    squirrelNote = "💼 You've received a direct hire offer!\nA buyer wants to work with you directly. Check it out and respond.";
+    squirrelActions = [{ label: "📩 Job Offers", href: "/dashboard/job-offers", variant: "default" }];
+  } else if (myOffer && myOffer.status === "declined") {
+    squirrelMood = "neutral";
+    squirrelNote = "You declined the offer for this task.\nNo worries — more opportunities await on the Browse page!";
+    squirrelActions = [{ label: "🔍 Browse Tasks", href: "/browse", variant: "outline" }];
   } else if (isBuyer) {
     squirrelMood = "neutral";
-    squirrelNote = "You posted this task!";
+    if (taskOpen) {
+      squirrelNote = `📋 You posted this task.\nYou have ${appCountView} applicant${appCountView !== 1 ? "s" : ""} so far. Review them in the Applicants tab.`;
+    } else {
+      squirrelNote = `📋 You posted this task. It's now ${task.status}.\nReview your applicants or manage your contracts.`;
+    }
+    squirrelActions = [
+      { label: "👥 Applicants", href: `/dashboard/tasks/${taskId}/applicants`, variant: "default" },
+      { label: "📋 My Tasks", href: "/dashboard/tasks", variant: "outline" },
+    ];
   } else if (isPureBuyer) {
     squirrelMood = "neutral";
     squirrelNote = "Hello! You can also post a task and get your job done.";
+    squirrelActions = [{ label: "📝 Post a Task", href: "/dashboard/tasks/new", variant: "default" }];
   } else if (!isInEmployeeMode && isBothMode) {
     squirrelMood = "neutral";
     squirrelNote = "Switch to employee mode in the header to apply for this task!";
   } else if (!hasEmployeeRole) {
     squirrelMood = "neutral";
     squirrelNote = "Only employees can apply. Want to become an employee? Update your role in settings.";
+  } else if (myApp) {
+    const appStatus = myApp.status;
+    if (appStatus === "hired") {
+      squirrelMood = "happy";
+      squirrelNote = "🎉 You've been hired! Check your contracts to start working.";
+      squirrelActions = [{ label: "📄 View Contract", href: `/dashboard/contracts/${contractId ?? ""}`, variant: "success" }];
+    } else if (appStatus === "shortlisted") {
+      squirrelMood = "excited";
+      squirrelNote = "👀 You're shortlisted! The buyer will reach out soon.";
+      squirrelActions = [{ label: "📋 My Applications", href: "/dashboard/applications", variant: "default" }];
+    } else if (appStatus === "withdrawn") {
+      squirrelMood = "neutral";
+      squirrelNote = "You withdrew your application.\nIf you change your mind, you can re-apply.";
+      squirrelActions = [{ label: "🔍 Browse Tasks", href: "/browse", variant: "outline" }];
+    } else {
+      squirrelMood = "happy";
+      squirrelNote = "✅ You've applied! Fingers crossed 🤞\nThe buyer will review your application soon.";
+      squirrelActions = [{ label: "📋 My Applications", href: "/dashboard/applications", variant: "default" }];
+    }
   } else if (taskOpen && applyCtx) {
     if (applyCtx.paused) {
       squirrelMood = "neutral";
-      squirrelNote = applyCtx.blockedReason ?? "Your applications are paused. Contact support to unpause.";
+      squirrelNote = applyCtx.blockedReason ?? "Your applications are paused.\nContact support to unpause.";
     } else if (applyCtx.hasSkill && applyCtx.canApply) {
       squirrelMood = "excited";
       const skills = applyCtx.matchedSkills.length > 0 ? applyCtx.matchedSkills.slice(0, 3).join(", ") : "";
-      squirrelNote = `Task is Open, Apply fast! You have ${skills ? skills + " " : ""}— buyers love verified skills!`;
+      squirrelNote = `Task is Open, Apply fast! 🎯\nYou have verified skills in ${skills ? skills + " " : "this area"} — buyers love that!`;
+      squirrelActions = [{ label: "📝 Apply Now", href: `#apply`, variant: "default" }];
     } else if (!applyCtx.hasSkill && applyCtx.canApply) {
       squirrelMood = "worried";
-      squirrelNote = "Skills does not match. Apply at your own risk.";
+      squirrelNote = "Skills does not match. Apply at your own risk.\nBuyers prefer verified skills — consider getting verified!";
+      squirrelActions = [{ label: "📝 Apply Anyway", href: `#apply`, variant: "outline" }];
     } else if (!applyCtx.canApply) {
       squirrelMood = "neutral";
       squirrelNote = applyCtx.blockedReason ?? "Your profile needs some work before you can apply.";
     } else {
       squirrelMood = "neutral";
-      squirrelNote = "You can apply for this task! Fill in a cover note to stand out.";
+      squirrelNote = "You can apply for this task!\nFill in a cover note to stand out from the crowd.";
+      squirrelActions = [{ label: "📝 Apply Now", href: `#apply`, variant: "default" }];
     }
   } else if (!taskOpen && hasEmployeeRole) {
     squirrelMood = "sad";
-    squirrelNote = "Ah Task closed! You were late! 😢";
+    squirrelNote = "This task is now closed. 😔\nDon't worry — there are plenty more opportunities on the Browse page!";
+    squirrelActions = [{ label: "🔍 Browse Tasks", href: "/browse", variant: "default" }];
   } else {
     squirrelMood = "neutral";
-    squirrelNote = "Welcome! I'm HiVR Squirrel 🐿️ — your guide to finding work.";
+    squirrelNote = "Welcome! I'm HiVR Squirrel 🐿️\nYour guide to finding work on HiVR.";
   }
 
   return (
@@ -297,10 +373,10 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
                 {task.title}
               </h1>
 
-              {/* Skills required chips (buyer's own tags) */}
-              {(task as any).skills_required && (task as any).skills_required.length > 0 && (
+              {/* Skills required chips */}
+              {getSkills(task).length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-1.5">
-                  {(task as any).skills_required.map((s: string) => (
+                  {getSkills(task).map((s: string) => (
                     <Badge key={s} variant="secondary" className="text-xs">
                       <Sparkles className="mr-1 h-3 w-3 text-primary" />{s}
                     </Badge>
@@ -308,16 +384,42 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
                 </div>
               )}
 
-              {/* Buyer line */}
-              <div className="mt-4 flex items-center gap-2 text-sm">
-                <Building2 className="h-4 w-4 text-muted-foreground" />
-                <span className="text-muted-foreground">Posted by</span>
-                <Avatar className="h-5 w-5">
-                  <AvatarImage src={buyerUser?.avatar_url ?? undefined} />
-                  <AvatarFallback className="text-[10px]">{initials}</AvatarFallback>
-                </Avatar>
-                <span className="font-semibold">{buyerUser?.full_name ?? "Anonymous buyer"}</span>
-                <Badge variant="success" className="text-[10px]">Verified</Badge>
+              {/* Buyer line + mascot (beside each other) */}
+              <div className="mt-4 flex items-start justify-between gap-4">
+                <div className="flex items-center gap-2 text-sm shrink-0">
+                  <Building2 className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-muted-foreground">Posted by</span>
+                  <Avatar className="h-5 w-5">
+                    <AvatarImage src={buyerUser?.avatar_url ?? undefined} />
+                    <AvatarFallback className="text-[10px]">{initials}</AvatarFallback>
+                  </Avatar>
+                  <span className="font-semibold">{buyerUser?.full_name ?? "Anonymous buyer"}</span>
+                  <Badge variant="success" className="text-[10px]">Verified</Badge>
+                </div>
+                <div className="shrink-0">
+<DraggableSquirrel
+                panelHeight={90}
+                mood={squirrelMood}
+                message={squirrelNote}
+                task={{
+                  id: task.id,
+                  title: task.title,
+                  description: task.description,
+                  pricing_model: task.pricing_model,
+                  budget_min: task.budget_min,
+                  budget_max: task.budget_max,
+                  deadline: task.deadline ?? null,
+                  category_name: (task as any).category?.name ?? undefined,
+                  skills_required: (task as any).skills_required ?? [],
+                  status: task.status,
+                  deliverables: getDeliverables(task).join(", ") || null,
+                  buyer_name: buyerUser?.full_name ?? undefined,
+                }}
+                applicantCount={appCountView}
+                isOwnTask={isBuyer}
+                actions={squirrelActions}
+              />
+                </div>
               </div>
 
               {/* Key stats row */}
@@ -328,21 +430,69 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
                 <StatPill Icon={Briefcase} label="Openings" value={String((task as any).openings ?? 1)} hint={String((task as any).openings ?? 1) === "1" ? undefined : `${(task as any).openings ?? 1} hires`} />
               </div>
 
+              {/* Deliverables list below stats */}
+              {getDeliverables(task).length > 0 && (
+                <div className="mt-4 rounded-xl border bg-card p-4">
+                  <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                    Deliverables
+                  </h3>
+                  <ul className="space-y-1">
+                    {getDeliverables(task).map((d, i) => (
+                      <li key={i} className="flex items-start gap-2 text-xs">
+                        <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-emerald-500" />
+                        <span>{d}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Overview / Q&A / Applicants tabs inside left panel */}
+              <div className="mt-6">
+                <TaskTabs
+                  taskId={taskId}
+                  task={{
+                    id: task.id,
+                    title: task.title,
+                    description: task.description,
+                    pricing_model: task.pricing_model,
+                    budget_min: task.budget_min,
+                    budget_max: task.budget_max,
+                    status: task.status,
+                    created_at: task.created_at,
+                    deadline: task.deadline ?? null,
+                    estimated_hours: (task as any).estimated_hours ?? null,
+                    category: (task as any).category ?? null,
+                    deliverables: getDeliverables(task),
+                    skills_required: (task as any).skills_required ?? [],
+                  }}
+                  applications={applications}
+                  queries={queries}
+                  isBuyer={isBuyer}
+                  signedIn={!!user}
+                  hasInteractions={hasInteractions}
+                  applicantSkillMap={applicantSkillMap}
+                  currentUserId={user?.id ?? undefined}
+                />
+              </div>
+
             </div>
 
-            {/* APPLY CTA — right side on desktop, sticky */}
-            <div className="md:w-72 shrink-0 md:self-start apply-cta-panel">
+            {/* RIGHT SIDEBAR — sticky on desktop */}
+            <div className="md:w-72 shrink-0 md:self-start apply-cta-panel space-y-4">
+              {/* OFFER CARD */}
               <div className="rounded-xl border bg-card p-5 shadow-sm">
                 {task.status !== "open" && (
                   <div className="mb-3 inline-flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-[11px] font-medium text-destructive">
                     <Clock className="h-3 w-3" />
-                    {task.status === "closed" && "Closed (filled)"}
+                    {task.status === "closed" && (Number(hired) >= Number((task as any).openings || 1) ? "Closed (filled)" : "Closed (expired)")}
                     {task.status === "cancelled" && "Cancelled"}
                     {task.status === "in_contract" && "In contract"}
                     {task.status === "upcoming" && "Upcoming"}
                   </div>
                 )}
-                <div className="text-xs uppercase tracking-wider text-muted-foreground">Compensation</div>
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">Offer</div>
                 <div className="mt-1 font-display text-2xl font-bold">
                   {formatPaise(task.budget_min)}
                   <span className="text-base font-normal text-muted-foreground"> – {formatPaise(task.budget_max)}</span>
@@ -358,9 +508,8 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
                   </span>
                 </div>
 
-                {/* Deadline display */}
                 {task.deadline && (
-                  <DeadlineDisplay deadline={task.deadline as any} />
+                  <DeadlineDisplay deadline={task.deadline as any} status={task.status} />
                 )}
 
                 {hasInteractions ? (
@@ -392,7 +541,6 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
                   </div>
                 )}
 
-                {/* Buyer-only: extend deadline / close task (applicants link is in the header) */}
                 {isBuyer && (
                   <BuyerTaskControls
                     taskId={taskId}
@@ -401,8 +549,11 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
                     appsCount={appsCount}
                   />
                 )}
+              </div>
 
-                <div className="mt-4 grid grid-cols-3 gap-2 border-t pt-4 text-center text-xs">
+              {/* Stats row */}
+              <div className="rounded-xl border bg-card p-4">
+                <div className="grid grid-cols-3 gap-2 text-center text-xs">
                   <div>
                     <div className="font-display text-lg font-semibold">{appCountView}</div>
                     <div className="text-muted-foreground">Applied</div>
@@ -414,66 +565,44 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
                   <div>
                     <div className="font-display text-lg font-semibold">{hired}</div>
                     <div className="text-muted-foreground">Hired</div>
+                  </div>
+                </div>
               </div>
-            </div>
+
+              {/* SKILLS REQUIRED */}
+              {getSkills(task).length > 0 && (
+                <div className="rounded-xl border bg-card p-4">
+                  <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    <Briefcase className="h-3.5 w-3.5" />
+                    Skills required
+                  </h3>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {getSkills(task).map((s: string) => (
+                      <Badge key={s} variant="secondary" className="text-xs">{s}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Important dates */}
+              <div className="rounded-xl border bg-card p-4">
+                <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <Calendar className="h-3.5 w-3.5" />
+                  Important dates
+                </div>
+                <div className="mt-3 space-y-1.5 text-xs">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Posted</span><span className="font-medium">{timeAgo(task.created_at)}</span></div>
+                  {task.deadline && <div className="flex justify-between"><span className="text-muted-foreground">Deadline</span><span className="font-medium">{new Date(task.deadline).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span></div>}
+                  {(task as any).estimated_hours != null && <div className="flex justify-between"><span className="text-muted-foreground">Est. time</span><span className="font-medium">~{(task as any).estimated_hours} {(task as any).category?.tier === "role_engagement" ? "days" : "hrs"}</span></div>}
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ============ SQUIRREL (between hero and tabs) ============ */}
-      <div className="container py-4">
-        <SquirrelMascot
-          mood={squirrelMood}
-          message={squirrelNote}
-          task={{
-            id: task.id,
-            title: task.title,
-            description: task.description,
-            pricing_model: task.pricing_model,
-            budget_min: task.budget_min,
-            budget_max: task.budget_max,
-            deadline: task.deadline ?? null,
-            category_name: (task as any).category?.name ?? undefined,
-            skills_required: (task as any).skills_required ?? [],
-            status: task.status,
-            deliverables: (task as any).deliverables ?? null,
-            buyer_name: buyerUser?.full_name ?? undefined,
-          }}
-          applicantCount={appCountView}
-          isOwnTask={isBuyer}
-        />
-      </div>
 
-      {/* ============ MAIN BODY (tabs) ============ */}
-      <div className="container pb-8 pt-4">
-        <TaskTabs
-          taskId={taskId}
-          task={{
-            id: task.id,
-            title: task.title,
-            description: task.description,
-            pricing_model: task.pricing_model,
-            budget_min: task.budget_min,
-            budget_max: task.budget_max,
-            status: task.status,
-            created_at: task.created_at,
-            deadline: task.deadline ?? null,
-            estimated_hours: (task as any).estimated_hours ?? null,
-            category: (task as any).category ?? null,
-            deliverables: (task as any).deliverables ?? null,
-            skills_required: (task as any).skills_required ?? [],
-          }}
-          applications={applications}
-          queries={queries}
-          isBuyer={isBuyer}
-          signedIn={!!user}
-          hasInteractions={hasInteractions}
-          applicantSkillMap={applicantSkillMap}
-          currentUserId={user?.id ?? undefined}
-        />
-      </div>
+
     </div>
   );
 }
@@ -489,6 +618,27 @@ function StatPill({ Icon, label, value, hint }: { Icon: any; label: string; valu
       {hint && <div className="text-[10px] text-muted-foreground">{hint}</div>}
     </div>
   );
+}
+
+function getSkills(task: any): string[] {
+  const explicit: string[] = (task as any).skills_required ?? [];
+  if (explicit.length > 0) return explicit;
+  const text = ((task.title ?? "") + " " + (task.description ?? "")).toLowerCase();
+  const candidates = [
+    "Excel", "Spreadsheets", "Python", "JavaScript", "TypeScript", "React", "Node.js",
+    "SQL", "Postgres", "REST APIs", "Data analysis", "Machine learning", "NLP",
+    "Frontend", "Backend", "DevOps", "Docker", "Kubernetes", "AWS", "GCP", "Azure",
+    "Teaching", "Mentoring", "Translation", "Writing", "Design", "Figma", "Video editing",
+  ];
+  return candidates.filter((c) => text.includes(c.toLowerCase())).slice(0, 6);
+}
+
+function getDeliverables(task: any): string[] {
+  const brief = task?.brief;
+  if (!brief || typeof brief !== "object") return [];
+  const items: any[] = (brief as any).checklist_items;
+  if (!Array.isArray(items)) return [];
+  return items.map((i: any) => i?.text ?? "").filter(Boolean);
 }
 
 async function checkInteractionsTable(sb: ReturnType<typeof createClient>): Promise<boolean> {

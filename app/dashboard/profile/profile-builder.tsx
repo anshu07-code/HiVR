@@ -94,7 +94,11 @@ function ProfileBuilderInner({
 }) {
   const router = useRouter();
   const { toast } = useToast();
-  const [tab, setTab] = React.useState<"basics" | "skills" | "videos" | "education" | "experience" | "projects" | "certs" | "achievements" | "links" | "resume">(typeof window !== "undefined" ? (sessionStorage.getItem("pb_tab") as any) ?? "basics" : "basics");
+  const [tab, setTab] = React.useState<"basics" | "skills" | "videos" | "education" | "experience" | "projects" | "certs" | "achievements" | "links" | "resume">("basics");
+  React.useEffect(() => {
+    const saved = sessionStorage.getItem("pb_tab");
+    if (saved) setTab(saved as any);
+  }, []);
   const [completeness, setCompleteness] = React.useState(initialCompleteness);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -226,6 +230,8 @@ function ProfileBuilderInner({
   React.useEffect(() => {
     return () => { if (autoSaveRef.current) clearTimeout(autoSaveRef.current); };
   }, []);
+
+  const [showLocationDropdown, setShowLocationDropdown] = React.useState(false);
 
   // ----- Skills state -----
   const [selectedSkills, setSelectedSkills] = React.useState<{
@@ -478,19 +484,19 @@ function ProfileBuilderInner({
     }
   }
 
-  // ----- Recompute completeness client-side -----
+  // ----- Recompute completeness client-side (must match server computeCompleteness in actions.ts) -----
   function recompute() {
     let s = 0;
     if (basics.full_name) s += 5;
     if (avatarUrl) s += 5;
     if (basics.headline) s += 5;
-    if (basics.bio && basics.bio.length > 20) s += 10;
+    if (basics.bio && basics.bio.length > 20) s += 15;
     if (basics.location) s += 5;
-    if (basics.availability_hours) s += 5;
+    if (basics.hourly_rate_paise) s += 5;
     if (selectedSkills.length >= 1) s += 15;
     if (selectedSkills.length >= 3) s += 5;
     if ((initial.education ?? []).length > 0) s += 10;
-    if ((initial.experience ?? []).length > 0) s += 10;
+    if ((initial.experience ?? []).length > 0) s += 15;
     if ((initial.projects ?? []).length > 0) s += 10;
     if ((initial.certifications ?? []).length > 0) s += 5;
     if ((initial.resume)) s += 5;
@@ -556,12 +562,19 @@ function ProfileBuilderInner({
         headline={basics.headline}
         bio={basics.bio}
         location={basics.location}
-        skills={(initial.skills ?? []).map((s) => ({ category_id: s.category_id, name: s.name ?? "" }))}
+        experienceType={basics.experience_type}
+        hourlyRatePaise={basics.hourly_rate_paise}
+        availabilityHours={basics.availability_hours}
+        languages={basics.languages}
+        skills={selectedSkills.map(ss => {
+          const match = (initial.skills ?? []).find(s => s.category_id === ss.category_id);
+          return { category_id: ss.category_id, name: match?.name ?? "", slug: match?.slug, icon: match?.icon, tier: match?.tier, is_primary: match?.is_primary, verification_status: match?.verification_status };
+        })}
         education={(initial.education ?? []) as any[]}
         experience={(initial.experience ?? []) as any[]}
+        projects={(initial.projects ?? []) as any[]}
         certifications={(initial.certifications ?? []) as any[]}
         achievements={(initial.achievements ?? []) as any[]}
-        languages={basics.languages}
       />
 
       {error && <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div>}
@@ -629,19 +642,20 @@ function ProfileBuilderInner({
                 <div className="relative">
                   <Input
                     value={basics.location}
-                    onChange={(e) => { setBasics({ ...basics, location: e.target.value }); markBasicsDirty(); }}
-                    onBlur={() => { if (dirtyBasics) saveBasics(); }}
+                    onChange={(e) => { setBasics({ ...basics, location: e.target.value }); setShowLocationDropdown(true); markBasicsDirty(); }}
+                    onFocus={() => setShowLocationDropdown(basics.location.length > 0)}
+                    onBlur={() => { setTimeout(() => setShowLocationDropdown(false), 200); if (dirtyBasics) saveBasics(); }}
                     placeholder="Bangalore, India"
                     className="[&::-webkit-calendar-picker-indicator]:hidden"
                   />
-                  {basics.location.length > 0 && (
+                  {showLocationDropdown && basics.location.length > 0 && (
                     <div className="absolute z-10 mt-0.5 max-h-48 w-full overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
                       {INDIAN_CITIES.filter(c => c.toLowerCase().includes(basics.location.toLowerCase()))
                         .slice(0, 20).map(c => (
                           <button
                             key={c}
                             type="button"
-                            onMouseDown={(e) => { e.preventDefault(); setBasics({ ...basics, location: c }); markBasicsDirty(); if (dirtyBasics) saveBasics(); }}
+                            onMouseDown={(e) => { e.preventDefault(); setBasics({ ...basics, location: c }); markBasicsDirty(); if (dirtyBasics) saveBasics(); setShowLocationDropdown(false); }}
                             className="flex w-full items-center rounded-sm px-2 py-1.5 text-xs hover:bg-accent"
                           >{c}</button>
                         ))}
